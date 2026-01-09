@@ -1,10 +1,25 @@
+/**
+ * RestoNext MX - Appwrite Types
+ * TypeScript interfaces for Appwrite Document Store structure
+ * Designed for Toast-level menu capabilities with embedded modifiers
+ */
+
 // ============================================
-// RestoNext MX - Shared Type Definitions
+// Base Appwrite Document Interface
 // ============================================
 
-// -----------------------------
-// Tenant / Restaurant Types
-// -----------------------------
+export interface AppwriteDocument {
+  $id: string;
+  $createdAt: string;
+  $updatedAt: string;
+  $permissions: string[];
+  $databaseId: string;
+  $collectionId: string;
+}
+
+// ============================================
+// Restaurant (Tenant)
+// ============================================
 
 export interface FiscalConfig {
   rfc: string;
@@ -13,215 +28,256 @@ export interface FiscalConfig {
   codigo_postal: string;
   csd_certificate_path?: string;
   csd_key_path?: string;
-  pac_provider?: 'facturama' | 'finkok' | 'sw_sapien';
+  pac_provider?: string;
 }
 
-export interface Tenant {
-  id: string;
+export interface Restaurant extends AppwriteDocument {
   name: string;
   slug: string;
-  fiscal_config: FiscalConfig;
-  created_at: string;
-  updated_at: string;
+  owner_id: string;
+  team_id: string;
+  fiscal_config?: FiscalConfig;
+  timezone: string;
+  currency: string;
+  is_active: boolean;
+  logo_url?: string;
+  address?: string;
+  phone?: string;
 }
 
-// -----------------------------
-// Menu Types
-// -----------------------------
+// ============================================
+// Menu Categories
+// ============================================
+
+export interface MenuCategory extends AppwriteDocument {
+  restaurant_id: string;
+  name: string;
+  description?: string;
+  sort_order: number;
+  is_active: boolean;
+  image_url?: string;
+}
+
+// ============================================
+// Modifiers (Embedded in MenuItems)
+// ============================================
 
 export interface ModifierOption {
   id: string;
   name: string;
   price_delta: number;
+  is_available?: boolean;
 }
 
 export interface ModifierGroup {
+  id: string;
   name: string;
   required: boolean;
-  min_select?: number;
-  max_select?: number;
+  min_select: number;
+  max_select: number;
   options: ModifierOption[];
 }
 
-export interface ModifiersSchema {
-  groups: ModifierGroup[];
-}
+// ============================================
+// Menu Items (with embedded modifiers)
+// ============================================
 
-export interface MenuItem {
-  id: string;
+export type RouteDestination = 'kitchen' | 'bar' | 'direct';
+
+export interface MenuItem extends AppwriteDocument {
+  restaurant_id: string;
   category_id: string;
   name: string;
   description?: string;
   price: number;
+  cost?: number;
   image_url?: string;
+  route_to: RouteDestination;
+  prep_time_minutes: number;
   is_available: boolean;
-  route_to: 'kitchen' | 'bar';
-  modifiers_schema?: ModifiersSchema;
-  created_at: string;
+  modifier_groups: ModifierGroup[];
+  tags?: string[];
+  allergens?: string[];
+  calories?: number;
 }
 
-export interface MenuCategory {
-  id: string;
-  tenant_id: string;
-  name: string;
-  icon?: string;
-  sort_order: number;
-  items?: MenuItem[];
-}
+// ============================================
+// Orders (with embedded items)
+// ============================================
 
-// -----------------------------
-// Order Types
-// -----------------------------
-
-export type OrderStatus = 'open' | 'in_progress' | 'ready' | 'delivered' | 'paid' | 'cancelled';
-export type TableStatus = 'free' | 'occupied' | 'bill_requested';
-
-export interface Table {
-  id: string;
-  tenant_id: string;
-  number: number;
-  capacity: number;
-  status: TableStatus;
-  pos_x: number;
-  pos_y: number;
-}
+export type OrderStatus = 'pending' | 'in_progress' | 'ready' | 'completed' | 'cancelled';
+export type OrderType = 'dine_in' | 'takeout' | 'delivery';
+export type OrderItemStatus = 'pending' | 'preparing' | 'ready' | 'served';
 
 export interface SelectedModifier {
-  group_name: string;
+  group: string;
+  option: string;
   option_id: string;
-  option_name: string;
   price_delta: number;
 }
 
 export interface OrderItem {
   id: string;
-  order_id: string;
   menu_item_id: string;
-  menu_item_name: string;
+  name: string;
   quantity: number;
   unit_price: number;
   selected_modifiers: SelectedModifier[];
-  notes?: string;
+  line_total: number;
   seat_number?: number;
-  status: 'pending' | 'preparing' | 'ready' | 'served';
-  created_at: string;
+  status: OrderItemStatus;
+  notes?: string;
+  route_to: RouteDestination;
 }
 
-export interface Order {
-  id: string;
-  tenant_id: string;
-  table_id: string;
-  table_number?: number; // Denormalized for display
+export interface Order extends AppwriteDocument {
+  restaurant_id: string;
+  table_id?: string;
+  table_number?: number;
   waiter_id: string;
   waiter_name?: string;
   status: OrderStatus;
+  order_type: OrderType;
   items: OrderItem[];
   subtotal: number;
   tax: number;
+  tip: number;
   total: number;
+  notes?: string;
   created_at: string;
-  updated_at: string;
+  completed_at?: string;
+  payment_method?: string;
+  payment_reference?: string;
 }
 
-// -----------------------------
-// Bill Split Types
-// -----------------------------
+// ============================================
+// Inventory
+// ============================================
 
-export type SplitType = 'by_seat' | 'even' | 'custom';
+export type InventoryUnit = 'kg' | 'g' | 'l' | 'ml' | 'pieza' | 'porcion';
 
-export interface BillSplit {
-  id: string;
-  order_id: string;
-  split_type: SplitType;
-  splits: SplitDetail[];
-  created_at: string;
-}
-
-export interface SplitDetail {
-  split_number: number;
-  item_ids: string[];
-  amount: number;
-  paid: boolean;
-  payment_method?: 'cash' | 'card' | 'transfer';
-}
-
-// -----------------------------
-// Invoice / CFDI Types
-// -----------------------------
-
-export type CFDIStatus = 'pending' | 'stamped' | 'cancelled' | 'error';
-export type UsoCFDI = 'G01' | 'G02' | 'G03' | 'I01' | 'I02' | 'I03' | 'P01';
-
-export interface Invoice {
-  id: string;
-  order_id: string;
-  tenant_id: string;
-  uuid?: string;
-  status: CFDIStatus;
-  receptor_rfc: string;
-  receptor_nombre: string;
-  receptor_cp: string;
-  uso_cfdi: UsoCFDI;
-  total: number;
-  pdf_url?: string;
-  xml_url?: string;
-  sat_response?: Record<string, unknown>;
-  created_at: string;
-}
-
-// -----------------------------
-// User / Auth Types
-// -----------------------------
-
-export type UserRole = 'admin' | 'manager' | 'waiter' | 'kitchen' | 'cashier';
-
-export interface User {
-  id: string;
-  tenant_id: string;
-  email: string;
+export interface InventoryItem extends AppwriteDocument {
+  restaurant_id: string;
   name: string;
+  sku?: string;
+  unit: InventoryUnit;
+  quantity_on_hand: number;
+  reorder_level: number;
+  cost_per_unit: number;
+  supplier?: string;
+  last_restocked?: string;
+  expiry_date?: string;
+}
+
+// ============================================
+// Recipes (for costing)
+// ============================================
+
+export interface RecipeIngredient {
+  inventory_id: string;
+  name: string;
+  quantity: number;
+  unit: InventoryUnit;
+  cost: number;
+}
+
+export interface Recipe extends AppwriteDocument {
+  restaurant_id: string;
+  menu_item_id: string;
+  menu_item_name: string;
+  ingredients: RecipeIngredient[];
+  total_cost: number;
+  yield_quantity?: number;
+  prep_instructions?: string;
+}
+
+// ============================================
+// Tables
+// ============================================
+
+export type TableStatus = 'free' | 'occupied' | 'reserved' | 'bill_requested';
+
+export interface Table extends AppwriteDocument {
+  restaurant_id: string;
+  number: number;
+  capacity: number;
+  status: TableStatus;
+  pos_x: number;
+  pos_y: number;
+  section?: string;
+  current_order_id?: string;
+}
+
+// ============================================
+// Users (Reference - stored in Appwrite Auth)
+// ============================================
+
+export type UserRole = 'admin' | 'manager' | 'waiter' | 'chef' | 'cashier' | 'host';
+
+export interface UserProfile extends AppwriteDocument {
+  user_id: string;
+  restaurant_id: string;
+  team_id: string;
+  name: string;
+  email: string;
   role: UserRole;
+  pin?: string; // For quick clock-in
   is_active: boolean;
-  created_at: string;
+  avatar_url?: string;
 }
 
-export interface AuthToken {
-  access_token: string;
-  token_type: 'bearer';
-  expires_in: number;
+// ============================================
+// API Request/Response Types
+// ============================================
+
+export interface CreateOrderRequest {
+  restaurant_id: string;
+  table_id?: string;
+  table_number?: number;
+  waiter_id: string;
+  waiter_name?: string;
+  order_type: OrderType;
+  items: Array<{
+    menu_item_id: string;
+    quantity: number;
+    selected_modifiers?: SelectedModifier[];
+    seat_number?: number;
+    notes?: string;
+  }>;
+  notes?: string;
 }
 
-// -----------------------------
-// WebSocket Event Types
-// -----------------------------
-
-export type WSEventType =
-  | 'kitchen:new_order'
-  | 'kitchen:order_update'
-  | 'kitchen:item_ready'
-  | 'table:call_waiter'
-  | 'table:status_change';
-
-export interface WSMessage<T = unknown> {
-  event: WSEventType;
-  payload: T;
-  timestamp: string;
+export interface CreateOrderResponse {
+  success: boolean;
+  order_id?: string;
+  total?: number;
+  items_count?: number;
+  inventory_updated?: number;
+  error?: string;
 }
 
-// -----------------------------
-// Analytics Types
-// -----------------------------
-
-export interface ForecastResult {
-  ingredient: string;
-  date: string;
-  predicted_demand: number;
-  lower_bound: number;
-  upper_bound: number;
+export interface InventoryDecrementResult {
+  inventory_id: string;
+  name: string;
+  previous_quantity: number;
+  new_quantity: number;
+  below_reorder: boolean;
 }
 
-export interface SalesDataPoint {
-  date: string;
-  ingredient: string;
-  quantity_sold: number;
-}
+// ============================================
+// Appwrite Collection IDs
+// ============================================
+
+export const COLLECTIONS = {
+  RESTAURANTS: 'restaurants',
+  MENU_CATEGORIES: 'menu_categories',
+  MENU_ITEMS: 'menu_items',
+  MODIFIER_GROUPS: 'modifier_groups',
+  ORDERS: 'orders',
+  INVENTORY_ITEMS: 'inventory_items',
+  RECIPES: 'recipes',
+  TABLES: 'tables',
+  USER_PROFILES: 'user_profiles',
+} as const;
+
+export const DATABASE_ID = 'restonext_db';

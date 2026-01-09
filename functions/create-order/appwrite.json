@@ -1,0 +1,16 @@
+{
+    "name": "create-order",
+    "version": "1.0.0",
+    "description": "Appwrite Cloud Function for Order Creation with Inventory Decrement",
+    "runtime": "python-3.11",
+    "entrypoint": "main.py",
+    "commands": "pip install -r requirements.txt",
+    "timeout": 30,
+    "events": [],
+    "schedule": "",
+    "permissions": [],
+    "scopes": [
+        "databases.read",
+        "databases.write"
+    ]
+}

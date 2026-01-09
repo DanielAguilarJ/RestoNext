@@ -1,0 +1,123 @@
+{
+    "projectId": "",
+    "projectName": "RestoNext MX",
+    "databases": [
+        {
+            "databaseId": "restonext_db",
+            "name": "RestoNext Database"
+        }
+    ],
+    "collections": [
+        {
+            "collectionId": "restaurants",
+            "databaseId": "restonext_db",
+            "name": "Restaurants",
+            "documentSecurity": true,
+            "permissions": [
+                "read(\"team:any\")",
+                "create(\"users\")"
+            ]
+        },
+        {
+            "collectionId": "menu_categories",
+            "databaseId": "restonext_db",
+            "name": "Menu Categories",
+            "documentSecurity": true,
+            "permissions": [
+                "read(\"team:any\")",
+                "create(\"team:any\")",
+                "update(\"team:any\")"
+            ]
+        },
+        {
+            "collectionId": "menu_items",
+            "databaseId": "restonext_db",
+            "name": "Menu Items",
+            "documentSecurity": true,
+            "permissions": [
+                "read(\"team:any\")",
+                "create(\"team:any\")",
+                "update(\"team:any\")"
+            ]
+        },
+        {
+            "collectionId": "modifier_groups",
+            "databaseId": "restonext_db",
+            "name": "Modifier Groups",
+            "documentSecurity": true,
+            "permissions": [
+                "read(\"team:any\")",
+                "create(\"team:any\")",
+                "update(\"team:any\")"
+            ]
+        },
+        {
+            "collectionId": "orders",
+            "databaseId": "restonext_db",
+            "name": "Orders",
+            "documentSecurity": true,
+            "permissions": [
+                "read(\"team:any\")",
+                "create(\"team:any\")",
+                "update(\"team:any\")"
+            ]
+        },
+        {
+            "collectionId": "inventory_items",
+            "databaseId": "restonext_db",
+            "name": "Inventory Items",
+            "documentSecurity": true,
+            "permissions": [
+                "read(\"team:any\")",
+                "create(\"team:any\")",
+                "update(\"team:any\")"
+            ]
+        },
+        {
+            "collectionId": "recipes",
+            "databaseId": "restonext_db",
+            "name": "Recipes",
+            "documentSecurity": true,
+            "permissions": [
+                "read(\"team:any\")",
+                "create(\"team:any\")",
+                "update(\"team:any\")"
+            ]
+        },
+        {
+            "collectionId": "tables",
+            "databaseId": "restonext_db",
+            "name": "Tables",
+            "documentSecurity": true,
+            "permissions": [
+                "read(\"team:any\")",
+                "create(\"team:any\")",
+                "update(\"team:any\")"
+            ]
+        },
+        {
+            "collectionId": "user_profiles",
+            "databaseId": "restonext_db",
+            "name": "User Profiles",
+            "documentSecurity": true,
+            "permissions": [
+                "read(\"team:any\")",
+                "create(\"team:any\")"
+            ]
+        }
+    ],
+    "functions": [
+        {
+            "functionId": "create-order",
+            "name": "Create Order",
+            "runtime": "python-3.11",
+            "entrypoint": "main.py",
+            "path": "functions/create-order",
+            "timeout": 30,
+            "scopes": [
+                "databases.read",
+                "databases.write"
+            ]
+        }
+    ]
+}
