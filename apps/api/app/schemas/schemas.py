@@ -19,6 +19,16 @@ class LoginRequest(BaseModel):
     password: str
 
 
+class Token(BaseModel):
+    access_token: str
+    token_type: str = "bearer"
+
+
+class TokenData(BaseModel):
+    user_id: Optional[UUID] = None
+    email: Optional[str] = None
+
+
 class UserCreate(BaseModel):
     email: EmailStr
     password: str

@@ -7,6 +7,7 @@ import {
     addRxPlugin
 } from 'rxdb';
 import { getRxStorageDexie } from 'rxdb/plugins/storage-dexie';
+import { wrappedValidateAjvStorage } from 'rxdb/plugins/validate-ajv';
 import { RxDBDevModePlugin } from 'rxdb/plugins/dev-mode';
 import { RxDBUpdatePlugin } from 'rxdb/plugins/update';
 import { RxDBQueryBuilderPlugin } from 'rxdb/plugins/query-builder';
@@ -37,7 +38,8 @@ if (typeof window !== 'undefined') {
 // Schemas
 // ============================================
 
-const orderSchema: RxJsonSchema<Order> = {
+export type OrderWithoutAppwrite = Omit<Order, '$id' | '$createdAt' | '$updatedAt' | '$permissions' | '$databaseId' | '$collectionId'>;
+const orderSchema: RxJsonSchema<OrderWithoutAppwrite> = {
     title: 'order',
     version: 0,
     primaryKey: 'id',
@@ -80,17 +82,14 @@ const orderSchema: RxJsonSchema<Order> = {
         payment_method: { type: 'string' },
         payment_reference: { type: 'string' },
         // Appwrite fields
-        $id: { type: 'string' },
-        $createdAt: { type: 'string' },
-        $updatedAt: { type: 'string' },
-        $permissions: { type: 'array', items: { type: 'string' } },
-        $databaseId: { type: 'string' },
-        $collectionId: { type: 'string' }
+        // RxDB does not allow fields starting with $ in the schema
+        // We will handle mapping separately if needed
     },
     required: ['restaurant_id', 'status', 'total', 'items']
 };
 
-const menuItemSchema: RxJsonSchema<MenuItem> = {
+export type MenuItemWithoutAppwrite = Omit<MenuItem, '$id' | '$createdAt' | '$updatedAt' | '$permissions' | '$databaseId' | '$collectionId'>;
+const menuItemSchema: RxJsonSchema<MenuItemWithoutAppwrite> = {
     title: 'menu_item',
     version: 0,
     primaryKey: 'id',
@@ -112,17 +111,13 @@ const menuItemSchema: RxJsonSchema<MenuItem> = {
         allergens: { type: 'array', items: { type: 'string' } },
         calories: { type: 'number' },
         // Appwrite fields
-        $id: { type: 'string' },
-        $createdAt: { type: 'string' },
-        $updatedAt: { type: 'string' },
-        $permissions: { type: 'array', items: { type: 'string' } },
-        $databaseId: { type: 'string' },
-        $collectionId: { type: 'string' }
+        // RxDB does not allow fields starting with $ in the schema
     },
     required: ['name', 'price']
 };
 
-const categorySchema: RxJsonSchema<MenuCategory> = {
+export type CategoryWithoutAppwrite = Omit<MenuCategory, '$id' | '$createdAt' | '$updatedAt' | '$permissions' | '$databaseId' | '$collectionId'>;
+const categorySchema: RxJsonSchema<CategoryWithoutAppwrite> = {
     title: 'menu_category',
     version: 0,
     primaryKey: 'id',
@@ -136,12 +131,7 @@ const categorySchema: RxJsonSchema<MenuCategory> = {
         is_active: { type: 'boolean' },
         image_url: { type: 'string' },
         // Appwrite fields
-        $id: { type: 'string' },
-        $createdAt: { type: 'string' },
-        $updatedAt: { type: 'string' },
-        $permissions: { type: 'array', items: { type: 'string' } },
-        $databaseId: { type: 'string' },
-        $collectionId: { type: 'string' }
+        // RxDB does not allow fields starting with $ in the schema
     },
     required: ['name']
 };
@@ -151,9 +141,9 @@ const categorySchema: RxJsonSchema<MenuCategory> = {
 // ============================================
 
 export type RxRestoCollections = {
-    orders: RxCollection<Order>;
-    menu_items: RxCollection<MenuItem>;
-    menu_categories: RxCollection<MenuCategory>;
+    orders: RxCollection<OrderWithoutAppwrite>;
+    menu_items: RxCollection<MenuItemWithoutAppwrite>;
+    menu_categories: RxCollection<CategoryWithoutAppwrite>;
 };
 
 export type RxRestoDatabase = RxDatabase<RxRestoCollections>;
@@ -166,9 +156,14 @@ let dbPromise: Promise<RxRestoDatabase> | null = null;
 
 export const createDatabase = async (): Promise<RxRestoDatabase> => {
     console.log('Database creation started...');
+    let storage: any = getRxStorageDexie();
+    if (process.env.NODE_ENV === 'development') {
+        storage = wrappedValidateAjvStorage({ storage });
+    }
+
     const db = await createRxDatabase<RxRestoCollections>({
         name: 'restonext_db',
-        storage: getRxStorageDexie()
+        storage
     });
     console.log('Database created');
 
@@ -229,9 +224,9 @@ async function syncCollection(
 
                     const documents = response.documents.map(doc => {
                         const mapped = mapDoc(doc) as any;
-                        // Determine if deleted, if appwrite supports soft delete or we infer it
-                        // For now assuming all listed are active/updated
-                        return mapped;
+                        // Strip Appwrite fields that are excluded from RxDB schema
+                        const { $id, $createdAt, $updatedAt, $permissions, $databaseId, $collectionId, ...rest } = mapped;
+                        return rest;
                     });
 
                     // If we got fewer docs than limit, we are done for now

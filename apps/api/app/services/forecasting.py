@@ -11,43 +11,51 @@ This service:
 from datetime import datetime, timedelta
 from typing import List, Optional
 
-import pandas as pd
-from prophet import Prophet
+try:
+    import pandas as pd
+    from prophet import Prophet
+    HAS_AI_LIBS = True
+except ImportError:
+    HAS_AI_LIBS = False
+    pd = None
+    Prophet = None
 
 
 # Mexican holidays for Prophet model
-# These affect restaurant demand patterns
-MEXICAN_HOLIDAYS = pd.DataFrame({
-    'holiday': [
-        'Año Nuevo',
-        'Día de la Constitución',
-        'Natalicio de Benito Juárez',
-        'Día del Trabajo',
-        'Día de la Independencia',
-        'Día de la Revolución',
-        'Navidad',
-        'Día de Muertos',
-        'Día de la Virgen de Guadalupe',
-        'Semana Santa',  # Approximate
-    ],
-    'ds': pd.to_datetime([
-        '2024-01-01',
-        '2024-02-05',
-        '2024-03-18',
-        '2024-05-01',
-        '2024-09-16',
-        '2024-11-18',
-        '2024-12-25',
-        '2024-11-01',
-        '2024-12-12',
-        '2024-03-28',
-    ]),
-    'lower_window': [0, 0, 0, 0, -1, 0, -1, -1, 0, -3],
-    'upper_window': [1, 0, 0, 0, 1, 0, 1, 1, 0, 3],
-})
+if HAS_AI_LIBS:
+    MEXICAN_HOLIDAYS = pd.DataFrame({
+        'holiday': [
+            'Año Nuevo',
+            'Día de la Constitución',
+            'Natalicio de Benito Juárez',
+            'Día del Trabajo',
+            'Día de la Independencia',
+            'Día de la Revolución',
+            'Navidad',
+            'Día de Muertos',
+            'Día de la Virgen de Guadalupe',
+            'Semana Santa',  # Approximate
+        ],
+        'ds': pd.to_datetime([
+            '2024-01-01',
+            '2024-02-05',
+            '2024-03-18',
+            '2024-05-01',
+            '2024-09-16',
+            '2024-11-18',
+            '2024-12-25',
+            '2024-11-01',
+            '2024-12-12',
+            '2024-03-28',
+        ]),
+        'lower_window': [0, 0, 0, 0, -1, 0, -1, -1, 0, -3],
+        'upper_window': [1, 0, 0, 0, 1, 0, 1, 1, 0, 3],
+    })
+else:
+    MEXICAN_HOLIDAYS = None
 
 
-def extend_holidays_to_years(base_holidays: pd.DataFrame, years: List[int]) -> pd.DataFrame:
+def extend_holidays_to_years(base_holidays: 'pd.DataFrame', years: List[int]) -> 'pd.DataFrame':
     """
     Extend holiday dates to multiple years.
     Prophet needs holidays for all years in the forecast range.
@@ -64,7 +72,7 @@ def extend_holidays_to_years(base_holidays: pd.DataFrame, years: List[int]) -> p
     return pd.concat(all_holidays, ignore_index=True)
 
 
-def prepare_sales_data(sales_data: List[dict]) -> pd.DataFrame:
+def prepare_sales_data(sales_data: List[dict]) -> 'pd.DataFrame':
     """
     Convert sales data to Prophet format.
     
@@ -108,6 +116,13 @@ def forecast_ingredient_demand(
     Returns:
         Dictionary with predictions including confidence intervals
     """
+    if not HAS_AI_LIBS:
+        return {
+            "ingredient": ingredient_name,
+            "error": "AI Forecasting libraries (pandas/prophet) are not installed in this environment.",
+            "predictions": [],
+        }
+
     # Prepare data
     df = prepare_sales_data(sales_data)
     

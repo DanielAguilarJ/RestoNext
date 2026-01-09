@@ -39,9 +39,15 @@ class ConnectionManager:
     async def connect_redis(self):
         """Initialize Redis connection for pub/sub"""
         if self.redis_client is None:
-            self.redis_client = redis.from_url(settings.redis_url)
-            self.pubsub = self.redis_client.pubsub()
-            await self.pubsub.subscribe("kitchen:new_order", "kitchen:order_update", "table:call_waiter")
+            try:
+                self.redis_client = redis.from_url(settings.redis_url)
+                self.pubsub = self.redis_client.pubsub()
+                await self.pubsub.subscribe("kitchen:new_order", "kitchen:order_update", "table:call_waiter")
+                print(f"INFO:     Connected to Redis at {settings.redis_url}")
+            except Exception as e:
+                print(f"WARNING:  Could not connect to Redis: {e}. Real-time sync across instances disabled.")
+                self.redis_client = None
+                self.pubsub = None
     
     async def disconnect_redis(self):
         """Close Redis connection"""
