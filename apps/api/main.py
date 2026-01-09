@@ -19,6 +19,8 @@ from app.api.pos import router as pos_router
 from app.api.billing import router as billing_router
 from app.api.analytics import router as analytics_router
 from app.api.onboarding import router as onboarding_router
+from app.api.cashier import router as cashier_router
+from app.api.printer import router as printer_router
 
 settings = get_settings()
 
@@ -68,6 +70,8 @@ app.include_router(pos_router, prefix="/api")
 app.include_router(billing_router, prefix="/api")
 app.include_router(analytics_router, prefix="/api")
 app.include_router(onboarding_router, prefix="/api")
+app.include_router(cashier_router, prefix="/api")
+app.include_router(printer_router, prefix="/api")
 
 
 # ============================================

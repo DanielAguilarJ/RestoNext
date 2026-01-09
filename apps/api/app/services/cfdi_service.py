@@ -11,9 +11,13 @@ KEY COMPLIANCE RULES (SAT Anexo 20):
 import re
 from typing import Optional, Tuple
 from datetime import datetime
-from uuid import uuid4
 
 from pydantic import BaseModel
+
+from app.core.config import get_settings
+from app.services.pac_providers import (
+    PACProvider, PACResponse, MockProvider, FinkokProvider
+)
 
 
 class CFDIValidationResult(BaseModel):
@@ -23,14 +27,7 @@ class CFDIValidationResult(BaseModel):
     cleaned_nombre: Optional[str] = None
 
 
-class PACResponse(BaseModel):
-    """Mock PAC (Proveedor Autorizado de Certificación) response"""
-    success: bool
-    uuid: Optional[str] = None
-    xml_content: Optional[str] = None
-    pdf_url: Optional[str] = None
-    xml_url: Optional[str] = None
-    error_message: Optional[str] = None
+
 
 
 # Régimen societario patterns to remove from Razón Social
@@ -320,26 +317,64 @@ def generate_cfdi_xml(
     return xml
 
 
-async def stamp_cfdi_with_pac(xml_content: str, pac_provider: str = "mock") -> PACResponse:
+# ============================================
+# PAC Provider Factory
+# ============================================
+
+def get_pac_provider() -> PACProvider:
     """
-    Send XML to PAC for stamping.
+    Factory function to get the configured PAC provider.
     
-    NOTE: This is a MOCK implementation. In production, integrate with
-    real PAC providers like Facturama, Finkok, or SW Sapien.
+    Reads from settings.pac_provider:
+    - "mock": MockProvider for development
+    - "finkok": FinkokProvider for production
     """
-    # Mock successful stamping
-    mock_uuid = str(uuid4()).upper()
+    settings = get_settings()
     
-    # In production, this would:
-    # 1. Sign XML with CSD certificate
-    # 2. Send to PAC API
-    # 3. Receive timbrado (stamped) XML with UUID
-    # 4. Generate PDF representation
+    if settings.pac_provider == "finkok":
+        return FinkokProvider(
+            username=settings.finkok_username,
+            password=settings.finkok_password,
+            sandbox=settings.finkok_sandbox,
+        )
     
-    return PACResponse(
-        success=True,
-        uuid=mock_uuid,
-        xml_content=xml_content,
-        pdf_url=f"/storage/invoices/{mock_uuid}.pdf",
-        xml_url=f"/storage/invoices/{mock_uuid}.xml",
+    # Default to mock
+    return MockProvider()
+
+
+async def stamp_cfdi_with_pac(xml_content: str) -> PACResponse:
+    """
+    Send XML to PAC for stamping using configured provider.
+    
+    Supports:
+    - MockProvider: For development/testing
+    - FinkokProvider: For production with Finkok
+    
+    Configure via PAC_PROVIDER environment variable.
+    """
+    provider = get_pac_provider()
+    return await provider.stamp_xml(xml_content)
+
+
+async def cancel_cfdi(
+    uuid: str,
+    rfc_emisor: str,
+    rfc_receptor: str,
+    total: float,
+    motivo: str = "02",
+) -> dict:
+    """
+    Cancel a previously stamped CFDI.
+    
+    Returns cancellation response from PAC.
+    """
+    provider = get_pac_provider()
+    response = await provider.cancel_uuid(
+        uuid=uuid,
+        rfc_emisor=rfc_emisor,
+        rfc_receptor=rfc_receptor,
+        total=total,
+        motivo=motivo,
     )
+    return response.model_dump()
+

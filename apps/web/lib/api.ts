@@ -1,6 +1,7 @@
 import {
     MenuCategory, MenuItem, Table, Order, UserRole
 } from '../../../packages/shared/src/index';
+import { isOnline, syncQueueManager, type OptimisticOrder } from './offline';
 
 // ============================================
 // API Configuration
@@ -161,8 +162,22 @@ export interface PaymentRequest {
 export const ordersApi = {
     /**
      * Create a new order
+     * When offline, stores order locally and returns optimistic response
      */
-    create: async (order: CreateOrderRequest): Promise<Order> => {
+    create: async (order: CreateOrderRequest): Promise<Order | OptimisticOrder> => {
+        // Check network status for offline-first handling
+        if (typeof window !== 'undefined' && !isOnline()) {
+            console.log('[ordersApi] Offline - queuing order for sync');
+            const optimisticOrder = await syncQueueManager.enqueue({
+                table_id: order.table_id,
+                items: order.items,
+                notes: order.notes,
+            });
+            // Return optimistic response as Order-like object
+            return optimisticOrder as unknown as Order;
+        }
+
+        // Online: normal API call
         return apiRequest<Order>('/orders', {
             method: 'POST',
             body: JSON.stringify(order),

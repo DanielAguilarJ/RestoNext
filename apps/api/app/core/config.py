@@ -25,6 +25,12 @@ class Settings(BaseSettings):
     app_name: str = "RestoNext MX"
     debug: bool = True
     
+    # PAC (Proveedor Autorizado de Certificación) Configuration
+    pac_provider: str = "mock"  # mock, finkok, facturama
+    finkok_username: str = ""
+    finkok_password: str = ""
+    finkok_sandbox: bool = True
+    
     class Config:
         env_file = ".env"
         env_file_encoding = "utf-8"
