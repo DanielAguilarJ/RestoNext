@@ -44,7 +44,7 @@ class UserResponse(BaseModel):
 # ============================================
 
 class FiscalConfigSchema(BaseModel):
-    """Fiscal configuration for Mexican businesses"""
+    """Fiscal configuration for Mexican businesses (legacy)"""
     rfc: str = Field(..., min_length=12, max_length=13)
     razon_social: str
     regimen_fiscal: str
@@ -54,13 +54,99 @@ class FiscalConfigSchema(BaseModel):
     pac_provider: Optional[str] = None
 
 
+class FiscalAddressSchema(BaseModel):
+    """Structured fiscal address for CFDI 4.0"""
+    street: str = Field(..., min_length=1, max_length=300)
+    exterior_number: str = Field(..., min_length=1, max_length=20)
+    interior_number: Optional[str] = Field(None, max_length=20)
+    neighborhood: str = Field(..., min_length=1, max_length=120)  # Colonia
+    city: str = Field(..., min_length=1, max_length=120)
+    state: str = Field(..., min_length=1, max_length=120)
+    postal_code: str = Field(..., min_length=5, max_length=5)  # CP
+    country: str = Field(default="México", max_length=60)
+
+
+class ContactsSchema(BaseModel):
+    """Business contact information"""
+    email: EmailStr
+    phone: Optional[str] = Field(None, max_length=20)
+    whatsapp: Optional[str] = Field(None, max_length=20)
+
+
+class TicketConfigSchema(BaseModel):
+    """Ticket/receipt configuration"""
+    header_lines: List[str] = Field(default_factory=list)
+    footer_lines: List[str] = Field(default_factory=list)
+    show_logo: bool = True
+    additional_notes: Optional[str] = None
+
+
+class BillingConfigSchema(BaseModel):
+    """PAC/CSD configuration for CFDI stamping"""
+    pac_provider: Optional[str] = None  # e.g., "facturapi", "finkok"
+    csd_cert_path: Optional[str] = None
+    csd_key_path: Optional[str] = None
+    csd_password_ref: Optional[str] = None  # Secret reference, not actual password
+    series: str = "A"
+    folio_start: int = 1
+
+
+class TenantOnboardingStart(BaseModel):
+    """Initial onboarding data - Step 1"""
+    trade_name: str = Field(..., min_length=2, max_length=200)
+    logo_url: Optional[str] = None
+
+
+class TenantOnboardingUpdate(BaseModel):
+    """Partial update for onboarding steps"""
+    trade_name: Optional[str] = Field(None, min_length=2, max_length=200)
+    legal_name: Optional[str] = Field(None, min_length=2, max_length=300)
+    logo_url: Optional[str] = None
+    rfc: Optional[str] = Field(None, min_length=12, max_length=13)
+    regimen_fiscal: Optional[str] = Field(None, min_length=3, max_length=3)
+    uso_cfdi_default: Optional[str] = Field(None, min_length=3, max_length=3)
+    fiscal_address: Optional[FiscalAddressSchema] = None
+    contacts: Optional[ContactsSchema] = None
+    ticket_config: Optional[TicketConfigSchema] = None
+    billing_config: Optional[BillingConfigSchema] = None
+    onboarding_step: Optional[str] = None
+
+
 class TenantCreate(BaseModel):
     name: str
     slug: str
     fiscal_config: FiscalConfigSchema
 
 
+class TenantPublic(BaseModel):
+    """Full tenant profile for authenticated users"""
+    id: UUID
+    name: str
+    slug: str
+    legal_name: Optional[str]
+    trade_name: Optional[str]
+    logo_url: Optional[str]
+    rfc: Optional[str]
+    regimen_fiscal: Optional[str]
+    uso_cfdi_default: str
+    fiscal_address: dict
+    contacts: dict
+    ticket_config: dict
+    billing_config: dict
+    timezone: str
+    currency: str
+    locale: str
+    onboarding_complete: bool
+    onboarding_step: str
+    is_active: bool
+    created_at: datetime
+    
+    class Config:
+        from_attributes = True
+
+
 class TenantResponse(BaseModel):
+    """Brief tenant response (legacy)"""
     id: UUID
     name: str
     slug: str

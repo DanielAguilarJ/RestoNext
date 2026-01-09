@@ -11,7 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.core.database import get_db
-from app.core.security import get_current_user
+from app.core.security import get_current_user, require_onboarding_complete
 from app.models.models import User, Order, Invoice, Tenant, CFDIStatus
 from app.schemas.schemas import SelfInvoiceRequest, InvoiceResponse
 from app.services.cfdi_service import (
@@ -28,6 +28,7 @@ async def create_self_invoice(
     invoice_request: SelfInvoiceRequest,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
+    _: bool = Depends(require_onboarding_complete),
 ):
     """
     Create a customer self-invoice (autofactura).
@@ -79,10 +80,10 @@ async def create_self_invoice(
     )
     tenant = tenant_result.scalar_one_or_none()
     
-    if not tenant or not tenant.fiscal_config:
-        raise HTTPException(
-            status_code=500,
-            detail="Restaurant fiscal configuration not found"
+    if not tenant or not tenant.onboarding_complete:
+         raise HTTPException(
+            status_code=400,
+            detail="Restaurant onboarding not complete. Cannot issue invoices."
         )
     
     # Validate customer data
@@ -114,11 +115,11 @@ async def create_self_invoice(
         })
     
     # Generate CFDI XML
-    fiscal = tenant.fiscal_config
+    # Using new structured fields from onboarding
     xml_content = generate_cfdi_xml(
-        emisor_rfc=fiscal.get("rfc"),
-        emisor_nombre=fiscal.get("razon_social"),
-        emisor_regimen=fiscal.get("regimen_fiscal", "612"),
+        emisor_rfc=tenant.rfc,
+        emisor_nombre=tenant.legal_name,
+        emisor_regimen=tenant.regimen_fiscal,
         receptor_rfc=invoice_request.receptor_rfc.upper(),
         receptor_nombre=validation.cleaned_nombre,  # Use cleaned name
         receptor_cp=invoice_request.receptor_cp,
@@ -129,9 +130,13 @@ async def create_self_invoice(
     )
     
     # Send to PAC for stamping
+    # Check billing_config for PAC provider, default to mock
+    billing_config = tenant.billing_config or {}
+    pac_provider = billing_config.get("pac_provider", "mock")
+    
     pac_response = await stamp_cfdi_with_pac(
         xml_content,
-        fiscal.get("pac_provider", "mock")
+        pac_provider
     )
     
     if not pac_response.success:

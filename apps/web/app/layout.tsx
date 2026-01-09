@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
+import { RxDBProvider } from "../lib/db-provider";
+import { TenantProvider } from "../lib/tenant-provider";
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -25,8 +27,13 @@ export default function RootLayout({
     return (
         <html lang="es" suppressHydrationWarning>
             <body className={inter.className}>
-                {children}
+                <RxDBProvider>
+                    <TenantProvider>
+                        {children}
+                    </TenantProvider>
+                </RxDBProvider>
             </body>
         </html>
     );
 }
+

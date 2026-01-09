@@ -76,6 +76,24 @@ class SplitType(str, enum.Enum):
     CUSTOM = "custom"
 
 
+class UnitOfMeasure(str, enum.Enum):
+    """Units for ingredient measurement"""
+    KG = "kg"           # Kilogramos
+    G = "g"             # Gramos
+    LT = "lt"           # Litros
+    ML = "ml"           # Mililitros
+    PZA = "pza"         # Pieza
+    PORCION = "porcion"  # Porción
+
+
+class TransactionType(str, enum.Enum):
+    """Types of inventory transactions"""
+    PURCHASE = "purchase"       # Compra/entrada
+    SALE = "sale"              # Venta/descuento automático
+    ADJUSTMENT = "adjustment"  # Ajuste de inventario
+    WASTE = "waste"            # Merma
+
+
 # ============================================
 # Tenant / Restaurant Model
 # ============================================
@@ -83,19 +101,58 @@ class SplitType(str, enum.Enum):
 class Tenant(Base):
     """
     Restaurant/Business entity.
-    fiscal_config JSONB stores RFC, Régimen Fiscal, CSD paths.
+    Extended for onboarding with fiscal data for CFDI 4.0.
+    
+    JSONB columns:
+    - fiscal_config: Legacy, will be deprecated in favor of structured fields
+    - fiscal_address: {street, ext, int, col, city, state, cp, country}
+    - contacts: {email, phone, whatsapp}
+    - ticket_config: {header_lines, footer_lines, show_logo, additional_notes}
+    - billing_config: {pac_provider, csd_cert_path, csd_key_path, csd_password_ref, series, folio_start}
     """
     __tablename__ = "tenants"
     
     id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
     )
+    
+    # Basic identity
     name: Mapped[str] = mapped_column(String(128), nullable=False)
     slug: Mapped[str] = mapped_column(String(64), unique=True, nullable=False)
     
-    # JSONB for fiscal configuration - avoids migrations when SAT rules change
-    # Structure: {rfc, razon_social, regimen_fiscal, codigo_postal, csd_paths...}
+    # Business identity (NEW for onboarding)
+    legal_name: Mapped[Optional[str]] = mapped_column(String(300), nullable=True)  # Razón social
+    trade_name: Mapped[Optional[str]] = mapped_column(String(200), nullable=True)  # Nombre comercial
+    logo_url: Mapped[Optional[str]] = mapped_column(String(512), nullable=True)
+    
+    # Fiscal data for CFDI 4.0 (NEW)
+    rfc: Mapped[Optional[str]] = mapped_column(String(13), nullable=True)
+    regimen_fiscal: Mapped[Optional[str]] = mapped_column(String(3), nullable=True)  # SAT catalog
+    uso_cfdi_default: Mapped[str] = mapped_column(String(3), nullable=False, default="G03")
+    
+    # JSONB for structured fiscal address
+    fiscal_address: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
+    
+    # JSONB for contacts
+    contacts: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
+    
+    # JSONB for ticket configuration
+    ticket_config: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
+    
+    # JSONB for billing/PAC configuration
+    billing_config: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
+    
+    # Legacy fiscal_config (keeping for backward compatibility)
     fiscal_config: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
+    
+    # Operational settings (NEW)
+    timezone: Mapped[str] = mapped_column(String(64), nullable=False, default="America/Mexico_City")
+    currency: Mapped[str] = mapped_column(String(3), nullable=False, default="MXN")
+    locale: Mapped[str] = mapped_column(String(10), nullable=False, default="es-MX")
+    
+    # Onboarding state (NEW)
+    onboarding_complete: Mapped[bool] = mapped_column(Boolean, default=False)
+    onboarding_step: Mapped[str] = mapped_column(String(32), nullable=False, default="basic")
     
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
@@ -210,12 +267,19 @@ class MenuItem(Base):
     # JSONB for complex modifier logic
     modifiers_schema: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)
     
+    # JSONB for tax configuration (replaces fixed 16% IVA)
+    # Example: {"iva": 0.16} or {"iva": 0.08, "ieps": 0.265} for alcohol
+    tax_config: Mapped[dict] = mapped_column(
+        JSONB, nullable=False, default={"iva": 0.16}
+    )
+    
     is_available: Mapped[bool] = mapped_column(Boolean, default=True)
     sort_order: Mapped[int] = mapped_column(Integer, default=0)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     
     # Relationships
     category: Mapped["MenuCategory"] = relationship(back_populates="items")
+    recipes: Mapped[List["Recipe"]] = relationship(back_populates="menu_item")
 
 
 # ============================================
@@ -460,3 +524,146 @@ class DailySales(Base):
     __table_args__ = (
         UniqueConstraint('tenant_id', 'date', 'ingredient', name='uq_daily_sales'),
     )
+
+
+# ============================================
+# Inventory Models (Escandallo)
+# ============================================
+
+class Ingredient(Base):
+    """
+    Base ingredients/supplies for inventory tracking.
+    Linked to recipes for automatic deduction on sale.
+    
+    modifier_link JSONB allows linking modifiers to ingredients:
+    Example: {"group_name": "Extras", "option_id": "extra_cheese"}
+    When this modifier is selected, extra ingredient is deducted.
+    """
+    __tablename__ = "ingredients"
+    
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    tenant_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("tenants.id"), nullable=False
+    )
+    
+    name: Mapped[str] = mapped_column(String(128), nullable=False)
+    sku: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    unit: Mapped[UnitOfMeasure] = mapped_column(
+        SQLEnum(UnitOfMeasure), nullable=False
+    )
+    
+    # Current theoretical stock
+    stock_quantity: Mapped[float] = mapped_column(Float, default=0.0)
+    min_stock_alert: Mapped[float] = mapped_column(Float, default=0.0)
+    cost_per_unit: Mapped[float] = mapped_column(Float, default=0.0)
+    
+    # Optional: link modifiers to ingredients for "Extra Queso" deductions
+    modifier_link: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)
+    
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    
+    __table_args__ = (
+        UniqueConstraint('tenant_id', 'name', name='uq_tenant_ingredient_name'),
+    )
+    
+    # Relationships
+    recipes: Mapped[List["Recipe"]] = relationship(back_populates="ingredient")
+    transactions: Mapped[List["InventoryTransaction"]] = relationship(
+        back_populates="ingredient"
+    )
+
+
+class Recipe(Base):
+    """
+    Links MenuItem to Ingredients with quantities (Escandallo).
+    Enables automatic inventory deduction on sale.
+    
+    Example: A "Hamburguesa" might have:
+    - 150g of Carne
+    - 1 pza of Pan
+    - 30g of Queso
+    """
+    __tablename__ = "recipes"
+    
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    menu_item_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("menu_items.id"), nullable=False
+    )
+    ingredient_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("ingredients.id"), nullable=False
+    )
+    
+    # Amount to deduct per menu item sold
+    quantity: Mapped[float] = mapped_column(Float, nullable=False)
+    unit: Mapped[UnitOfMeasure] = mapped_column(
+        SQLEnum(UnitOfMeasure), nullable=False
+    )
+    
+    # For UI: optional notes (e.g., "cocida", "cruda")
+    notes: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    
+    __table_args__ = (
+        UniqueConstraint(
+            'menu_item_id', 'ingredient_id', name='uq_recipe_item_ingredient'
+        ),
+    )
+    
+    # Relationships
+    menu_item: Mapped["MenuItem"] = relationship(back_populates="recipes")
+    ingredient: Mapped["Ingredient"] = relationship(back_populates="recipes")
+
+
+class InventoryTransaction(Base):
+    """
+    Audit log for all inventory movements.
+    Enables traceability for cost control and auditing.
+    
+    transaction_type:
+    - PURCHASE: Stock increase from supplier
+    - SALE: Automatic deduction from order
+    - ADJUSTMENT: Manual inventory correction
+    - WASTE: Loss/spoilage (merma)
+    """
+    __tablename__ = "inventory_transactions"
+    
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    tenant_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("tenants.id"), nullable=False
+    )
+    ingredient_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("ingredients.id"), nullable=False
+    )
+    
+    transaction_type: Mapped[TransactionType] = mapped_column(
+        SQLEnum(TransactionType), nullable=False
+    )
+    # Positive for entries, negative for exits
+    quantity: Mapped[float] = mapped_column(Float, nullable=False)
+    unit: Mapped[UnitOfMeasure] = mapped_column(
+        SQLEnum(UnitOfMeasure), nullable=False
+    )
+    
+    # Reference to source document (order_id, purchase_id, etc.)
+    reference_type: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
+    reference_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        UUID(as_uuid=True), nullable=True
+    )
+    
+    # Running balance after transaction
+    stock_after: Mapped[float] = mapped_column(Float, nullable=False)
+    
+    notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    created_by: Mapped[Optional[uuid.UUID]] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id"), nullable=True
+    )
+    
+    # Relationships
+    ingredient: Mapped["Ingredient"] = relationship(back_populates="transactions")

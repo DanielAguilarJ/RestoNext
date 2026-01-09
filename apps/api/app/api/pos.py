@@ -12,7 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.core.database import get_db
-from app.core.security import get_current_user, require_waiter, require_cashier
+from app.core.security import get_current_user, require_waiter, require_cashier, require_onboarding_complete
 from app.core.websocket_manager import ws_manager
 from app.models.models import (
     User, Order, OrderItem, MenuItem, Table, 
@@ -31,6 +31,7 @@ async def create_order(
     order_data: OrderCreate,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_waiter),
+    _: bool = Depends(require_onboarding_complete),
 ):
     """
     Create a new order.

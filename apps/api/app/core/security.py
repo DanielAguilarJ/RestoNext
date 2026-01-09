@@ -152,3 +152,71 @@ require_manager_or_admin = require_roles(UserRole.ADMIN, UserRole.MANAGER)
 require_waiter = require_roles(UserRole.ADMIN, UserRole.MANAGER, UserRole.WAITER)
 require_kitchen = require_roles(UserRole.ADMIN, UserRole.MANAGER, UserRole.KITCHEN)
 require_cashier = require_roles(UserRole.ADMIN, UserRole.MANAGER, UserRole.CASHIER)
+
+
+# ============================================
+# Tenant Context Dependencies
+# ============================================
+
+# Import Tenant here to avoid circular imports
+from app.models.models import Tenant
+
+
+async def get_current_tenant(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> "Tenant":
+    """
+    Get the tenant for the current user.
+    
+    This dependency does NOT check onboarding status.
+    Use require_onboarding_complete for routes that need complete onboarding.
+    """
+    result = await db.execute(
+        select(Tenant).where(Tenant.id == current_user.tenant_id)
+    )
+    tenant = result.scalar_one_or_none()
+    
+    if tenant is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Tenant not found",
+        )
+    
+    if not tenant.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Tenant account is disabled",
+        )
+    
+    return tenant
+
+
+def require_onboarding_complete():
+    """
+    Dependency to ensure onboarding is complete.
+    
+    Use this on POS, KDS, Billing routes to block access until
+    the tenant has completed their onboarding profile.
+    
+    Usage:
+        @router.get("/orders")
+        async def list_orders(tenant: Tenant = Depends(require_onboarding_complete())):
+            ...
+    """
+    async def onboarding_checker(
+        tenant: Tenant = Depends(get_current_tenant),
+    ) -> Tenant:
+        if not tenant.onboarding_complete:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Please complete your restaurant profile setup first. Visit /onboarding to continue.",
+            )
+        return tenant
+    
+    return onboarding_checker
+
+
+# Pre-defined onboarding dependency for convenience
+require_complete_profile = require_onboarding_complete()
+

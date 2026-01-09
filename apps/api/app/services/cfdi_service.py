@@ -149,7 +149,20 @@ def generate_cfdi_xml(
     total: float,
 ) -> str:
     """
-    Generate CFDI 4.0 XML structure.
+    Generate CFDI 4.0 XML structure with dynamic tax calculation.
+    
+    Each concepto should include:
+    - clave_prod_serv: SAT product key (default: '90101500' for restaurants)
+    - cantidad: Quantity
+    - clave_unidad: Unit key (default: 'ACT')
+    - descripcion: Item description
+    - valor_unitario: Unit price
+    - importe: Total (cantidad × valor_unitario)
+    - tax_config: Optional dict with tax rates, e.g. {"iva": 0.16, "ieps": 0.265}
+    
+    Supported tax rates:
+    - IVA: 0.0 (exempt), 0.08 (border), 0.16 (standard)
+    - IEPS: Variable rates for alcohol, tobacco, etc.
     
     NOTE: This is a MOCK implementation. In production, use a proper
     XML library with SAT schema validation and certificate signing.
@@ -158,9 +171,72 @@ def generate_cfdi_xml(
     folio = datetime.now().strftime("%Y%m%d%H%M%S")
     fecha = datetime.now().isoformat()
     
+    # Track taxes for summary
+    iva_totals = {}  # rate -> {base, importe}
+    ieps_totals = {}  # rate -> {base, importe}
+    
     # Build conceptos XML
     conceptos_xml = ""
     for c in conceptos:
+        importe = c['importe']
+        tax_config = c.get('tax_config', {'iva': 0.16})
+        
+        # Calculate IVA
+        iva_rate = tax_config.get('iva', 0.16)
+        iva_importe = importe * iva_rate
+        
+        # Calculate IEPS if present
+        ieps_rate = tax_config.get('ieps')
+        ieps_importe = importe * ieps_rate if ieps_rate else 0
+        
+        # Build taxes XML for this concept
+        traslados_xml = ""
+        
+        # IVA (Impuesto 002)
+        if iva_rate > 0:
+            traslados_xml += f"""
+                        <cfdi:Traslado
+                            Base="{importe:.2f}"
+                            Impuesto="002"
+                            TipoFactor="Tasa"
+                            TasaOCuota="{iva_rate:.6f}"
+                            Importe="{iva_importe:.2f}"/>"""
+            
+            # Accumulate for totals
+            if iva_rate not in iva_totals:
+                iva_totals[iva_rate] = {'base': 0, 'importe': 0}
+            iva_totals[iva_rate]['base'] += importe
+            iva_totals[iva_rate]['importe'] += iva_importe
+        elif iva_rate == 0:
+            # Tasa 0% must be explicit in CFDI
+            traslados_xml += f"""
+                        <cfdi:Traslado
+                            Base="{importe:.2f}"
+                            Impuesto="002"
+                            TipoFactor="Tasa"
+                            TasaOCuota="0.000000"
+                            Importe="0.00"/>"""
+            
+            if 0.0 not in iva_totals:
+                iva_totals[0.0] = {'base': 0, 'importe': 0}
+            iva_totals[0.0]['base'] += importe
+            iva_totals[0.0]['importe'] += 0
+        
+        # IEPS (Impuesto 003) if applicable
+        if ieps_rate:
+            traslados_xml += f"""
+                        <cfdi:Traslado
+                            Base="{importe:.2f}"
+                            Impuesto="003"
+                            TipoFactor="Tasa"
+                            TasaOCuota="{ieps_rate:.6f}"
+                            Importe="{ieps_importe:.2f}"/>"""
+            
+            if ieps_rate not in ieps_totals:
+                ieps_totals[ieps_rate] = {'base': 0, 'importe': 0}
+            ieps_totals[ieps_rate]['base'] += importe
+            ieps_totals[ieps_rate]['importe'] += ieps_importe
+        
         conceptos_xml += f"""
             <cfdi:Concepto
                 ClaveProdServ="{c.get('clave_prod_serv', '90101500')}"
@@ -168,20 +244,38 @@ def generate_cfdi_xml(
                 ClaveUnidad="{c.get('clave_unidad', 'ACT')}"
                 Descripcion="{c['descripcion']}"
                 ValorUnitario="{c['valor_unitario']:.2f}"
-                Importe="{c['importe']:.2f}">
+                Importe="{importe:.2f}">
                 <cfdi:Impuestos>
-                    <cfdi:Traslados>
-                        <cfdi:Traslado
-                            Base="{c['importe']:.2f}"
-                            Impuesto="002"
-                            TipoFactor="Tasa"
-                            TasaOCuota="0.160000"
-                            Importe="{c['importe'] * 0.16:.2f}"/>
+                    <cfdi:Traslados>{traslados_xml}
                     </cfdi:Traslados>
                 </cfdi:Impuestos>
             </cfdi:Concepto>"""
     
-    iva = subtotal * 0.16
+    # Build total taxes summary
+    total_impuestos = 0
+    traslados_resumen = ""
+    
+    # IVA totals by rate
+    for rate, totals in sorted(iva_totals.items()):
+        traslados_resumen += f"""
+            <cfdi:Traslado
+                Base="{totals['base']:.2f}"
+                Impuesto="002"
+                TipoFactor="Tasa"
+                TasaOCuota="{rate:.6f}"
+                Importe="{totals['importe']:.2f}"/>"""
+        total_impuestos += totals['importe']
+    
+    # IEPS totals by rate
+    for rate, totals in sorted(ieps_totals.items()):
+        traslados_resumen += f"""
+            <cfdi:Traslado
+                Base="{totals['base']:.2f}"
+                Impuesto="003"
+                TipoFactor="Tasa"
+                TasaOCuota="{rate:.6f}"
+                Importe="{totals['importe']:.2f}"/>"""
+        total_impuestos += totals['importe']
     
     xml = f"""<?xml version="1.0" encoding="UTF-8"?>
 <cfdi:Comprobante xmlns:cfdi="http://www.sat.gob.mx/cfd/4"
@@ -216,14 +310,8 @@ def generate_cfdi_xml(
         {conceptos_xml}
     </cfdi:Conceptos>
     
-    <cfdi:Impuestos TotalImpuestosTrasladados="{iva:.2f}">
-        <cfdi:Traslados>
-            <cfdi:Traslado
-                Base="{subtotal:.2f}"
-                Impuesto="002"
-                TipoFactor="Tasa"
-                TasaOCuota="0.160000"
-                Importe="{iva:.2f}"/>
+    <cfdi:Impuestos TotalImpuestosTrasladados="{total_impuestos:.2f}">
+        <cfdi:Traslados>{traslados_resumen}
         </cfdi:Traslados>
     </cfdi:Impuestos>
     

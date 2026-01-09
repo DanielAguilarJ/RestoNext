@@ -13,6 +13,9 @@ const nextConfig = {
     images: {
         domains: ["localhost"],
     },
+
+    // Transpile RxDB to handle ESM modules correctly
+    transpilePackages: ["rxdb"],
 };
 
 module.exports = nextConfig;

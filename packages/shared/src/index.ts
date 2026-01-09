@@ -9,6 +9,7 @@
 // ============================================
 
 export interface AppwriteDocument {
+  id: string; // Mapped from $id
   $id: string;
   $createdAt: string;
   $updatedAt: string;
