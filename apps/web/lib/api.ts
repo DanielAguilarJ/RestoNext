@@ -1,31 +1,85 @@
-import { Client, Databases, Account, ID, Query } from 'appwrite';
 import {
-    MenuCategory, MenuItem, Table, Order, OrderItem, UserRole
+    MenuCategory, MenuItem, Table, Order, UserRole
 } from '../../../packages/shared/src/index';
 
-// Initialize Appwrite Client
-const client = new Client()
-    .setEndpoint(process.env.NEXT_PUBLIC_APPWRITE_ENDPOINT || 'https://cloud.appwrite.io/v1')
-    .setProject(process.env.NEXT_PUBLIC_APPWRITE_PROJECT_ID || 'restonext');
+// ============================================
+// API Configuration
+// ============================================
 
-export const databases = new Databases(client);
-export const account = new Account(client);
-
-export const DATABASE_ID = 'restonext';
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api';
 
 /**
- * Document Mapping Utility
- * Ensures Appwrite documents match our shared interfaces
+ * Token storage utilities
  */
-export function mapDoc<T>(doc: any): T {
-    // We keep the internal Appwrite fields ($id, $createdAt, etc.)
-    // as our shared interfaces extend AppwriteDocument
-    return {
-        ...doc,
-        // Optional: keep aliases for backward compatibility if needed, 
-        // but it's better to use the shared interfaces directly.
-        id: doc.$id,
-    } as T;
+const TokenStorage = {
+    get: (): string | null => {
+        if (typeof window === 'undefined') return null;
+        return localStorage.getItem('access_token');
+    },
+    set: (token: string): void => {
+        if (typeof window !== 'undefined') {
+            localStorage.setItem('access_token', token);
+        }
+    },
+    remove: (): void => {
+        if (typeof window !== 'undefined') {
+            localStorage.removeItem('access_token');
+        }
+    }
+};
+
+/**
+ * API Client with JWT handling
+ */
+async function apiRequest<T>(
+    endpoint: string,
+    options: RequestInit = {}
+): Promise<T> {
+    const token = TokenStorage.get();
+
+    const headers: HeadersInit = {
+        'Content-Type': 'application/json',
+        ...options.headers,
+    };
+
+    if (token) {
+        (headers as Record<string, string>)['Authorization'] = `Bearer ${token}`;
+    }
+
+    const response = await fetch(`${API_BASE_URL}${endpoint}`, {
+        ...options,
+        headers,
+    });
+
+    if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.detail || `API Error: ${response.status}`);
+    }
+
+    // Handle 204 No Content
+    if (response.status === 204) {
+        return {} as T;
+    }
+
+    return response.json();
+}
+
+// ============================================
+// User Types
+// ============================================
+
+export interface User {
+    id: string;
+    email: string;
+    name: string;
+    role: UserRole;
+    restaurant_id: string;
+}
+
+export interface LoginResponse {
+    access_token: string;
+    token_type: string;
+    user: User;
 }
 
 // ============================================
@@ -33,33 +87,49 @@ export function mapDoc<T>(doc: any): T {
 // ============================================
 
 export const authApi = {
-    login: async (email: string, password: string) => {
-        const session = await account.createEmailPasswordSession(email, password);
-        const user = await account.get();
-        return { access_token: session.$id, user };
+    /**
+     * Login with email and password
+     */
+    login: async (email: string, password: string): Promise<LoginResponse> => {
+        const formData = new URLSearchParams();
+        formData.append('username', email);
+        formData.append('password', password);
+
+        const response = await fetch(`${API_BASE_URL}/auth/login`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/x-www-form-urlencoded',
+            },
+            body: formData.toString(),
+        });
+
+        if (!response.ok) {
+            const errorData = await response.json().catch(() => ({}));
+            throw new Error(errorData.detail || 'Login failed');
+        }
+
+        const data: LoginResponse = await response.json();
+        TokenStorage.set(data.access_token);
+        return data;
     },
 
-    logout: async () => {
-        await account.deleteSession('current');
-    },
-
-    me: async (): Promise<any | null> => {
+    /**
+     * Logout current user
+     */
+    logout: async (): Promise<void> => {
         try {
-            const user = await account.get();
-            const profile = await databases.listDocuments(DATABASE_ID, 'profiles', [
-                Query.equal('user_id', user.$id)
-            ]);
-            if (profile.documents.length > 0) {
-                const p = profile.documents[0];
-                return {
-                    id: user.$id,
-                    email: user.email,
-                    name: user.name,
-                    role: p.role as UserRole,
-                    restaurant_id: p.restaurant_id,
-                };
-            }
-            return null;
+            await apiRequest('/auth/logout', { method: 'POST' });
+        } finally {
+            TokenStorage.remove();
+        }
+    },
+
+    /**
+     * Get current authenticated user
+     */
+    me: async (): Promise<User | null> => {
+        try {
+            return await apiRequest<User>('/auth/me');
         } catch {
             return null;
         }
@@ -70,46 +140,74 @@ export const authApi = {
 // Orders API
 // ============================================
 
+export interface CreateOrderRequest {
+    table_id: string;
+    items: Array<{
+        menu_item_id: string;
+        quantity: number;
+        notes?: string;
+        modifiers?: string[];
+    }>;
+    notes?: string;
+}
+
+export interface PaymentRequest {
+    payment_method: 'cash' | 'card' | 'transfer';
+    amount: number;
+    tip?: number;
+    reference?: string;
+}
+
 export const ordersApi = {
-    create: async (order: Partial<Order>): Promise<Order> => {
-        const doc = await databases.createDocument(
-            DATABASE_ID,
-            'orders',
-            ID.unique(),
-            order
-        );
-        return mapDoc<Order>(doc);
+    /**
+     * Create a new order
+     */
+    create: async (order: CreateOrderRequest): Promise<Order> => {
+        return apiRequest<Order>('/orders', {
+            method: 'POST',
+            body: JSON.stringify(order),
+        });
     },
 
+    /**
+     * Get a specific order by ID
+     */
     get: async (orderId: string): Promise<Order> => {
-        const doc = await databases.getDocument(DATABASE_ID, 'orders', orderId);
-        return mapDoc<Order>(doc);
+        return apiRequest<Order>(`/orders/${orderId}`);
     },
 
-    list: async (params?: { status?: string; table_id?: string; restaurant_id?: string }): Promise<Order[]> => {
-        const queries = [];
-        if (params?.status) queries.push(Query.equal('status', params.status));
-        if (params?.table_id) queries.push(Query.equal('table_id', params.table_id));
-        if (params?.restaurant_id) queries.push(Query.equal('restaurant_id', params.restaurant_id));
+    /**
+     * List orders with optional filters
+     */
+    list: async (params?: {
+        status?: string;
+        table_id?: string;
+        restaurant_id?: string;
+        limit?: number;
+        offset?: number;
+    }): Promise<Order[]> => {
+        const searchParams = new URLSearchParams();
 
-        const res = await databases.listDocuments(DATABASE_ID, 'orders', queries);
-        return res.documents.map(mapDoc<Order>);
+        if (params?.status) searchParams.append('status', params.status);
+        if (params?.table_id) searchParams.append('table_id', params.table_id);
+        if (params?.restaurant_id) searchParams.append('restaurant_id', params.restaurant_id);
+        if (params?.limit) searchParams.append('limit', params.limit.toString());
+        if (params?.offset) searchParams.append('offset', params.offset.toString());
+
+        const query = searchParams.toString();
+        const endpoint = query ? `/orders?${query}` : '/orders';
+
+        return apiRequest<Order[]>(endpoint);
     },
 
-    updateItemStatus: async (orderId: string, itemId: string, status: string): Promise<OrderItem> => {
-        // Appwrite Function should handle item status updates in embedded items
-        throw new Error("Update item status logic moved to Appwrite Functions/Orders update");
-    },
-
-    pay: async (orderId: string, payment?: any): Promise<Order> => {
-        const doc = await databases.updateDocument(DATABASE_ID, 'orders', orderId, { status: 'completed' });
-        return mapDoc<Order>(doc);
-    },
-
-    requestBill: async (orderId: string): Promise<Table> => {
-        // Assuming orderId is linked to a table status update
-        const doc = await databases.updateDocument(DATABASE_ID, 'tables', orderId, { status: 'bill_requested' });
-        return mapDoc<Table>(doc);
+    /**
+     * Process payment for an order
+     */
+    pay: async (orderId: string, payment?: PaymentRequest): Promise<Order> => {
+        return apiRequest<Order>(`/orders/${orderId}/pay`, {
+            method: 'POST',
+            body: payment ? JSON.stringify(payment) : undefined,
+        });
     }
 };
 
@@ -118,20 +216,30 @@ export const ordersApi = {
 // ============================================
 
 export const menuApi = {
-    getCategories: async (restaurantId: string): Promise<MenuCategory[]> => {
-        const res = await databases.listDocuments(DATABASE_ID, 'menu_categories', [
-            Query.equal('restaurant_id', restaurantId),
-            Query.orderAsc('sort_order')
-        ]);
-        return res.documents.map(mapDoc<MenuCategory>);
+    /**
+     * Get all categories for a restaurant
+     */
+    getCategories: async (restaurantId?: string): Promise<MenuCategory[]> => {
+        const searchParams = new URLSearchParams();
+        if (restaurantId) searchParams.append('restaurant_id', restaurantId);
+
+        const query = searchParams.toString();
+        const endpoint = query ? `/menu/categories?${query}` : '/menu/categories';
+
+        return apiRequest<MenuCategory[]>(endpoint);
     },
 
-    getItems: async (categoryId: string): Promise<MenuItem[]> => {
-        const res = await databases.listDocuments(DATABASE_ID, 'menu_items', [
-            Query.equal('category_id', categoryId),
-            Query.orderAsc('sort_order')
-        ]);
-        return res.documents.map(mapDoc<MenuItem>);
+    /**
+     * Get menu items, optionally filtered by category
+     */
+    getItems: async (categoryId?: string): Promise<MenuItem[]> => {
+        const searchParams = new URLSearchParams();
+        if (categoryId) searchParams.append('category_id', categoryId);
+
+        const query = searchParams.toString();
+        const endpoint = query ? `/menu/items?${query}` : '/menu/items';
+
+        return apiRequest<MenuItem[]>(endpoint);
     }
 };
 
@@ -140,57 +248,116 @@ export const menuApi = {
 // ============================================
 
 export const tablesApi = {
-    list: async (restaurantId: string): Promise<Table[]> => {
-        const res = await databases.listDocuments(DATABASE_ID, 'tables', [
-            Query.equal('restaurant_id', restaurantId),
-            Query.orderAsc('number')
-        ]);
-        return res.documents.map(mapDoc<Table>);
+    /**
+     * List all tables for a restaurant
+     */
+    list: async (restaurantId?: string): Promise<Table[]> => {
+        const searchParams = new URLSearchParams();
+        if (restaurantId) searchParams.append('restaurant_id', restaurantId);
+
+        const query = searchParams.toString();
+        const endpoint = query ? `/tables?${query}` : '/tables';
+
+        return apiRequest<Table[]>(endpoint);
     },
 
+    /**
+     * Update a table's status
+     */
     updateStatus: async (id: string, status: string): Promise<Table> => {
-        const doc = await databases.updateDocument(DATABASE_ID, 'tables', id, { status });
-        return mapDoc<Table>(doc);
+        return apiRequest<Table>(`/tables/${id}/status`, {
+            method: 'PATCH',
+            body: JSON.stringify({ status }),
+        });
     }
 };
 
 // ============================================
-// Billing & Analytics
+// WebSocket Client for Real-time Updates
 // ============================================
 
-export const billingApi = {
-    createSelfInvoice: async (data: any) => {
-        // Trigger Appwrite Function
-        throw new Error("Billing logic moved to Appwrite Functions");
-    }
-};
+export class WebSocketClient {
+    private ws: WebSocket | null = null;
+    private reconnectAttempts = 0;
+    private maxReconnectAttempts = 5;
+    private reconnectDelay = 1000;
+    private messageHandlers: Map<string, Set<(data: any) => void>> = new Map();
 
-export const analyticsApi = {
-    getForecast: async (ingredient: string) => {
-        // Trigger Appwrite Function
-        throw new Error("Forecasting logic moved to Appwrite Functions");
-    }
-};
+    connect(endpoint: string = '/ws'): void {
+        const token = TokenStorage.get();
+        const wsUrl = API_BASE_URL.replace(/^http/, 'ws').replace('/api', '') + endpoint;
+        const url = token ? `${wsUrl}?token=${token}` : wsUrl;
 
-// ============================================
-// Realtime Client
-// ============================================
+        this.ws = new WebSocket(url);
 
-export class AppwriteRealtimeClient {
-    private unsubscribe: (() => void) | null = null;
+        this.ws.onopen = () => {
+            console.log('WebSocket connected');
+            this.reconnectAttempts = 0;
+        };
 
-    subscribe(collection: string, callback: (data: any) => void) {
-        if (this.unsubscribe) this.unsubscribe();
-
-        this.unsubscribe = client.subscribe(
-            `databases.${DATABASE_ID}.collections.${collection}.documents`,
-            response => {
-                callback(response);
+        this.ws.onmessage = (event) => {
+            try {
+                const data = JSON.parse(event.data);
+                const handlers = this.messageHandlers.get(data.type);
+                if (handlers) {
+                    handlers.forEach(handler => handler(data.payload));
+                }
+            } catch (error) {
+                console.error('WebSocket message parse error:', error);
             }
-        );
+        };
 
-        return this.unsubscribe;
+        this.ws.onclose = () => {
+            console.log('WebSocket disconnected');
+            this.attemptReconnect(endpoint);
+        };
+
+        this.ws.onerror = (error) => {
+            console.error('WebSocket error:', error);
+        };
+    }
+
+    private attemptReconnect(endpoint: string): void {
+        if (this.reconnectAttempts < this.maxReconnectAttempts) {
+            this.reconnectAttempts++;
+            const delay = this.reconnectDelay * Math.pow(2, this.reconnectAttempts - 1);
+            console.log(`Attempting to reconnect in ${delay}ms...`);
+            setTimeout(() => this.connect(endpoint), delay);
+        }
+    }
+
+    subscribe(eventType: string, callback: (data: any) => void): () => void {
+        if (!this.messageHandlers.has(eventType)) {
+            this.messageHandlers.set(eventType, new Set());
+        }
+        this.messageHandlers.get(eventType)!.add(callback);
+
+        // Return unsubscribe function
+        return () => {
+            const handlers = this.messageHandlers.get(eventType);
+            if (handlers) {
+                handlers.delete(callback);
+            }
+        };
+    }
+
+    disconnect(): void {
+        if (this.ws) {
+            this.ws.close();
+            this.ws = null;
+        }
+        this.messageHandlers.clear();
     }
 }
 
-export const wsClient = new AppwriteRealtimeClient();
+export const wsClient = new WebSocketClient();
+
+// ============================================
+// Export token utilities for external use
+// ============================================
+
+export const tokenUtils = {
+    getToken: TokenStorage.get,
+    setToken: TokenStorage.set,
+    removeToken: TokenStorage.remove,
+};

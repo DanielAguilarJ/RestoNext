@@ -3,14 +3,26 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useKDSStore } from "@/lib/store";
-import { wsClient, mapDoc } from "@/lib/api";
+import { useKitchenSocket } from "@/hooks/useKitchenSocket";
 import { cn, formatTimeElapsed, getTimerStatus } from "@/lib/utils";
-import { Clock, Check, ChefHat, ArrowLeft, Flame, Bell, Sparkles } from "lucide-react";
-import { Order, OrderItem } from "../../../../packages/shared/src/index";
+import { Clock, Check, ChefHat, ArrowLeft, Flame, Bell, Sparkles, Wifi, WifiOff, RefreshCw } from "lucide-react";
 
 export function KDSBoard() {
     const { tickets, addTicket, updateItemStatus, setTickets } = useKDSStore();
     const [currentTime, setCurrentTime] = useState(new Date());
+
+    // Connect to Kitchen WebSocket
+    const {
+        isConnected,
+        connectionError,
+        reconnectAttempts,
+        connect,
+        disconnect
+    } = useKitchenSocket({
+        autoConnect: true,
+        reconnectInterval: 3000,
+        maxReconnectAttempts: 10,
+    });
 
     // Update timer every second
     useEffect(() => {
@@ -21,32 +33,6 @@ export function KDSBoard() {
         return () => clearInterval(interval);
     }, []);
 
-    // Connect to Appwrite Realtime for new orders and item updates
-    useEffect(() => {
-        const unsubscribe = wsClient.subscribe("orders", (response: any) => {
-            if (response.events.some((e: string) => e.includes(".create"))) {
-                const order = mapDoc<Order>(response.payload);
-                addTicket({
-                    id: order.$id,
-                    orderId: order.$id,
-                    tableNumber: order.table_number || 0,
-                    items: order.items?.map((item: any) => ({
-                        id: item.id || Math.random().toString(),
-                        name: item.name,
-                        quantity: item.quantity,
-                        modifiers: item.selected_modifiers?.map((m: any) => m.option) || [],
-                        status: item.status as any,
-                    })) || [],
-                    createdAt: new Date(order.created_at || order.$createdAt),
-                });
-            }
-        });
-
-        return () => {
-            if (typeof unsubscribe === "function") unsubscribe();
-        };
-    }, []);
-
     const handleItemClick = (ticketId: string, itemId: string, currentStatus: string) => {
         const nextStatus = currentStatus === "pending"
             ? "preparing"
@@ -55,10 +41,17 @@ export function KDSBoard() {
                 : "pending";
 
         updateItemStatus(ticketId, itemId, nextStatus as "pending" | "preparing" | "ready");
+
+        // TODO: Send status update to server via WebSocket or API
     };
 
     const getTimerMinutes = (createdAt: Date) => {
         return Math.floor((currentTime.getTime() - createdAt.getTime()) / 60000);
+    };
+
+    const handleManualReconnect = () => {
+        disconnect();
+        setTimeout(connect, 100);
     };
 
     return (
@@ -93,8 +86,38 @@ export function KDSBoard() {
                     </div>
                 </div>
 
-                {/* Stats */}
+                {/* Stats & Connection Status */}
                 <div className="flex items-center gap-4">
+                    {/* Connection Status */}
+                    <div className={cn(
+                        "glass-dark rounded-xl px-4 py-2 flex items-center gap-2 transition-all duration-300",
+                        isConnected ? "border border-green-500/30" : "border border-red-500/30"
+                    )}>
+                        {isConnected ? (
+                            <>
+                                <Wifi className="w-5 h-5 text-green-500" />
+                                <span className="text-green-400 text-sm font-medium">Conectado</span>
+                            </>
+                        ) : (
+                            <>
+                                <WifiOff className="w-5 h-5 text-red-500" />
+                                <span className="text-red-400 text-sm font-medium">
+                                    {reconnectAttempts > 0
+                                        ? `Reconectando... (${reconnectAttempts})`
+                                        : 'Desconectado'}
+                                </span>
+                                <button
+                                    onClick={handleManualReconnect}
+                                    className="ml-2 p-1 hover:bg-white/10 rounded transition-colors"
+                                    title="Reconectar manualmente"
+                                >
+                                    <RefreshCw className="w-4 h-4 text-gray-400 hover:text-white" />
+                                </button>
+                            </>
+                        )}
+                    </div>
+
+                    {/* Order Count */}
                     <div className="glass-dark rounded-xl px-4 py-2 flex items-center gap-2">
                         <Bell className="w-5 h-5 text-yellow-500" />
                         <span className="text-white font-bold">{tickets.length}</span>
@@ -102,6 +125,20 @@ export function KDSBoard() {
                     </div>
                 </div>
             </header>
+
+            {/* Connection Error Banner */}
+            {connectionError && (
+                <div className="relative z-10 mb-4 p-4 bg-red-500/20 border border-red-500/50 rounded-xl flex items-center justify-between">
+                    <span className="text-red-300">{connectionError}</span>
+                    <button
+                        onClick={handleManualReconnect}
+                        className="px-4 py-2 bg-red-500 hover:bg-red-600 text-white rounded-lg transition-colors flex items-center gap-2"
+                    >
+                        <RefreshCw className="w-4 h-4" />
+                        Reintentar
+                    </button>
+                </div>
+            )}
 
             {/* Tickets Grid */}
             <div className="relative z-10 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
@@ -196,6 +233,13 @@ export function KDSBoard() {
                                             </div>
                                         )}
 
+                                        {/* Notes */}
+                                        {item.notes && (
+                                            <div className="mt-2 text-sm text-yellow-400 italic">
+                                                📝 {item.notes}
+                                            </div>
+                                        )}
+
                                         {/* Status Badge */}
                                         <div className="mt-3 text-xs font-semibold uppercase tracking-wider">
                                             {item.status === "pending" && (
@@ -232,7 +276,25 @@ export function KDSBoard() {
                         <ChefHat className="w-12 h-12 text-gray-600" />
                     </div>
                     <p className="text-xl font-medium text-gray-400 mb-2">Sin pedidos pendientes</p>
-                    <p className="text-gray-500">Los nuevos pedidos aparecerán aquí automáticamente</p>
+                    <p className="text-gray-500 mb-4">Los nuevos pedidos aparecerán aquí automáticamente</p>
+
+                    {/* Connection hint */}
+                    <div className={cn(
+                        "flex items-center gap-2 px-4 py-2 rounded-lg",
+                        isConnected ? "bg-green-500/10 text-green-400" : "bg-yellow-500/10 text-yellow-400"
+                    )}>
+                        {isConnected ? (
+                            <>
+                                <Wifi className="w-4 h-4" />
+                                <span className="text-sm">Escuchando nuevos pedidos...</span>
+                            </>
+                        ) : (
+                            <>
+                                <WifiOff className="w-4 h-4" />
+                                <span className="text-sm">Conectando al servidor...</span>
+                            </>
+                        )}
+                    </div>
                 </div>
             )}
         </div>

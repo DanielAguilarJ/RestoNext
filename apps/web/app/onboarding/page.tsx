@@ -2,8 +2,7 @@
 
 import React, { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { databases, DATABASE_ID, account } from "../../lib/api";
-import { Query } from "appwrite";
+import { authApi } from "../../lib/api";
 
 // ============================================
 // Types
@@ -30,6 +29,39 @@ interface OnboardingData {
     header_lines: string[];
     footer_lines: string[];
     show_logo: boolean;
+}
+
+// API base URL
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api';
+
+// Helper function for API calls
+async function apiRequest<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
+    const token = typeof window !== 'undefined' ? localStorage.getItem('access_token') : null;
+
+    const headers: HeadersInit = {
+        'Content-Type': 'application/json',
+        ...options.headers,
+    };
+
+    if (token) {
+        (headers as Record<string, string>)['Authorization'] = `Bearer ${token}`;
+    }
+
+    const response = await fetch(`${API_BASE_URL}${endpoint}`, {
+        ...options,
+        headers,
+    });
+
+    if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.detail || `API Error: ${response.status}`);
+    }
+
+    if (response.status === 204) {
+        return {} as T;
+    }
+
+    return response.json();
 }
 
 const REGIMEN_OPTIONS = [
@@ -122,63 +154,61 @@ export default function OnboardingPage() {
     useEffect(() => {
         const loadData = async () => {
             try {
-                const user = await account.get();
-                const profileRes = await databases.listDocuments(DATABASE_ID, "profiles", [
-                    Query.equal("user_id", user.$id),
-                ]);
+                const user = await authApi.me();
+                if (!user) {
+                    router.push("/login");
+                    return;
+                }
 
-                if (profileRes.documents.length > 0) {
-                    const resId = profileRes.documents[0].restaurant_id;
-                    if (resId) {
-                        setRestaurantId(resId);
-                        const doc = await databases.getDocument(DATABASE_ID, "restaurants", resId);
+                // Fetch restaurant data from backend
+                const restaurant = await apiRequest<any>(`/onboarding/restaurant`);
 
-                        const parse = (val: any) => typeof val === 'string' ? JSON.parse(val || '{}') : (val || {});
+                if (restaurant) {
+                    setRestaurantId(restaurant.id);
 
-                        const contacts = parse(doc.contacts);
-                        const fiscalAddr = parse(doc.fiscal_address);
-                        const ticketCfg = parse(doc.ticket_config);
+                    const contacts = restaurant.contacts || {};
+                    const fiscalAddr = restaurant.fiscal_address || {};
+                    const ticketCfg = restaurant.ticket_config || {};
 
-                        // Map existing data
-                        setData((prev) => ({
-                            ...prev,
-                            trade_name: doc.trade_name || doc.name || "",
-                            logo_url: doc.logo_url || "",
-                            email: contacts.email || "",
-                            phone: contacts.phone || "",
-                            whatsapp: contacts.whatsapp || "",
-                            legal_name: doc.legal_name || "",
-                            rfc: doc.rfc || "",
-                            regimen_fiscal: doc.regimen_fiscal || "612",
-                            uso_cfdi_default: doc.uso_cfdi_default || "G03",
-                            street: fiscalAddr.street || "",
-                            exterior_number: fiscalAddr.exterior_number || "",
-                            interior_number: fiscalAddr.interior_number || "",
-                            neighborhood: fiscalAddr.neighborhood || "",
-                            city: fiscalAddr.city || "",
-                            state: fiscalAddr.state || "",
-                            postal_code: fiscalAddr.postal_code || "",
-                            country: fiscalAddr.country || "México",
-                            header_lines: ticketCfg.header_lines || [],
-                            footer_lines: ticketCfg.footer_lines || ["¡Gracias por su preferencia!"],
-                            show_logo: ticketCfg.show_logo ?? true,
-                        }));
+                    // Map existing data
+                    setData((prev) => ({
+                        ...prev,
+                        trade_name: restaurant.trade_name || restaurant.name || "",
+                        logo_url: restaurant.logo_url || "",
+                        email: contacts.email || "",
+                        phone: contacts.phone || "",
+                        whatsapp: contacts.whatsapp || "",
+                        legal_name: restaurant.legal_name || "",
+                        rfc: restaurant.rfc || "",
+                        regimen_fiscal: restaurant.regimen_fiscal || "612",
+                        uso_cfdi_default: restaurant.uso_cfdi_default || "G03",
+                        street: fiscalAddr.street || "",
+                        exterior_number: fiscalAddr.exterior_number || "",
+                        interior_number: fiscalAddr.interior_number || "",
+                        neighborhood: fiscalAddr.neighborhood || "",
+                        city: fiscalAddr.city || "",
+                        state: fiscalAddr.state || "",
+                        postal_code: fiscalAddr.postal_code || "",
+                        country: fiscalAddr.country || "México",
+                        header_lines: ticketCfg.header_lines || [],
+                        footer_lines: ticketCfg.footer_lines || ["¡Gracias por su preferencia!"],
+                        show_logo: ticketCfg.show_logo ?? true,
+                    }));
 
-                        // Set step based on saved progress
-                        const stepMap: Record<string, number> = {
-                            basic: 0,
-                            contacts: 1,
-                            fiscal: 2,
-                            ticket: 3,
-                            complete: 4,
-                        };
-                        setCurrentStep(stepMap[doc.onboarding_step] || 0);
+                    // Set step based on saved progress
+                    const stepMap: Record<string, number> = {
+                        basic: 0,
+                        contacts: 1,
+                        fiscal: 2,
+                        ticket: 3,
+                        complete: 4,
+                    };
+                    setCurrentStep(stepMap[restaurant.onboarding_step] || 0);
 
-                        // If already complete, redirect
-                        if (doc.onboarding_complete) {
-                            router.push("/pos");
-                            return;
-                        }
+                    // If already complete, redirect
+                    if (restaurant.onboarding_complete) {
+                        router.push("/pos");
+                        return;
                     }
                 }
             } catch (err) {
@@ -200,14 +230,14 @@ export default function OnboardingPage() {
         setErrors([]);
 
         try {
-            const updatePayload: any = {
+            const updatePayload = {
                 trade_name: data.trade_name,
                 legal_name: data.legal_name,
                 logo_url: data.logo_url || null,
                 rfc: data.rfc || null,
                 regimen_fiscal: data.regimen_fiscal || null,
                 uso_cfdi_default: data.uso_cfdi_default,
-                fiscal_address: JSON.stringify({
+                fiscal_address: {
                     street: data.street,
                     exterior_number: data.exterior_number,
                     interior_number: data.interior_number || null,
@@ -216,21 +246,24 @@ export default function OnboardingPage() {
                     state: data.state,
                     postal_code: data.postal_code,
                     country: data.country,
-                }),
-                contacts: JSON.stringify({
+                },
+                contacts: {
                     email: data.email,
                     phone: data.phone || null,
                     whatsapp: data.whatsapp || null,
-                }),
-                ticket_config: JSON.stringify({
+                },
+                ticket_config: {
                     header_lines: data.header_lines,
                     footer_lines: data.footer_lines,
                     show_logo: data.show_logo,
-                }),
+                },
                 onboarding_step: nextStep,
             };
 
-            await databases.updateDocument(DATABASE_ID, "restaurants", restaurantId, updatePayload);
+            await apiRequest(`/onboarding/restaurant`, {
+                method: 'PATCH',
+                body: JSON.stringify(updatePayload),
+            });
         } catch (err: any) {
             console.error("Failed to save progress:", err);
             setErrors([err.message || "Error al guardar"]);
@@ -277,35 +310,36 @@ export default function OnboardingPage() {
                 return;
             }
 
-            await databases.updateDocument(DATABASE_ID, "restaurants", restaurantId, {
-                trade_name: data.trade_name,
-                legal_name: data.legal_name,
-                logo_url: data.logo_url || null,
-                rfc: data.rfc.toUpperCase(),
-                regimen_fiscal: data.regimen_fiscal,
-                uso_cfdi_default: data.uso_cfdi_default,
-                fiscal_address: JSON.stringify({
-                    street: data.street,
-                    exterior_number: data.exterior_number,
-                    interior_number: data.interior_number || null,
-                    neighborhood: data.neighborhood,
-                    city: data.city,
-                    state: data.state,
-                    postal_code: data.postal_code,
-                    country: data.country,
+            await apiRequest(`/onboarding/complete`, {
+                method: 'POST',
+                body: JSON.stringify({
+                    trade_name: data.trade_name,
+                    legal_name: data.legal_name,
+                    logo_url: data.logo_url || null,
+                    rfc: data.rfc.toUpperCase(),
+                    regimen_fiscal: data.regimen_fiscal,
+                    uso_cfdi_default: data.uso_cfdi_default,
+                    fiscal_address: {
+                        street: data.street,
+                        exterior_number: data.exterior_number,
+                        interior_number: data.interior_number || null,
+                        neighborhood: data.neighborhood,
+                        city: data.city,
+                        state: data.state,
+                        postal_code: data.postal_code,
+                        country: data.country,
+                    },
+                    contacts: {
+                        email: data.email,
+                        phone: data.phone || null,
+                        whatsapp: data.whatsapp || null,
+                    },
+                    ticket_config: {
+                        header_lines: data.header_lines,
+                        footer_lines: data.footer_lines,
+                        show_logo: data.show_logo,
+                    },
                 }),
-                contacts: JSON.stringify({
-                    email: data.email,
-                    phone: data.phone || null,
-                    whatsapp: data.whatsapp || null,
-                }),
-                ticket_config: JSON.stringify({
-                    header_lines: data.header_lines,
-                    footer_lines: data.footer_lines,
-                    show_logo: data.show_logo,
-                }),
-                onboarding_complete: true,
-                onboarding_step: "complete",
             });
 
             router.push("/pos");

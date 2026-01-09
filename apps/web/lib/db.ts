@@ -1,9 +1,16 @@
+/**
+ * RestoNext MX - RxDB Offline Database
+ * Local-first database with FastAPI backend sync
+ * 
+ * NOTE: This file is a work in progress for offline-first support.
+ * Replication is temporarily disabled until FastAPI sync endpoints are implemented.
+ */
+
 import {
     createRxDatabase,
     RxDatabase,
     RxCollection,
     RxJsonSchema,
-    RxDocument,
     addRxPlugin
 } from 'rxdb';
 import { getRxStorageDexie } from 'rxdb/plugins/storage-dexie';
@@ -11,19 +18,6 @@ import { wrappedValidateAjvStorage } from 'rxdb/plugins/validate-ajv';
 import { RxDBDevModePlugin } from 'rxdb/plugins/dev-mode';
 import { RxDBUpdatePlugin } from 'rxdb/plugins/update';
 import { RxDBQueryBuilderPlugin } from 'rxdb/plugins/query-builder';
-import { replicateRxCollection } from 'rxdb/plugins/replication';
-import { ID, Query } from 'appwrite';
-import { databases, DATABASE_ID, mapDoc } from './api';
-import {
-    MenuCategory,
-    MenuItem,
-    Order,
-    Table,
-    OrderStatus,
-    OrderType,
-    OrderItem,
-    RouteDestination
-} from '../../../packages/shared/src/index';
 
 // Enable dev mode and other plugins
 if (typeof window !== 'undefined') {
@@ -35,11 +29,75 @@ if (typeof window !== 'undefined') {
 }
 
 // ============================================
+// Local Types (without Appwrite dependencies)
+// ============================================
+
+export interface LocalOrder {
+    id: string;
+    restaurant_id: string;
+    table_id: string;
+    table_number?: number;
+    waiter_id?: string;
+    waiter_name?: string;
+    status: string;
+    order_type?: string;
+    items: Array<{
+        id: string;
+        menu_item_id: string;
+        name: string;
+        quantity: number;
+        unit_price: number;
+        selected_modifiers?: any[];
+        line_total?: number;
+        seat_number?: number;
+        status?: string;
+        notes?: string;
+        route_to?: string;
+    }>;
+    subtotal?: number;
+    tax?: number;
+    tip?: number;
+    total: number;
+    notes?: string;
+    created_at?: string;
+    completed_at?: string;
+    payment_method?: string;
+    payment_reference?: string;
+}
+
+export interface LocalMenuItem {
+    id: string;
+    restaurant_id?: string;
+    category_id?: string;
+    name: string;
+    description?: string;
+    price: number;
+    cost?: number;
+    image_url?: string;
+    route_to?: string;
+    prep_time_minutes?: number;
+    is_available?: boolean;
+    modifier_groups?: any[];
+    tags?: string[];
+    allergens?: string[];
+    calories?: number;
+}
+
+export interface LocalMenuCategory {
+    id: string;
+    restaurant_id?: string;
+    name: string;
+    description?: string;
+    sort_order?: number;
+    is_active?: boolean;
+    image_url?: string;
+}
+
+// ============================================
 // Schemas
 // ============================================
 
-export type OrderWithoutAppwrite = Omit<Order, '$id' | '$createdAt' | '$updatedAt' | '$permissions' | '$databaseId' | '$collectionId'>;
-const orderSchema: RxJsonSchema<OrderWithoutAppwrite> = {
+const orderSchema: RxJsonSchema<LocalOrder> = {
     title: 'order',
     version: 0,
     primaryKey: 'id',
@@ -51,8 +109,8 @@ const orderSchema: RxJsonSchema<OrderWithoutAppwrite> = {
         table_number: { type: 'number' },
         waiter_id: { type: 'string' },
         waiter_name: { type: 'string' },
-        status: { type: 'string' }, // OrderStatus
-        order_type: { type: 'string' }, // OrderType
+        status: { type: 'string' },
+        order_type: { type: 'string' },
         items: {
             type: 'array',
             items: {
@@ -81,15 +139,11 @@ const orderSchema: RxJsonSchema<OrderWithoutAppwrite> = {
         completed_at: { type: 'string' },
         payment_method: { type: 'string' },
         payment_reference: { type: 'string' },
-        // Appwrite fields
-        // RxDB does not allow fields starting with $ in the schema
-        // We will handle mapping separately if needed
     },
-    required: ['restaurant_id', 'status', 'total', 'items']
+    required: ['id', 'restaurant_id', 'status', 'total', 'items']
 };
 
-export type MenuItemWithoutAppwrite = Omit<MenuItem, '$id' | '$createdAt' | '$updatedAt' | '$permissions' | '$databaseId' | '$collectionId'>;
-const menuItemSchema: RxJsonSchema<MenuItemWithoutAppwrite> = {
+const menuItemSchema: RxJsonSchema<LocalMenuItem> = {
     title: 'menu_item',
     version: 0,
     primaryKey: 'id',
@@ -110,14 +164,11 @@ const menuItemSchema: RxJsonSchema<MenuItemWithoutAppwrite> = {
         tags: { type: 'array', items: { type: 'string' } },
         allergens: { type: 'array', items: { type: 'string' } },
         calories: { type: 'number' },
-        // Appwrite fields
-        // RxDB does not allow fields starting with $ in the schema
     },
-    required: ['name', 'price']
+    required: ['id', 'name', 'price']
 };
 
-export type CategoryWithoutAppwrite = Omit<MenuCategory, '$id' | '$createdAt' | '$updatedAt' | '$permissions' | '$databaseId' | '$collectionId'>;
-const categorySchema: RxJsonSchema<CategoryWithoutAppwrite> = {
+const categorySchema: RxJsonSchema<LocalMenuCategory> = {
     title: 'menu_category',
     version: 0,
     primaryKey: 'id',
@@ -130,10 +181,8 @@ const categorySchema: RxJsonSchema<CategoryWithoutAppwrite> = {
         sort_order: { type: 'number' },
         is_active: { type: 'boolean' },
         image_url: { type: 'string' },
-        // Appwrite fields
-        // RxDB does not allow fields starting with $ in the schema
     },
-    required: ['name']
+    required: ['id', 'name']
 };
 
 // ============================================
@@ -141,9 +190,9 @@ const categorySchema: RxJsonSchema<CategoryWithoutAppwrite> = {
 // ============================================
 
 export type RxRestoCollections = {
-    orders: RxCollection<OrderWithoutAppwrite>;
-    menu_items: RxCollection<MenuItemWithoutAppwrite>;
-    menu_categories: RxCollection<CategoryWithoutAppwrite>;
+    orders: RxCollection<LocalOrder>;
+    menu_items: RxCollection<LocalMenuItem>;
+    menu_categories: RxCollection<LocalMenuCategory>;
 };
 
 export type RxRestoDatabase = RxDatabase<RxRestoCollections>;
@@ -180,142 +229,11 @@ export const createDatabase = async (): Promise<RxRestoDatabase> => {
     });
     console.log('Collections added');
 
-    // Start Replication
-    startReplication(db);
+    // TODO: Implement replication with FastAPI backend
+    // startReplication(db);
 
     return db;
 };
-
-// ============================================
-// Replication Logic
-// ============================================
-
-const BATCH_SIZE = 50;
-
-async function syncCollection(
-    collection: RxCollection,
-    appwriteCollectionId: string
-) {
-    console.log(`Starting sync for ${collection.name}...`);
-
-    return replicateRxCollection({
-        collection,
-        replicationIdentifier: `appwrite-${appwriteCollectionId}`, // unique id for this replication
-        pull: {
-            async handler(lastCheckpoint: any, batchSize: number) {
-                const limit = batchSize || BATCH_SIZE;
-                const minTimestamp = lastCheckpoint ? lastCheckpoint.updatedAt : '1970-01-01T00:00:00.000Z';
-
-                try {
-                    const queries = [
-                        Query.limit(limit),
-                        Query.orderAsc('$updatedAt') // Sort by UpdatedAt for checkpointing
-                    ];
-
-                    if (minTimestamp) {
-                        queries.push(Query.greaterThan('$updatedAt', minTimestamp));
-                    }
-
-                    const response = await databases.listDocuments(
-                        DATABASE_ID,
-                        appwriteCollectionId,
-                        queries
-                    );
-
-                    const documents = response.documents.map(doc => {
-                        const mapped = mapDoc(doc) as any;
-                        // Strip Appwrite fields that are excluded from RxDB schema
-                        const { $id, $createdAt, $updatedAt, $permissions, $databaseId, $collectionId, ...rest } = mapped;
-                        return rest;
-                    });
-
-                    // If we got fewer docs than limit, we are done for now
-                    const hasMore = documents.length === limit;
-
-                    // New checkpoint is the last doc's updatedAt
-                    const newCheckpoint = documents.length > 0
-                        ? { updatedAt: documents[documents.length - 1].$updatedAt }
-                        : lastCheckpoint;
-
-                    return {
-                        documents,
-                        checkpoint: newCheckpoint
-                    };
-                } catch (err) {
-                    console.error(`Pull error for ${collection.name}:`, err);
-                    throw err;
-                }
-            }
-        },
-        push: {
-            async handler(docs) {
-                const pushedRowErrors: any[] = [];
-
-                for (const row of docs) {
-                    try {
-                        const docData = row.newDocumentState as any;
-                        // If it's a new document (locally created)
-                        // In RxDB, we might use a temporary ID or check if it exists in Appwrite
-                        // Since we use uuid for IDs, we can just try to create or update.
-
-                        // Check if exists to decide update vs create is expensive 1 by 1.
-                        // We'll try update first, if 404 then create? 
-                        // Or if we know it's new (assumed = true which RxDB defines).
-
-                        // For simplicity in this demo:
-                        // Appwrite createDocument requires a unique ID.
-                        // We use the ID from the doc.
-
-                        // Note: We need to strip RxDB internal fields if any, 
-                        // but our schema defines them explicitly so it should be fine.
-                        // We DO need to strip $id, $createdAt, $updatedAt etc when sending to Appwrite usually,
-                        // unless we are system user. Client SDK ignores them or errors.
-
-                        const { $id, $createdAt, $updatedAt, $permissions, $databaseId, $collectionId, ...payload } = docData;
-
-                        // Identify if exists
-                        try {
-                            await databases.updateDocument(
-                                DATABASE_ID,
-                                appwriteCollectionId,
-                                docData.id,
-                                payload
-                            );
-                        } catch (e: any) {
-                            if (e.code === 404) {
-                                // Create
-                                await databases.createDocument(
-                                    DATABASE_ID,
-                                    appwriteCollectionId,
-                                    docData.id,
-                                    payload
-                                );
-                            } else {
-                                throw e;
-                            }
-                        }
-                    } catch (err) {
-                        console.error(`Push error for ${collection.name}:`, err);
-                        pushedRowErrors.push(row);
-                    }
-                }
-                return pushedRowErrors;
-            },
-            batchSize: 5
-        },
-        live: true,
-        waitForLeadership: true
-    });
-}
-
-function startReplication(db: RxRestoDatabase) {
-    // Sync Orders
-    syncCollection(db.orders, 'orders');
-
-    // Sync Menu (Read-only mostly, but technically writable in this logic)
-    syncCollection(db.menu_items, 'menu_items');
-    syncCollection(db.menu_categories, 'menu_categories');
-}
 
 export const getDatabase = () => {
     if (!dbPromise) {
@@ -323,3 +241,17 @@ export const getDatabase = () => {
     }
     return dbPromise;
 };
+
+// ============================================
+// Helper Functions
+// ============================================
+
+/**
+ * Map API response document to RxDB-compatible format
+ */
+export function mapApiDoc<T extends { id: string }>(doc: Record<string, any>): T {
+    return {
+        ...doc,
+        id: doc.id || doc.$id,
+    } as T;
+}

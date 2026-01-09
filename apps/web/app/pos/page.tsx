@@ -85,17 +85,12 @@ export default function POSPage() {
             }));
 
             await ordersApi.create({
-                table_id: selectedTable.$id,
-                restaurant_id: "default-tenant",
-                items: items as any,
-                total: cartTotal,
-                status: "pending",
-                order_type: "dine_in",
-                waiter_id: "admin",
-                subtotal: cartTotal,
-                tax: 0,
-                tip: 0,
-                created_at: new Date().toISOString()
+                table_id: selectedTable.id,
+                items: items.map(item => ({
+                    menu_item_id: item.menu_item_id,
+                    quantity: item.quantity,
+                    modifiers: item.selected_modifiers,
+                })),
             });
             alert(`Pedido enviado para Mesa ${selectedTable?.number}`);
             clearCart();
