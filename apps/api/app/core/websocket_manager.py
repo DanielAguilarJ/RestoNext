@@ -1,0 +1,154 @@
+"""
+RestoNext MX - WebSocket Connection Manager
+Redis-backed pub/sub for real-time kitchen updates
+"""
+
+import json
+import asyncio
+from typing import Dict, Set, Optional
+from datetime import datetime
+
+from fastapi import WebSocket
+import redis.asyncio as redis
+
+from app.core.config import get_settings
+
+settings = get_settings()
+
+
+class ConnectionManager:
+    """
+    Manages WebSocket connections with Redis pub/sub.
+    
+    Architecture:
+    - Each connected client is tracked by role (kitchen, bar, waiter)
+    - Redis pub/sub allows scaling across multiple API instances
+    - Messages are broadcasted to specific channels based on destination
+    """
+    
+    def __init__(self):
+        self.active_connections: Dict[str, Set[WebSocket]] = {
+            "kitchen": set(),
+            "bar": set(),
+            "waiter": set(),
+            "all": set(),
+        }
+        self.redis_client: Optional[redis.Redis] = None
+        self.pubsub: Optional[redis.client.PubSub] = None
+    
+    async def connect_redis(self):
+        """Initialize Redis connection for pub/sub"""
+        if self.redis_client is None:
+            self.redis_client = redis.from_url(settings.redis_url)
+            self.pubsub = self.redis_client.pubsub()
+            await self.pubsub.subscribe("kitchen:new_order", "kitchen:order_update", "table:call_waiter")
+    
+    async def disconnect_redis(self):
+        """Close Redis connection"""
+        if self.pubsub:
+            await self.pubsub.unsubscribe()
+        if self.redis_client:
+            await self.redis_client.close()
+    
+    async def connect(self, websocket: WebSocket, channel: str = "all"):
+        """Add a new WebSocket connection to a channel"""
+        await websocket.accept()
+        if channel not in self.active_connections:
+            self.active_connections[channel] = set()
+        self.active_connections[channel].add(websocket)
+        self.active_connections["all"].add(websocket)
+    
+    def disconnect(self, websocket: WebSocket, channel: str = "all"):
+        """Remove a WebSocket connection"""
+        if channel in self.active_connections:
+            self.active_connections[channel].discard(websocket)
+        self.active_connections["all"].discard(websocket)
+    
+    async def send_personal_message(self, message: dict, websocket: WebSocket):
+        """Send message to a specific client"""
+        await websocket.send_json(message)
+    
+    async def broadcast_to_channel(self, message: dict, channel: str):
+        """
+        Broadcast message to all connections in a channel.
+        Also publishes to Redis for multi-instance support.
+        """
+        # Add timestamp to message
+        message["timestamp"] = datetime.utcnow().isoformat()
+        
+        # Publish to Redis for other API instances
+        if self.redis_client:
+            await self.redis_client.publish(channel, json.dumps(message))
+        
+        # Send to local connections
+        if channel in self.active_connections:
+            dead_connections = set()
+            for connection in self.active_connections[channel]:
+                try:
+                    await connection.send_json(message)
+                except Exception:
+                    dead_connections.add(connection)
+            
+            # Clean up dead connections
+            for dead in dead_connections:
+                self.disconnect(dead, channel)
+    
+    async def notify_kitchen_new_order(self, order_data: dict):
+        """Send new order notification to kitchen displays"""
+        message = {
+            "event": "kitchen:new_order",
+            "payload": order_data
+        }
+        await self.broadcast_to_channel(message, "kitchen")
+    
+    async def notify_kitchen_item_ready(self, item_data: dict):
+        """Notify that an item is ready for pickup"""
+        message = {
+            "event": "kitchen:item_ready",
+            "payload": item_data
+        }
+        await self.broadcast_to_channel(message, "waiter")
+    
+    async def notify_call_waiter(self, table_number: int, tenant_id: str):
+        """Customer called waiter via QR menu"""
+        message = {
+            "event": "table:call_waiter",
+            "payload": {
+                "table_number": table_number,
+                "tenant_id": tenant_id
+            }
+        }
+        await self.broadcast_to_channel(message, "waiter")
+    
+    async def notify_bar_new_order(self, order_data: dict):
+        """Send bar items to bar display"""
+        message = {
+            "event": "bar:new_order",
+            "payload": order_data
+        }
+        await self.broadcast_to_channel(message, "bar")
+    
+    async def listen_redis(self):
+        """
+        Background task to listen for Redis pub/sub messages.
+        Forwards messages from other API instances to local WebSocket connections.
+        """
+        if not self.pubsub:
+            return
+        
+        async for message in self.pubsub.listen():
+            if message["type"] == "message":
+                channel = message["channel"].decode()
+                data = json.loads(message["data"])
+                
+                # Forward to local connections
+                if channel in self.active_connections:
+                    for connection in self.active_connections[channel].copy():
+                        try:
+                            await connection.send_json(data)
+                        except Exception:
+                            self.disconnect(connection, channel)
+
+
+# Global instance
+ws_manager = ConnectionManager()

@@ -1,0 +1,128 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 0 0% 100%;
+    --foreground: 222.2 84% 4.9%;
+    --card: 0 0% 100%;
+    --card-foreground: 222.2 84% 4.9%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 222.2 84% 4.9%;
+    --primary: 0 84% 60%;
+    --primary-foreground: 210 40% 98%;
+    --secondary: 210 40% 96.1%;
+    --secondary-foreground: 222.2 47.4% 11.2%;
+    --muted: 210 40% 96.1%;
+    --muted-foreground: 215.4 16.3% 46.9%;
+    --accent: 210 40% 96.1%;
+    --accent-foreground: 222.2 47.4% 11.2%;
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 210 40% 98%;
+    --border: 214.3 31.8% 91.4%;
+    --input: 214.3 31.8% 91.4%;
+    --ring: 0 84% 60%;
+    --radius: 0.5rem;
+  }
+
+  .dark {
+    --background: 222.2 84% 4.9%;
+    --foreground: 210 40% 98%;
+    --card: 222.2 84% 4.9%;
+    --card-foreground: 210 40% 98%;
+    --popover: 222.2 84% 4.9%;
+    --popover-foreground: 210 40% 98%;
+    --primary: 0 84% 60%;
+    --primary-foreground: 222.2 47.4% 11.2%;
+    --secondary: 217.2 32.6% 17.5%;
+    --secondary-foreground: 210 40% 98%;
+    --muted: 217.2 32.6% 17.5%;
+    --muted-foreground: 215 20.2% 65.1%;
+    --accent: 217.2 32.6% 17.5%;
+    --accent-foreground: 210 40% 98%;
+    --destructive: 0 62.8% 30.6%;
+    --destructive-foreground: 210 40% 98%;
+    --border: 217.2 32.6% 17.5%;
+    --input: 217.2 32.6% 17.5%;
+    --ring: 0 84% 60%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground;
+    font-feature-settings: "rlig" 1, "calt" 1;
+  }
+}
+
+/* Mobile-first touch-friendly styles */
+@layer components {
+  .touch-target {
+    @apply min-h-touch min-w-touch flex items-center justify-center;
+  }
+  
+  .btn-primary {
+    @apply bg-brand-600 hover:bg-brand-700 text-white font-semibold 
+           py-3 px-6 rounded-lg transition-colors duration-200
+           active:scale-95 touch-target;
+  }
+  
+  .btn-secondary {
+    @apply bg-gray-100 hover:bg-gray-200 text-gray-900 font-semibold 
+           py-3 px-6 rounded-lg transition-colors duration-200
+           active:scale-95 touch-target;
+  }
+  
+  /* Table status indicators */
+  .table-free {
+    @apply bg-green-500/20 border-2 border-green-500 text-green-700;
+  }
+  
+  .table-occupied {
+    @apply bg-red-500/20 border-2 border-red-500 text-red-700;
+  }
+  
+  .table-bill-requested {
+    @apply bg-yellow-500/20 border-2 border-yellow-500 text-yellow-700;
+  }
+  
+  /* KDS ticket styles */
+  .kds-ticket {
+    @apply bg-white dark:bg-gray-800 rounded-xl shadow-lg p-4;
+  }
+  
+  .kds-timer-normal {
+    @apply bg-blue-500 text-white;
+  }
+  
+  .kds-timer-warning {
+    @apply bg-amber-500 text-white animate-pulse;
+  }
+  
+  .kds-timer-critical {
+    @apply bg-red-600 text-white animate-pulse-slow;
+  }
+}
+
+/* Custom scrollbar for touch devices */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}
