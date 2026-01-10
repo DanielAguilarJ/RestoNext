@@ -92,7 +92,7 @@ const sendToUsbPrinter = async (data: Uint8Array): Promise<void> => {
         throw new Error("Could not find output endpoint on printer");
     }
 
-    await hookedUsbPrinter.transferOut(endpoint.endpointNumber, data);
+    await hookedUsbPrinter.transferOut(endpoint.endpointNumber, data.buffer as ArrayBuffer);
 };
 
 // ============================================

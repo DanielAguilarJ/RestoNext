@@ -2,6 +2,19 @@ import {
     MenuCategory, MenuItem, Table, Order, UserRole
 } from '../../../packages/shared/src/index';
 import { isOnline, syncQueueManager, type OptimisticOrder } from './offline';
+import { Client, Account, Databases } from 'appwrite';
+
+// ============================================
+// Appwrite SDK (for backward compatibility)
+// ============================================
+
+const appwriteClient = new Client()
+    .setEndpoint(process.env.NEXT_PUBLIC_APPWRITE_ENDPOINT || 'https://cloud.appwrite.io/v1')
+    .setProject(process.env.NEXT_PUBLIC_APPWRITE_PROJECT || '');
+
+export const account = new Account(appwriteClient);
+export const databases = new Databases(appwriteClient);
+export const DATABASE_ID = process.env.NEXT_PUBLIC_APPWRITE_DATABASE_ID || '';
 
 // ============================================
 // API Configuration
