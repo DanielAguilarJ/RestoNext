@@ -94,6 +94,15 @@ class TransactionType(str, enum.Enum):
     WASTE = "waste"            # Merma
 
 
+class PurchaseOrderStatus(str, enum.Enum):
+    """Status workflow for purchase orders"""
+    DRAFT = "draft"           # Sugerencia generada por sistema
+    PENDING = "pending"       # Enviada a proveedor
+    APPROVED = "approved"     # Aprobada por gerente
+    RECEIVED = "received"     # Mercancía recibida
+    CANCELLED = "cancelled"   # Cancelada
+
+
 # ============================================
 # Tenant / Restaurant Model
 # ============================================
@@ -574,6 +583,9 @@ class Ingredient(Base):
     transactions: Mapped[List["InventoryTransaction"]] = relationship(
         back_populates="ingredient"
     )
+    supplier_ingredients: Mapped[List["SupplierIngredient"]] = relationship(
+        back_populates="ingredient"
+    )
 
 
 class Recipe(Base):
@@ -667,3 +679,171 @@ class InventoryTransaction(Base):
     
     # Relationships
     ingredient: Mapped["Ingredient"] = relationship(back_populates="transactions")
+
+
+# ============================================
+# Procurement Models (Smart Purchasing)
+# ============================================
+
+class Supplier(Base):
+    """
+    Proveedores de ingredientes.
+    Each tenant can have multiple suppliers with contact information.
+    """
+    __tablename__ = "suppliers"
+    
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    tenant_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("tenants.id"), nullable=False
+    )
+    
+    name: Mapped[str] = mapped_column(String(128), nullable=False)
+    contact_name: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
+    email: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    phone: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
+    
+    # JSONB for flexible address data
+    address: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)
+    
+    notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, onupdate=datetime.utcnow
+    )
+    
+    __table_args__ = (
+        UniqueConstraint('tenant_id', 'name', name='uq_tenant_supplier_name'),
+    )
+    
+    # Relationships
+    supplier_ingredients: Mapped[List["SupplierIngredient"]] = relationship(
+        back_populates="supplier", cascade="all, delete-orphan"
+    )
+    purchase_orders: Mapped[List["PurchaseOrder"]] = relationship(
+        back_populates="supplier"
+    )
+
+
+class SupplierIngredient(Base):
+    """
+    Many-to-many relationship between Suppliers and Ingredients.
+    Stores the cost_per_unit for each supplier-ingredient combination.
+    Allows tracking which supplier offers the best price for each ingredient.
+    """
+    __tablename__ = "supplier_ingredients"
+    
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    supplier_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("suppliers.id"), nullable=False
+    )
+    ingredient_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("ingredients.id"), nullable=False
+    )
+    
+    cost_per_unit: Mapped[float] = mapped_column(Float, nullable=False)
+    lead_days: Mapped[int] = mapped_column(Integer, default=1)  # Días de entrega
+    min_order_quantity: Mapped[float] = mapped_column(Float, default=1.0)
+    
+    notes: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    is_preferred: Mapped[bool] = mapped_column(Boolean, default=False)
+    
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, onupdate=datetime.utcnow
+    )
+    
+    __table_args__ = (
+        UniqueConstraint('supplier_id', 'ingredient_id', name='uq_supplier_ingredient'),
+    )
+    
+    # Relationships
+    supplier: Mapped["Supplier"] = relationship(back_populates="supplier_ingredients")
+    ingredient: Mapped["Ingredient"] = relationship(back_populates="supplier_ingredients")
+
+
+class PurchaseOrder(Base):
+    """
+    Órdenes de compra a proveedores.
+    Supports workflow: DRAFT -> PENDING -> APPROVED -> RECEIVED
+    """
+    __tablename__ = "purchase_orders"
+    
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    tenant_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("tenants.id"), nullable=False
+    )
+    supplier_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("suppliers.id"), nullable=False
+    )
+    
+    status: Mapped[PurchaseOrderStatus] = mapped_column(
+        SQLEnum(PurchaseOrderStatus), default=PurchaseOrderStatus.DRAFT
+    )
+    
+    expected_delivery: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    actual_delivery: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    
+    subtotal: Mapped[float] = mapped_column(Float, default=0.0)
+    tax: Mapped[float] = mapped_column(Float, default=0.0)
+    total: Mapped[float] = mapped_column(Float, default=0.0)
+    
+    notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    created_by: Mapped[Optional[uuid.UUID]] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id"), nullable=True
+    )
+    
+    approved_by: Mapped[Optional[uuid.UUID]] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id"), nullable=True
+    )
+    approved_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, onupdate=datetime.utcnow
+    )
+    
+    # Relationships
+    supplier: Mapped["Supplier"] = relationship(back_populates="purchase_orders")
+    items: Mapped[List["PurchaseOrderItem"]] = relationship(
+        back_populates="purchase_order", cascade="all, delete-orphan"
+    )
+
+
+class PurchaseOrderItem(Base):
+    """
+    Líneas de orden de compra.
+    Tracks quantity ordered vs quantity received for partial deliveries.
+    """
+    __tablename__ = "purchase_order_items"
+    
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    purchase_order_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("purchase_orders.id"), nullable=False
+    )
+    ingredient_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("ingredients.id"), nullable=False
+    )
+    
+    quantity_ordered: Mapped[float] = mapped_column(Float, nullable=False)
+    quantity_received: Mapped[float] = mapped_column(Float, default=0.0)
+    unit_cost: Mapped[float] = mapped_column(Float, nullable=False)
+    total_cost: Mapped[float] = mapped_column(Float, nullable=False)
+    
+    notes: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    
+    # Relationships
+    purchase_order: Mapped["PurchaseOrder"] = relationship(back_populates="items")
+    ingredient: Mapped["Ingredient"] = relationship()
+

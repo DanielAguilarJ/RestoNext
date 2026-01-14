@@ -381,6 +381,156 @@ export class WebSocketClient {
 export const wsClient = new WebSocketClient();
 
 // ============================================
+// Analytics API Types
+// ============================================
+
+export interface HourlySalesData {
+    hour: number;
+    day_of_week: number;
+    day_name: string;
+    total_sales: number;
+    order_count: number;
+}
+
+export interface SalesByHourResponse {
+    data: HourlySalesData[];
+    max_sales: number;
+    start_date: string;
+    end_date: string;
+}
+
+export interface TopDishData {
+    id: string;
+    name: string;
+    category_name: string;
+    sales_count: number;
+    revenue: number;
+    cost: number;
+    profit: number;
+    profit_margin: number;
+}
+
+export interface TopDishesResponse {
+    dishes: TopDishData[];
+    start_date: string;
+    end_date: string;
+}
+
+export interface DailySalesPoint {
+    date: string;
+    day_name: string;
+    total_sales: number;
+    order_count: number;
+}
+
+export interface SalesComparisonResponse {
+    current_week: DailySalesPoint[];
+    previous_week: DailySalesPoint[];
+    current_week_total: number;
+    previous_week_total: number;
+    change_percentage: number;
+    current_week_start: string;
+    current_week_end: string;
+    previous_week_start: string;
+    previous_week_end: string;
+}
+
+export interface KPIResponse {
+    average_ticket: number;
+    total_sales: number;
+    total_orders: number;
+    food_cost_percentage: number;
+    average_orders_per_day: number;
+    busiest_hour: number | null;
+    busiest_day: string | null;
+    start_date: string;
+    end_date: string;
+}
+
+export interface CategorySalesData {
+    category_id: string;
+    category_name: string;
+    total_sales: number;
+    order_count: number;
+    percentage: number;
+    color: string;
+}
+
+export interface SalesByCategoryResponse {
+    categories: CategorySalesData[];
+    total_sales: number;
+    start_date: string;
+    end_date: string;
+}
+
+// ============================================
+// Analytics API
+// ============================================
+
+export const analyticsApi = {
+    /**
+     * Get sales aggregated by hour and day of week for heatmap
+     */
+    getSalesByHour: async (startDate?: Date, endDate?: Date): Promise<SalesByHourResponse> => {
+        const params = new URLSearchParams();
+        if (startDate) params.append('start_date', startDate.toISOString());
+        if (endDate) params.append('end_date', endDate.toISOString());
+
+        const query = params.toString();
+        const endpoint = query ? `/analytics/sales-by-hour?${query}` : '/analytics/sales-by-hour';
+
+        return apiRequest<SalesByHourResponse>(endpoint);
+    },
+
+    /**
+     * Get top profitable dishes
+     */
+    getTopDishes: async (startDate?: Date, endDate?: Date, limit: number = 10): Promise<TopDishesResponse> => {
+        const params = new URLSearchParams();
+        if (startDate) params.append('start_date', startDate.toISOString());
+        if (endDate) params.append('end_date', endDate.toISOString());
+        params.append('limit', limit.toString());
+
+        return apiRequest<TopDishesResponse>(`/analytics/top-dishes?${params.toString()}`);
+    },
+
+    /**
+     * Get current vs previous week sales comparison
+     */
+    getSalesComparison: async (): Promise<SalesComparisonResponse> => {
+        return apiRequest<SalesComparisonResponse>('/analytics/sales-comparison');
+    },
+
+    /**
+     * Get KPIs for dashboard cards
+     */
+    getKPIs: async (startDate?: Date, endDate?: Date): Promise<KPIResponse> => {
+        const params = new URLSearchParams();
+        if (startDate) params.append('start_date', startDate.toISOString());
+        if (endDate) params.append('end_date', endDate.toISOString());
+
+        const query = params.toString();
+        const endpoint = query ? `/analytics/kpis?${query}` : '/analytics/kpis';
+
+        return apiRequest<KPIResponse>(endpoint);
+    },
+
+    /**
+     * Get sales distribution by category for pie chart
+     */
+    getSalesByCategory: async (startDate?: Date, endDate?: Date): Promise<SalesByCategoryResponse> => {
+        const params = new URLSearchParams();
+        if (startDate) params.append('start_date', startDate.toISOString());
+        if (endDate) params.append('end_date', endDate.toISOString());
+
+        const query = params.toString();
+        const endpoint = query ? `/analytics/sales-by-category?${query}` : '/analytics/sales-by-category';
+
+        return apiRequest<SalesByCategoryResponse>(endpoint);
+    }
+};
+
+// ============================================
 // Export token utilities for external use
 // ============================================
 
