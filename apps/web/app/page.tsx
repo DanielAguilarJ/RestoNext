@@ -1,7 +1,7 @@
 import Link from "next/link";
 import {
     UtensilsCrossed, ChefHat, Receipt, QrCode,
-    Sparkles, TrendingUp, Clock, Users
+    Sparkles, TrendingUp, Clock, Users, Package
 } from "lucide-react";
 
 export default function Home() {
@@ -163,6 +163,29 @@ export default function Home() {
                         Menú QR para clientes
                     </p>
                     <div className="mt-3 flex items-center gap-2 text-purple-600 text-sm font-medium opacity-0 group-hover:opacity-100 transition-opacity">
+                        <span>Abrir</span>
+                        <span className="group-hover:translate-x-1 transition-transform">→</span>
+                    </div>
+                </Link>
+
+                {/* Inventory */}
+                <Link
+                    href="/inventory"
+                    className="group card-interactive p-6 animate-scale-in col-span-2 sm:col-span-1"
+                    style={{ animationDelay: '0.5s' }}
+                >
+                    <div className="w-16 h-16 bg-gradient-to-br from-teal-400 to-teal-600 rounded-2xl flex items-center justify-center mb-4
+                          shadow-lg shadow-teal-500/30 group-hover:shadow-teal-500/50 transition-all duration-300
+                          group-hover:scale-110 group-hover:-rotate-3">
+                        <Package className="w-8 h-8 text-white" />
+                    </div>
+                    <h2 className="text-lg font-bold text-gray-900 dark:text-white mb-1 group-hover:text-teal-600 transition-colors">
+                        Inventario
+                    </h2>
+                    <p className="text-sm text-gray-500 dark:text-gray-400">
+                        Gestión de insumos y mermas
+                    </p>
+                    <div className="mt-3 flex items-center gap-2 text-teal-600 text-sm font-medium opacity-0 group-hover:opacity-100 transition-opacity">
                         <span>Abrir</span>
                         <span className="group-hover:translate-x-1 transition-transform">→</span>
                     </div>

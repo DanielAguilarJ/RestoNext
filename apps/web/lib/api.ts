@@ -539,3 +539,92 @@ export const tokenUtils = {
     setToken: TokenStorage.set,
     removeToken: TokenStorage.remove,
 };
+
+// ============================================
+// Inventory API
+// ============================================
+
+export interface Ingredient {
+    id: string;
+    tenant_id: string;
+    name: string;
+    sku?: string;
+    unit: string;
+    stock_quantity: number;
+    min_stock_alert: number;
+    cost_per_unit: number;
+    modifier_link?: Record<string, any>;
+    is_active: boolean;
+    usage_count?: number;
+    created_at: string;
+}
+
+export interface InventoryTransaction {
+    id: string;
+    ingredient_id: string;
+    transaction_type: 'purchase' | 'sale' | 'adjustment' | 'waste';
+    quantity: number;
+    unit: string;
+    stock_after: number;
+    notes?: string;
+    created_at: string;
+    created_by?: string;
+}
+
+export const inventoryApi = {
+    /**
+     * List all ingredients
+     */
+    list: async (lowStock?: boolean): Promise<Ingredient[]> => {
+        const query = lowStock ? '?low_stock=true' : '';
+        return apiRequest<Ingredient[]>(`/inventory${query}`);
+    },
+
+    /**
+     * Create new ingredient
+     */
+    create: async (data: any): Promise<Ingredient> => {
+        return apiRequest<Ingredient>('/inventory', {
+            method: 'POST',
+            body: JSON.stringify(data),
+        });
+    },
+
+    /**
+     * Get ingredient details
+     */
+    get: async (id: string): Promise<Ingredient> => {
+        return apiRequest<Ingredient>(`/inventory/${id}`);
+    },
+
+    /**
+     * Update ingredient
+     */
+    update: async (id: string, data: Partial<Ingredient>): Promise<Ingredient> => {
+        return apiRequest<Ingredient>(`/inventory/${id}`, {
+            method: 'PATCH',
+            body: JSON.stringify(data),
+        });
+    },
+
+    /**
+     * Adjust stock
+     */
+    adjustStock: async (id: string, quantity: number, type: string, notes?: string): Promise<InventoryTransaction> => {
+        return apiRequest<InventoryTransaction>(`/inventory/${id}/adjust`, {
+            method: 'POST',
+            body: JSON.stringify({
+                quantity,
+                transaction_type: type,
+                notes
+            }),
+        });
+    },
+
+    /**
+     * Get stock history
+     */
+    getTransactions: async (id: string): Promise<InventoryTransaction[]> => {
+        return apiRequest<InventoryTransaction[]>(`/inventory/${id}/transactions`);
+    }
+};
