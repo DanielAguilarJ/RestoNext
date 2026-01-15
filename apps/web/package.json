@@ -32,8 +32,8 @@
         "react": "^18",
         "react-dom": "^18",
         "recharts": "^2.15.4",
-        "rxdb": "^16.21.1",
-        "rxdb-hooks": "^5.0.2",
+        "rxdb": "^15.0.0",
+        "rxdb-hooks": "^5.0.0",
         "rxjs": "^7.8.2",
         "tailwind-merge": "^2.2.0",
         "tailwindcss-animate": "^1.0.7",
@@ -51,4 +51,3 @@
         "typescript": "^5"
     }
 }
- 
