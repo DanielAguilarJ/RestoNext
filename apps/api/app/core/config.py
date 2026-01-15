@@ -1,9 +1,5 @@
-"""
-RestoNext MX - Configuration Settings
-Uses pydantic-settings for environment variable management
-"""
-
 from functools import lru_cache
+from pydantic import model_validator
 from pydantic_settings import BaseSettings
 
 
@@ -12,6 +8,15 @@ class Settings(BaseSettings):
     
     # Database
     database_url: str = "postgresql+asyncpg://restonext:restonext_dev@localhost:5432/restonext"
+    
+    @model_validator(mode='after')
+    def fix_database_url(self) -> 'Settings':
+        """Substitute postgres:// with postgresql+asyncpg:// for Railway/Heroku compatibility"""
+        if self.database_url and self.database_url.startswith("postgres://"):
+            self.database_url = self.database_url.replace("postgres://", "postgresql+asyncpg://", 1)
+        elif self.database_url and self.database_url.startswith("postgresql://") and "+asyncpg" not in self.database_url:
+            self.database_url = self.database_url.replace("postgresql://", "postgresql+asyncpg://", 1)
+        return self
     
     # Redis
     redis_url: str = "redis://localhost:6379"
@@ -35,6 +40,7 @@ class Settings(BaseSettings):
     class Config:
         env_file = ".env"
         env_file_encoding = "utf-8"
+        case_sensitive = False
 
 
 @lru_cache()
