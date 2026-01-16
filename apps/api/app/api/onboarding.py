@@ -238,3 +238,204 @@ async def get_current_tenant_profile(
         )
     
     return tenant
+
+
+# ============================================
+# Quick Onboarding Wizard Endpoints
+# ============================================
+
+from pydantic import BaseModel
+from typing import Optional
+
+
+class QuickOnboardingRequest(BaseModel):
+    """Request for quick onboarding wizard completion."""
+    name: str
+    logo_url: Optional[str] = None
+    currency: str = "MXN"
+    service_types: List[str] = ["dine_in"]
+    seed_demo_data: bool = False
+
+
+class QuickOnboardingResponse(BaseModel):
+    """Response from quick onboarding."""
+    success: bool
+    message: str
+    tenant_name: str
+    demo_data_seeded: bool
+
+
+@router.post("/onboarding/quick-complete", response_model=QuickOnboardingResponse)
+async def quick_complete_onboarding(
+    data: QuickOnboardingRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Quick-complete the onboarding wizard.
+    
+    This is a simplified onboarding for new users that:
+    1. Updates the tenant name and logo
+    2. Sets currency and service preferences
+    3. Optionally seeds demo data
+    4. Marks onboarding as complete
+    
+    Used by the OnboardingWizard component.
+    """
+    # Get user's tenant
+    result = await db.execute(
+        select(Tenant).where(Tenant.id == current_user.tenant_id)
+    )
+    tenant = result.scalar_one_or_none()
+    
+    if not tenant:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Tenant not found"
+        )
+    
+    # Update tenant with wizard data
+    tenant.trade_name = data.name
+    tenant.name = data.name  # Also update the main name field
+    
+    if data.logo_url:
+        tenant.logo_url = data.logo_url
+    
+    # Update config with service preferences
+    current_config = tenant.config or {}
+    current_config["currency"] = data.currency
+    current_config["service_types"] = data.service_types
+    tenant.config = current_config
+    
+    # Mark onboarding as complete for wizard flow
+    tenant.onboarding_step = "complete"
+    # Note: onboarding_complete stays False until fiscal info is filled
+    
+    await db.commit()
+    
+    demo_seeded = False
+    
+    # Optionally seed demo data
+    if data.seed_demo_data:
+        try:
+            await _seed_demo_data_for_tenant(db, tenant.id)
+            demo_seeded = True
+        except Exception as e:
+            print(f"Warning: Failed to seed demo data: {e}")
+    
+    await db.refresh(tenant)
+    
+    return QuickOnboardingResponse(
+        success=True,
+        message="Onboarding completado exitosamente",
+        tenant_name=tenant.trade_name or tenant.name,
+        demo_data_seeded=demo_seeded
+    )
+
+
+async def _seed_demo_data_for_tenant(db: AsyncSession, tenant_id):
+    """
+    Seed basic demo data for a new tenant.
+    
+    Creates:
+    - Sample menu categories
+    - Sample products
+    - Sample tables
+    """
+    import uuid
+    from app.models.models import MenuCategory, MenuItem, Table
+    
+    # Create demo categories
+    categories_data = [
+        {"name": "Entradas", "display_order": 1, "color": "#10B981"},
+        {"name": "Platos Fuertes", "display_order": 2, "color": "#3B82F6"},
+        {"name": "Bebidas", "display_order": 3, "color": "#8B5CF6"},
+        {"name": "Postres", "display_order": 4, "color": "#EC4899"},
+    ]
+    
+    category_ids = {}
+    for cat_data in categories_data:
+        category = MenuCategory(
+            id=uuid.uuid4(),
+            tenant_id=tenant_id,
+            name=cat_data["name"],
+            display_order=cat_data["display_order"],
+            color=cat_data["color"],
+            is_active=True
+        )
+        db.add(category)
+        category_ids[cat_data["name"]] = category.id
+    
+    await db.flush()
+    
+    # Create demo products
+    products_data = [
+        {"name": "Nachos con Guacamole", "price": 95.00, "category": "Entradas", "station": "kitchen"},
+        {"name": "Tacos al Pastor (3 pzas)", "price": 85.00, "category": "Platos Fuertes", "station": "kitchen"},
+        {"name": "Enchiladas Suizas", "price": 145.00, "category": "Platos Fuertes", "station": "kitchen"},
+        {"name": "Cerveza Artesanal", "price": 75.00, "category": "Bebidas", "station": "bar"},
+        {"name": "Margarita Clásica", "price": 120.00, "category": "Bebidas", "station": "bar"},
+        {"name": "Agua Fresca del Día", "price": 35.00, "category": "Bebidas", "station": "bar"},
+        {"name": "Flan Napolitano", "price": 65.00, "category": "Postres", "station": "kitchen"},
+    ]
+    
+    for prod_data in products_data:
+        product = MenuItem(
+            id=uuid.uuid4(),
+            tenant_id=tenant_id,
+            category_id=category_ids.get(prod_data["category"]),
+            name=prod_data["name"],
+            price=prod_data["price"],
+            station=prod_data["station"],
+            is_available=True
+        )
+        db.add(product)
+    
+    # Create demo tables
+    for i in range(1, 6):
+        table = Table(
+            id=uuid.uuid4(),
+            tenant_id=tenant_id,
+            number=i,
+            capacity=4,
+            zone=f"Zona {chr(64 + ((i-1) // 2) + 1)}",  # A, A, B, B, C
+            status="available",
+            is_active=True
+        )
+        db.add(table)
+    
+    await db.commit()
+
+
+@router.get("/onboarding/status")
+async def get_onboarding_status(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Get the current onboarding status for the tenant.
+    
+    Used by the frontend to decide if the onboarding wizard should be shown.
+    """
+    result = await db.execute(
+        select(Tenant).where(Tenant.id == current_user.tenant_id)
+    )
+    tenant = result.scalar_one_or_none()
+    
+    if not tenant:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Tenant not found"
+        )
+    
+    # Determine if wizard should be shown
+    # Show wizard if onboarding_step is "basic" (initial state)
+    show_wizard = tenant.onboarding_step == "basic" and not tenant.onboarding_complete
+    
+    return {
+        "show_wizard": show_wizard,
+        "onboarding_step": tenant.onboarding_step,
+        "onboarding_complete": tenant.onboarding_complete,
+        "tenant_name": tenant.trade_name or tenant.name,
+        "has_logo": bool(tenant.logo_url),
+    }

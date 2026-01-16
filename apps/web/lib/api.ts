@@ -1043,3 +1043,117 @@ export const tenantApi = {
     }
 };
 
+// ============================================
+// Subscription API (Stripe B2B Billing)
+// ============================================
+
+export interface SubscriptionPlan {
+    id: string;
+    name: string;
+    price_mxn: number;
+    features: string[];
+    is_current: boolean;
+    is_upgrade: boolean;
+}
+
+export interface CurrentSubscription {
+    plan: string;
+    plan_name: string;
+    price_mxn: number;
+    features: string[];
+    status: 'active' | 'trialing' | 'past_due' | 'canceled';
+    stripe_customer_id?: string;
+    current_period_end?: string;
+    cancel_at_period_end: boolean;
+}
+
+export interface CheckoutResponse {
+    checkout_url: string;
+    session_id: string;
+}
+
+export interface PortalResponse {
+    portal_url: string;
+}
+
+export const subscriptionApi = {
+    /**
+     * Get current subscription plan
+     */
+    getCurrent: async (): Promise<CurrentSubscription> => {
+        return apiRequest<CurrentSubscription>('/subscription/current');
+    },
+
+    /**
+     * Get available plans
+     */
+    getPlans: async (): Promise<{ current_plan: string; plans: SubscriptionPlan[] }> => {
+        return apiRequest('/subscription/plans');
+    },
+
+    /**
+     * Create Stripe Checkout session for upgrade
+     */
+    createCheckout: async (plan: string): Promise<CheckoutResponse> => {
+        return apiRequest<CheckoutResponse>('/subscription/checkout', {
+            method: 'POST',
+            body: JSON.stringify({ plan }),
+        });
+    },
+
+    /**
+     * Create Stripe Customer Portal session
+     */
+    createPortal: async (): Promise<PortalResponse> => {
+        return apiRequest<PortalResponse>('/subscription/portal', {
+            method: 'POST',
+        });
+    },
+};
+
+// ============================================
+// Onboarding API
+// ============================================
+
+export interface OnboardingStatus {
+    show_wizard: boolean;
+    onboarding_step: string;
+    onboarding_complete: boolean;
+    tenant_name: string;
+    has_logo: boolean;
+}
+
+export interface QuickOnboardingRequest {
+    name: string;
+    logo_url?: string;
+    currency: string;
+    service_types: string[];
+    seed_demo_data: boolean;
+}
+
+export interface QuickOnboardingResponse {
+    success: boolean;
+    message: string;
+    tenant_name: string;
+    demo_data_seeded: boolean;
+}
+
+export const onboardingApi = {
+    /**
+     * Get current onboarding status
+     */
+    getStatus: async (): Promise<OnboardingStatus> => {
+        return apiRequest<OnboardingStatus>('/onboarding/status');
+    },
+
+    /**
+     * Complete onboarding with quick wizard
+     */
+    quickComplete: async (data: QuickOnboardingRequest): Promise<QuickOnboardingResponse> => {
+        return apiRequest<QuickOnboardingResponse>('/onboarding/quick-complete', {
+            method: 'POST',
+            body: JSON.stringify(data),
+        });
+    },
+};
+

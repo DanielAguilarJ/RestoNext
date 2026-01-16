@@ -100,6 +100,17 @@ class Settings(BaseSettings):
     backup_max_size_gb: int = 5
     backup_admin_email: str = ""  # Email to notify on backup status
     
+    # Stripe Configuration (B2B Subscription Billing)
+    stripe_secret_key: str = ""  # sk_live_xxx or sk_test_xxx
+    stripe_publishable_key: str = ""  # pk_live_xxx or pk_test_xxx
+    stripe_webhook_secret: str = ""  # whsec_xxx
+    stripe_price_id_starter: str = ""  # price_xxx for Starter plan
+    stripe_price_id_professional: str = ""  # price_xxx for Professional plan
+    stripe_price_id_enterprise: str = ""  # price_xxx for Enterprise plan
+    
+    # Frontend URL (for Stripe redirects)
+    frontend_url: str = "http://localhost:3000"
+    
     class Config:
         env_file = ".env"
         env_file_encoding = "utf-8"

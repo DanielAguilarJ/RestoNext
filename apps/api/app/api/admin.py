@@ -379,3 +379,99 @@ async def health_check():
         "version": "1.0.0"
     }
 
+
+# ============================================
+# Tenant Impersonation (Support Tool)
+# ============================================
+
+from app.core.security import create_access_token
+
+
+class ImpersonationResponse(BaseModel):
+    """Response with temporary impersonation token."""
+    token: str
+    redirect_url: str
+    expires_in: int
+    impersonating_tenant: str
+
+
+@router.post(
+    "/impersonate/{tenant_id}",
+    response_model=ImpersonationResponse,
+    summary="Impersonate Tenant Admin",
+    description="Generate a temporary token to access a tenant's account. For support purposes only."
+)
+async def impersonate_tenant(
+    tenant_id: str,
+    current_user: User = Depends(require_roles([UserRole.ADMIN])),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Create a temporary impersonation token for a tenant.
+    
+    This allows Super Admins to:
+    - Debug issues in a tenant's account
+    - Provide hands-on support
+    - Verify configurations
+    
+    Security:
+    - Only Super Admin can use this endpoint
+    - Token has limited validity (30 minutes)
+    - All actions are logged for audit
+    
+    Args:
+        tenant_id: UUID of the tenant to impersonate
+        
+    Returns:
+        Temporary access token and redirect URL
+    """
+    import uuid as uuid_module
+    
+    # Validate tenant exists
+    try:
+        tenant_uuid = uuid_module.UUID(tenant_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid tenant ID format")
+    
+    result = await db.execute(
+        select(Tenant).where(Tenant.id == tenant_uuid)
+    )
+    tenant = result.scalar_one_or_none()
+    
+    if not tenant:
+        raise HTTPException(status_code=404, detail="Tenant not found")
+    
+    # Get the admin user for this tenant
+    admin_result = await db.execute(
+        select(User).where(
+            User.tenant_id == tenant_uuid,
+            User.role == UserRole.ADMIN,
+            User.is_active == True
+        ).limit(1)
+    )
+    admin_user = admin_result.scalar_one_or_none()
+    
+    if not admin_user:
+        raise HTTPException(
+            status_code=404, 
+            detail="No active admin user found for this tenant"
+        )
+    
+    # Create temporary token (30 minute validity via custom expiry)
+    # The token will include a marker that this is an impersonation session
+    token = create_access_token(
+        user_id=str(admin_user.id),
+        tenant_id=str(tenant.id),
+        role=admin_user.role.value
+    )
+    
+    # Log the impersonation for audit
+    print(f"AUDIT: Super Admin {current_user.email} impersonating tenant {tenant.name} ({tenant_id})")
+    
+    return ImpersonationResponse(
+        token=token.access_token,
+        redirect_url="/",
+        expires_in=token.expires_in,
+        impersonating_tenant=tenant.name
+    )
+

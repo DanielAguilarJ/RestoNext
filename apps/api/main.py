@@ -43,6 +43,7 @@ from app.api.menu import router as menu_router
 from app.api.dining import router as dining_router
 from app.api.admin_tables import router as admin_tables_router
 from app.api.admin import router as admin_router
+from app.api.subscription import router as subscription_router, webhook_router as stripe_webhook_router
 
 settings = get_settings()
 
@@ -208,6 +209,10 @@ app.include_router(dining_router, prefix="/api", tags=["Self-Service Dining"])
 app.include_router(admin_tables_router, prefix="/api", tags=["Admin - Tables"])
 # Admin endpoints for system management (backups, jobs)
 app.include_router(admin_router, prefix="/api", tags=["Admin - System"])
+# Subscription management (Stripe billing)
+app.include_router(subscription_router, prefix="/api", tags=["Subscription"])
+# Stripe webhooks (public, no auth - signature verified internally)
+app.include_router(stripe_webhook_router, prefix="/api", tags=["Webhooks"])
 
 
 # ============================================

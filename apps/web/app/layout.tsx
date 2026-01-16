@@ -3,6 +3,7 @@ import { Inter } from "next/font/google";
 import "./globals.css";
 import { RxDBProvider } from "../lib/db-provider";
 import { TenantProvider } from "../lib/tenant-provider";
+import AppShell from "@/components/layout/AppShell";
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -29,7 +30,9 @@ export default function RootLayout({
             <body className={inter.className}>
                 <RxDBProvider>
                     <TenantProvider>
-                        {children}
+                        <AppShell>
+                            {children}
+                        </AppShell>
                     </TenantProvider>
                 </RxDBProvider>
             </body>
