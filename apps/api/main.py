@@ -44,6 +44,7 @@ from app.api.dining import router as dining_router
 from app.api.admin_tables import router as admin_tables_router
 from app.api.admin import router as admin_router
 from app.api.subscription import router as subscription_router, webhook_router as stripe_webhook_router
+from app.api.legal import router as legal_router
 
 settings = get_settings()
 
@@ -213,6 +214,8 @@ app.include_router(admin_router, prefix="/api", tags=["Admin - System"])
 app.include_router(subscription_router, prefix="/api", tags=["Subscription"])
 # Stripe webhooks (public, no auth - signature verified internally)
 app.include_router(stripe_webhook_router, prefix="/api", tags=["Webhooks"])
+# Legal compliance (terms, privacy - required for Stripe)
+app.include_router(legal_router, prefix="/api", tags=["Legal"])
 
 
 # ============================================

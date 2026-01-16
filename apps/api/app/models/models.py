@@ -15,7 +15,7 @@ from typing import Optional, List
 
 from sqlalchemy import (
     String, Integer, Float, Boolean, DateTime, ForeignKey, 
-    Text, Enum as SQLEnum, UniqueConstraint
+    Text, Enum as SQLEnum, UniqueConstraint, Index
 )
 from sqlalchemy.dialects.postgresql import UUID, JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -429,8 +429,21 @@ class Order(Base):
     """
     Order header containing table info and overall status.
     Items are stored separately in OrderItem.
+    
+    PERFORMANCE INDICES:
+    - idx_order_tenant_date: Critical for analytics queries (get_sales_trends)
+    - idx_order_status: For filtering active orders
     """
     __tablename__ = "orders"
+    
+    # ============================================
+    # Performance Indices (PRE-FLIGHT OPTIMIZATION)
+    # ============================================
+    __table_args__ = (
+        Index('idx_order_tenant_date', 'tenant_id', 'created_at'),
+        Index('idx_order_tenant_status', 'tenant_id', 'status'),
+        Index('idx_order_table_status', 'table_id', 'status'),
+    )
     
     id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
@@ -761,8 +774,21 @@ class InventoryTransaction(Base):
     - SALE: Automatic deduction from order
     - ADJUSTMENT: Manual inventory correction
     - WASTE: Loss/spoilage (merma)
+    
+    PERFORMANCE INDICES:
+    - idx_inv_tenant_ingredient: Critical for stock level queries
+    - idx_inv_tenant_date: For historical stock reports
     """
     __tablename__ = "inventory_transactions"
+    
+    # ============================================
+    # Performance Indices (PRE-FLIGHT OPTIMIZATION)
+    # ============================================
+    __table_args__ = (
+        Index('idx_inv_tenant_ingredient', 'tenant_id', 'ingredient_id'),
+        Index('idx_inv_tenant_date', 'tenant_id', 'created_at'),
+        Index('idx_inv_ingredient_type', 'ingredient_id', 'transaction_type'),
+    )
     
     id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
@@ -1192,8 +1218,23 @@ class Customer(Base):
     """
     Central Customer Database (CRM).
     Used for Delivery addresses, Reservations, and Loyalty.
+    
+    PERFORMANCE INDICES:
+    - idx_customer_email: For quick customer lookup by email
+    - idx_customer_phone: For quick customer lookup by phone
     """
     __tablename__ = "customers"
+    
+    # ============================================
+    # Performance Indices (PRE-FLIGHT OPTIMIZATION)
+    # ============================================
+    __table_args__ = (
+        UniqueConstraint('tenant_id', 'phone', name='uq_tenant_customer_phone'),
+        UniqueConstraint('tenant_id', 'email', name='uq_tenant_customer_email'),
+        Index('idx_customer_tenant_email', 'tenant_id', 'email'),
+        Index('idx_customer_tenant_phone', 'tenant_id', 'phone'),
+        Index('idx_customer_tenant_name', 'tenant_id', 'name'),
+    )
     
     id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
@@ -1219,15 +1260,11 @@ class Customer(Base):
     notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     
-    __table_args__ = (
-        UniqueConstraint('tenant_id', 'phone', name='uq_tenant_customer_phone'),
-        UniqueConstraint('tenant_id', 'email', name='uq_tenant_customer_email'),
-    )
-    
     # Relationships
     orders: Mapped[List["Order"]] = relationship(back_populates="customer")
     reservations: Mapped[List["Reservation"]] = relationship(back_populates="customer")
     loyalty_transactions: Mapped[List["LoyaltyTransaction"]] = relationship(back_populates="customer")
+    legal_acceptances: Mapped[List["LegalAcceptance"]] = relationship(back_populates="customer")
 
 
 class LoyaltyTransaction(Base):
@@ -1454,3 +1491,103 @@ class ServiceRequest(Base):
 # ============================================
 # Note: Add this to Table class if not using backref:
 # service_requests: Mapped[List["ServiceRequest"]] = relationship(back_populates="table")
+
+
+# ============================================
+# Legal Compliance Models (Stripe Ready)
+# ============================================
+
+class LegalDocumentType(str, enum.Enum):
+    """Types of legal documents"""
+    TERMS = "terms"
+    PRIVACY = "privacy"
+
+
+class LegalDocument(Base):
+    """
+    Versioned legal documents (Terms of Service, Privacy Policy).
+    Required for Stripe compliance - must prove users accepted current terms.
+    
+    Features:
+    - Version tracking (semantic versioning recommended)
+    - Markdown content for flexible formatting
+    - is_current flag to mark active version
+    - effective_date for legal validity
+    """
+    __tablename__ = "legal_documents"
+    
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    
+    # Document type: 'terms' or 'privacy'
+    type: Mapped[str] = mapped_column(String(32), nullable=False)
+    
+    # Version string (e.g., "1.0.0", "2.1.0")
+    version: Mapped[str] = mapped_column(String(20), nullable=False)
+    
+    # Human-readable title
+    title: Mapped[str] = mapped_column(String(255), nullable=False)
+    
+    # Full document content in Markdown format
+    content: Mapped[str] = mapped_column(Text, nullable=False)
+    
+    # When this version becomes legally binding
+    effective_date: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    
+    # Only one document of each type should be current
+    is_current: Mapped[bool] = mapped_column(Boolean, default=False)
+    
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    
+    # Relationships
+    acceptances: Mapped[List["LegalAcceptance"]] = relationship(back_populates="document")
+    
+    __table_args__ = (
+        Index('idx_legal_doc_type_current', 'type', 'is_current'),
+        UniqueConstraint('type', 'version', name='uq_legal_doc_type_version'),
+    )
+
+
+class LegalAcceptance(Base):
+    """
+    Records user acceptance of legal documents.
+    Captures IP address and timestamp for audit trail (Stripe requirement).
+    
+    CRITICAL: This is legally binding evidence that the user accepted terms.
+    Never delete these records.
+    """
+    __tablename__ = "legal_acceptances"
+    
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    
+    # User who accepted (can be null for customer-based acceptance)
+    user_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id"), nullable=True
+    )
+    
+    # Customer who accepted (for tablet/self-service acceptance)
+    customer_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("customers.id"), nullable=True
+    )
+    
+    # Document that was accepted
+    document_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("legal_documents.id"), nullable=False
+    )
+    
+    # Audit trail fields (REQUIRED for Stripe)
+    accepted_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    ip_address: Mapped[Optional[str]] = mapped_column(String(45), nullable=True)  # IPv6 max length
+    user_agent: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
+    
+    # Relationships
+    document: Mapped["LegalDocument"] = relationship(back_populates="acceptances")
+    customer: Mapped[Optional["Customer"]] = relationship(back_populates="legal_acceptances")
+    
+    __table_args__ = (
+        Index('idx_legal_accept_user_doc', 'user_id', 'document_id'),
+        Index('idx_legal_accept_customer_doc', 'customer_id', 'document_id'),
+    )
