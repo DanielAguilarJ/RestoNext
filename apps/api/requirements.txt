@@ -1,37 +1,71 @@
-# Python dependencies for RestoNext MX API
+# ============================================
+# RestoNext MX API - Python Dependencies
+# ============================================
+# Production-ready dependencies for SaaS deployment
 
+# ============================================
 # Core Framework
+# ============================================
 fastapi
 uvicorn[standard]
 python-multipart
 
+# Production performance (optional but recommended)
+uvloop
+httptools
+
+# ============================================
 # Database
+# ============================================
 sqlalchemy[asyncio]
 asyncpg
 alembic
 
+# ============================================
 # Redis
+# ============================================
 redis
 aioredis
 
-# Auth
+# ============================================
+# Authentication & Security
+# ============================================
 python-jose[cryptography]
 passlib[bcrypt]
 pydantic[email]
 pydantic-settings
 
+# ============================================
 # AI & Data Science
+# ============================================
 pandas
 prophet
 
+# ============================================
+# Scheduler (Business Automation)
+# ============================================
+apscheduler>=3.10.0
+
+# ============================================
+# CLI Tool
+# ============================================
+typer[all]
+rich
+
+# ============================================
 # Utilities
+# ============================================
 python-dateutil
 httpx
 
+# ============================================
 # Observability & Monitoring
+# ============================================
 sentry-sdk[fastapi]
 
+# ============================================
 # Testing
+# ============================================
 pytest
 pytest-asyncio
 httpx

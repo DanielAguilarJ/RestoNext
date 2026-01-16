@@ -1,9 +1,15 @@
 """
 RestoNext MX - FastAPI Main Application
 Entry point with CORS, WebSocket, and route registration
+
+Production Features:
+- APScheduler for automated business tasks
+- Sentry for error tracking
+- Redis pub/sub for WebSocket scaling
 """
 
 import asyncio
+import os
 import uuid
 from contextlib import asynccontextmanager
 
@@ -17,6 +23,7 @@ from sentry_sdk.integrations.sqlalchemy import SqlalchemyIntegration
 from app.core.config import get_settings
 from app.core.database import init_db
 from app.core.websocket_manager import ws_manager
+from app.core.scheduler import init_scheduler, start_scheduler, shutdown_scheduler
 
 # Import routers
 from app.api.auth import router as auth_router
@@ -64,20 +71,56 @@ if settings.sentry_dsn:
 async def lifespan(app: FastAPI):
     """
     Application lifespan events.
-    - Startup: Initialize DB and Redis connections
-    - Shutdown: Close connections
+    - Startup: Initialize DB, Redis, and Scheduler
+    - Shutdown: Gracefully close all connections
     """
+    # ============================================
     # Startup
+    # ============================================
+    print("INFO:     🚀 Starting RestoNext MX API...")
+    
+    # Initialize database
     await init_db()
+    
+    # Connect to Redis for WebSocket pub/sub
     await ws_manager.connect_redis()
     
     # Start Redis listener in background
     asyncio.create_task(ws_manager.listen_redis())
     
+    # Initialize and start the scheduler (if enabled)
+    scheduler_enabled = os.getenv("SCHEDULER_ENABLED", "true").lower() == "true"
+    if scheduler_enabled:
+        try:
+            init_scheduler()
+            start_scheduler()
+            print("INFO:     📅 APScheduler started - Business automation active")
+        except Exception as e:
+            print(f"WARNING:  ⚠️ Scheduler failed to start: {e}")
+    else:
+        print("INFO:     📅 Scheduler disabled via SCHEDULER_ENABLED=false")
+    
+    print("INFO:     ✅ RestoNext MX API ready to serve requests")
+    
     yield
     
+    # ============================================
     # Shutdown
+    # ============================================
+    print("INFO:     🛑 Shutting down RestoNext MX API...")
+    
+    # Stop scheduler gracefully
+    if scheduler_enabled:
+        try:
+            shutdown_scheduler()
+            print("INFO:     📅 Scheduler stopped gracefully")
+        except Exception as e:
+            print(f"WARNING:  ⚠️ Scheduler shutdown error: {e}")
+    
+    # Disconnect from Redis
     await ws_manager.disconnect_redis()
+    
+    print("INFO:     👋 Goodbye!")
 
 
 app = FastAPI(
@@ -279,6 +322,35 @@ async def customer_websocket(websocket: WebSocket, table_number: int):
 async def health_check():
     """Health check endpoint for Docker/K8s"""
     return {"status": "healthy", "service": "restonext-api"}
+
+
+@app.get("/api/system/scheduler")
+async def scheduler_status():
+    """
+    Get scheduler status for admin dashboard.
+    Shows all registered jobs and their next run times.
+    """
+    from app.core.scheduler import get_scheduler_status
+    return get_scheduler_status()
+
+
+@app.get("/api/system/info")
+async def system_info():
+    """System information for admin dashboard"""
+    from app.core.scheduler import get_scheduler_status
+    
+    scheduler = get_scheduler_status()
+    
+    return {
+        "name": settings.app_name,
+        "version": "1.0.0",
+        "environment": settings.sentry_environment,
+        "scheduler": scheduler,
+        "features": {
+            "sentry": bool(settings.sentry_dsn),
+            "redis": True,  # Always enabled in docker-compose
+        }
+    }
 
 
 @app.get("/")

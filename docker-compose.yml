@@ -1,80 +1,178 @@
+# ============================================
+# RestoNext MX - Production Docker Compose
+# ============================================
+# Cloud-Native Restaurant Management SaaS
+# Includes: NGINX Reverse Proxy, FastAPI Backend, Next.js Frontend, PostgreSQL, Redis
+# ============================================
+
 services:
+  # ============================================
+  # NGINX Reverse Proxy (SSL/TLS Termination)
+  # ============================================
+  nginx:
+    image: nginx:1.25-alpine
+    container_name: restonext-nginx
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/conf.d:/etc/nginx/conf.d:ro
+      - ./nginx/ssl:/etc/nginx/ssl:ro
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      - api
+      - web
+    networks:
+      - restonext-network
+    healthcheck:
+      test: [ "CMD", "nginx", "-t" ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # ============================================
   # PostgreSQL Database
+  # ============================================
   db:
     image: postgres:16-alpine
+    container_name: restonext-db
+    restart: unless-stopped
     environment:
-      POSTGRES_USER: restonext
-      POSTGRES_PASSWORD: restonext_dev
-      POSTGRES_DB: restonext
+      POSTGRES_USER: ${POSTGRES_USER:-restonext}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-restonext_dev}
+      POSTGRES_DB: ${POSTGRES_DB:-restonext}
     ports:
       - "5433:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
+    networks:
+      - restonext-network
     healthcheck:
-      test: [ "CMD-SHELL", "pg_isready -U restonext" ]
+      test: [ "CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-restonext}" ]
       interval: 5s
       timeout: 5s
       retries: 5
 
-  # Redis for WebSocket pub/sub and Rate Limiting
+  # ============================================
+  # Redis for WebSocket pub/sub, Rate Limiting & Caching
+  # ============================================
   redis:
     image: redis:7-alpine
+    container_name: restonext-redis
+    restart: unless-stopped
     ports:
       - "6379:6379"
     volumes:
       - redis_data:/data
-    command: redis-server --appendonly yes
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+    networks:
+      - restonext-network
     healthcheck:
       test: [ "CMD", "redis-cli", "ping" ]
       interval: 5s
       timeout: 5s
       retries: 5
 
-  # FastAPI Backend
+  # ============================================
+  # FastAPI Backend (Python)
+  # ============================================
   api:
     build:
       context: ./apps/api
       dockerfile: Dockerfile
-    ports:
-      - "8000:8000"
+      target: production
+    container_name: restonext-api
+    restart: unless-stopped
+    expose:
+      - "8000"
     environment:
       # Database
-      DATABASE_URL: postgresql+asyncpg://restonext:restonext_dev@db:5432/restonext
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-restonext}:${POSTGRES_PASSWORD:-restonext_dev}@db:5432/${POSTGRES_DB:-restonext}
       # Redis
       REDIS_URL: redis://redis:6379
       # Auth
-      JWT_SECRET: dev-secret-change-in-production
+      JWT_SECRET: ${JWT_SECRET:-dev-secret-change-in-production}
       # Sentry (optional - leave empty to disable)
       SENTRY_DSN: ${SENTRY_DSN:-}
-      SENTRY_ENVIRONMENT: ${SENTRY_ENVIRONMENT:-development}
+      SENTRY_ENVIRONMENT: ${SENTRY_ENVIRONMENT:-production}
       SENTRY_TRACES_SAMPLE_RATE: ${SENTRY_TRACES_SAMPLE_RATE:-0.1}
+      # AI Integration
+      PERPLEXITY_API_KEY: ${PERPLEXITY_API_KEY:-}
+      # Scheduler (enable in production)
+      SCHEDULER_ENABLED: ${SCHEDULER_ENABLED:-true}
+      # Timezone
+      TZ: America/Mexico_City
     depends_on:
       db:
         condition: service_healthy
       redis:
         condition: service_healthy
     volumes:
-      - ./apps/api:/app
-    command: uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+      - api_logs:/app/logs
+    networks:
+      - restonext-network
+    healthcheck:
+      test: [ "CMD", "curl", "-f", "http://localhost:8000/health" ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
 
+  # ============================================
   # Next.js Frontend
+  # ============================================
   web:
     build:
       context: ./apps/web
       dockerfile: Dockerfile
-    ports:
-      - "3000:3000"
+    container_name: restonext-web
+    restart: unless-stopped
+    expose:
+      - "3000"
     environment:
-      NEXT_PUBLIC_API_URL: http://localhost:8000
-      NEXT_PUBLIC_WS_URL: ws://localhost:8000
+      # API URLs (from NGINX perspective)
+      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-https://localhost/api}
+      NEXT_PUBLIC_WS_URL: ${NEXT_PUBLIC_WS_URL:-wss://localhost/ws}
+      NODE_ENV: production
+      TZ: America/Mexico_City
     depends_on:
       - api
-    volumes:
-      - ./apps/web:/app
-      - /app/node_modules
-      - /app/.next
-    command: npm run dev
+    networks:
+      - restonext-network
+    healthcheck:
+      test: [ "CMD", "curl", "-f", "http://localhost:3000" ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
 
+  # ============================================
+  # Certbot (SSL Certificate Management)
+  # Run manually: docker compose run --rm certbot certonly ...
+  # ============================================
+  certbot:
+    image: certbot/certbot:latest
+    container_name: restonext-certbot
+    volumes:
+      - ./nginx/ssl:/etc/letsencrypt
+      - certbot_www:/var/www/certbot
+    entrypoint: "/bin/sh -c 'trap exit TERM; while :; do certbot renew; sleep 12h & wait $${!}; done;'"
+    profiles:
+      - ssl # Only run when explicitly requested
+
+# ============================================
+# Networks
+# ============================================
+networks:
+  restonext-network:
+    driver: bridge
+
+# ============================================
+# Volumes
+# ============================================
 volumes:
   postgres_data:
   redis_data:
+  api_logs:
+  certbot_www:

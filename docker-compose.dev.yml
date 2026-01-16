@@ -1,0 +1,93 @@
+# ============================================
+# RestoNext MX - Development Docker Compose
+# ============================================
+# Use this for local development with hot reload
+# Usage: docker-compose -f docker-compose.dev.yml up
+# ============================================
+
+services:
+  # PostgreSQL Database
+  db:
+    image: postgres:16-alpine
+    container_name: restonext-db-dev
+    environment:
+      POSTGRES_USER: restonext
+      POSTGRES_PASSWORD: restonext_dev
+      POSTGRES_DB: restonext
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres_data_dev:/var/lib/postgresql/data
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U restonext" ]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # Redis for WebSocket pub/sub and Rate Limiting
+  redis:
+    image: redis:7-alpine
+    container_name: restonext-redis-dev
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data_dev:/data
+    command: redis-server --appendonly yes
+    healthcheck:
+      test: [ "CMD", "redis-cli", "ping" ]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # FastAPI Backend (Development - Hot Reload)
+  api:
+    build:
+      context: ./apps/api
+      dockerfile: Dockerfile
+      target: development
+    container_name: restonext-api-dev
+    ports:
+      - "8000:8000"
+    environment:
+      # Database
+      DATABASE_URL: postgresql+asyncpg://restonext:restonext_dev@db:5432/restonext
+      # Redis
+      REDIS_URL: redis://redis:6379
+      # Auth
+      JWT_SECRET: dev-secret-change-in-production
+      # Sentry (optional)
+      SENTRY_DSN: ${SENTRY_DSN:-}
+      SENTRY_ENVIRONMENT: development
+      # Scheduler (disabled in dev by default - use CLI to run manually)
+      SCHEDULER_ENABLED: ${SCHEDULER_ENABLED:-false}
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./apps/api:/app
+    command: uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+
+  # Next.js Frontend (Development - Hot Reload)
+  web:
+    build:
+      context: ./apps/web
+      dockerfile: Dockerfile.dev
+    container_name: restonext-web-dev
+    ports:
+      - "3000:3000"
+    environment:
+      NEXT_PUBLIC_API_URL: http://localhost:8000
+      NEXT_PUBLIC_WS_URL: ws://localhost:8000
+    depends_on:
+      - api
+    volumes:
+      - ./apps/web:/app
+      - /app/node_modules
+      - /app/.next
+    command: npm run dev
+
+volumes:
+  postgres_data_dev:
+  redis_data_dev:
