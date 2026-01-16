@@ -4,10 +4,15 @@ Entry point with CORS, WebSocket, and route registration
 """
 
 import asyncio
+import uuid
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
+import sentry_sdk
+from sentry_sdk.integrations.fastapi import FastApiIntegration
+from sentry_sdk.integrations.sqlalchemy import SqlalchemyIntegration
 
 from app.core.config import get_settings
 from app.core.database import init_db
@@ -34,6 +39,25 @@ from app.api.admin_tables import router as admin_tables_router
 
 settings = get_settings()
 
+# ============================================
+# Sentry Initialization (Production Observability)
+# ============================================
+
+if settings.sentry_dsn:
+    sentry_sdk.init(
+        dsn=settings.sentry_dsn,
+        environment=settings.sentry_environment,
+        traces_sample_rate=settings.sentry_traces_sample_rate,
+        integrations=[
+            FastApiIntegration(transaction_style="endpoint"),
+            SqlalchemyIntegration(),
+        ],
+        # Include request data but exclude sensitive headers
+        send_default_pii=False,
+        # Add RestoNext metadata
+        release="restonext-api@1.0.0",
+    )
+    print(f"INFO:     Sentry initialized for environment: {settings.sentry_environment}")
 
 
 @asynccontextmanager
@@ -62,6 +86,53 @@ app = FastAPI(
     version="1.0.0",
     lifespan=lifespan,
 )
+
+
+# ============================================
+# Error Handling Middleware (Sentry Integration)
+# ============================================
+
+@app.middleware("http")
+async def sentry_error_middleware(request: Request, call_next):
+    """
+    Middleware to capture unhandled exceptions and return clean error responses.
+    
+    Features:
+    - Captures errors to Sentry with event ID
+    - Returns clean JSON response to client
+    - Includes reference ID for support
+    """
+    try:
+        response = await call_next(request)
+        return response
+    except Exception as exc:
+        # Generate unique error reference ID
+        error_ref = str(uuid.uuid4())[:8]
+        
+        # Capture to Sentry if configured
+        if settings.sentry_dsn:
+            with sentry_sdk.push_scope() as scope:
+                scope.set_tag("error_ref", error_ref)
+                scope.set_context("request", {
+                    "url": str(request.url),
+                    "method": request.method,
+                    "client_ip": request.client.host if request.client else None,
+                })
+                sentry_sdk.capture_exception(exc)
+        
+        # Log the error
+        print(f"ERROR [{error_ref}]: {type(exc).__name__}: {str(exc)}")
+        
+        # Return clean JSON response
+        return JSONResponse(
+            status_code=500,
+            content={
+                "error": "Internal Server Error",
+                "message": "Ha ocurrido un error inesperado. Por favor intenta de nuevo.",
+                "ref": error_ref
+            }
+        )
+
 
 # CORS configuration
 app.add_middleware(
@@ -145,6 +216,39 @@ async def waiter_websocket(websocket: WebSocket):
                 await websocket.send_text("pong")
     except WebSocketDisconnect:
         ws_manager.disconnect(websocket, "waiter")
+
+
+@app.websocket("/ws/cashier")
+async def cashier_websocket(websocket: WebSocket):
+    """
+    WebSocket for Cashier/Payment station.
+    Receives bill request notifications with total amounts.
+    Priority channel for closing service cycles.
+    """
+    await ws_manager.connect(websocket, "cashier")
+    try:
+        while True:
+            data = await websocket.receive_text()
+            if data == "ping":
+                await websocket.send_text("pong")
+    except WebSocketDisconnect:
+        ws_manager.disconnect(websocket, "cashier")
+
+
+@app.websocket("/ws/pos")
+async def pos_websocket(websocket: WebSocket):
+    """
+    WebSocket for POS Dashboard.
+    Receives all table updates, bill requests, and order notifications.
+    """
+    await ws_manager.connect(websocket, "pos")
+    try:
+        while True:
+            data = await websocket.receive_text()
+            if data == "ping":
+                await websocket.send_text("pong")
+    except WebSocketDisconnect:
+        ws_manager.disconnect(websocket, "pos")
 
 
 @app.websocket("/ws/customer/{table_number}")

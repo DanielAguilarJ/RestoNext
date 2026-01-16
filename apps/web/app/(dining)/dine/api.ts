@@ -159,6 +159,46 @@ export async function getBill(config: DiningApiConfig): Promise<Bill> {
     return diningRequest<Bill>(config, '/bill');
 }
 
+interface BillRequestResponse {
+    success: boolean;
+    table_number: number;
+    table_id: string;
+    message: string;
+    items: Array<{
+        name: string;
+        quantity: number;
+        unit_price: number;
+        modifiers_total: number;
+        subtotal: number;
+    }>;
+    subtotal: number;
+    tax: number;
+    discount: number;
+    tip_suggested: number;
+    total: number;
+    currency: string;
+    status: string;
+    estimated_wait_minutes: number;
+    requested_at: string;
+}
+
+/**
+ * Request the bill / check for the table.
+ * This is the critical endpoint for the "Pedir Cuenta" flow.
+ * 
+ * On success:
+ * - Table status changes to "payment_requested"
+ * - WebSocket notification sent to waiter/cashier
+ * - Returns full bill breakdown
+ */
+export async function requestBill(config: DiningApiConfig): Promise<BillRequestResponse> {
+    return diningRequest<BillRequestResponse>(config, '/request-bill', {
+        method: 'POST',
+    });
+}
+
+export type { BillRequestResponse };
+
 // ============================================
 // AI Upselling API
 // ============================================

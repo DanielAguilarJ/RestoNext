@@ -27,3 +27,11 @@ prophet
 # Utilities
 python-dateutil
 httpx
+
+# Observability & Monitoring
+sentry-sdk[fastapi]
+
+# Testing
+pytest
+pytest-asyncio
+httpx

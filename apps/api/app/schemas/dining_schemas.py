@@ -233,6 +233,34 @@ class BillPublic(BaseModel):
     payment_methods: List[str] = ["cash", "card"]
 
 
+class BillRequestResponse(BaseModel):
+    """
+    Response when customer requests the bill.
+    Includes full breakdown for display and staff notification.
+    """
+    success: bool
+    table_number: int
+    table_id: UUID
+    message: str
+    # Detailed breakdown
+    items: List[BillItemPublic]
+    subtotal: float
+    tax: float
+    discount: float = 0
+    tip_suggested: float = 0  # 15% suggested tip
+    total: float
+    currency: str = "MXN"
+    # Status
+    status: str = "payment_requested"  # payment_requested, waiter_notified
+    # Estimated time for waiter arrival
+    estimated_wait_minutes: int = 2
+    # Timestamp
+    requested_at: datetime
+    
+    class Config:
+        from_attributes = True
+
+
 # ============================================
 # WebSocket Event Schemas
 # ============================================

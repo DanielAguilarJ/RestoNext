@@ -2,14 +2,15 @@
 
 /**
  * Cart Modal Component
- * Full-screen cart view with order summary and AI upselling
+ * Full-screen cart view with order summary, AI upselling, and bill request
  */
 
 import React, { useState, useEffect } from 'react';
-import { X, Minus, Plus, Trash2, ChevronRight, Loader2, Sparkles, PlusCircle } from 'lucide-react';
+import { X, Minus, Plus, Trash2, ChevronRight, Loader2, Sparkles, PlusCircle, Receipt, CheckCircle, Clock } from 'lucide-react';
 import { useDining } from '../context';
-import { getUpsellSuggestions } from '../api';
+import { getUpsellSuggestions, requestBill } from '../api';
 import type { CartItem } from '../types';
+import type { BillRequestResponse } from '../api';
 
 interface UpsellSuggestion {
     id: string;
@@ -27,7 +28,7 @@ interface CartModalProps {
 }
 
 export function CartModal({ currency, isOpen, onClose, onOrderSuccess }: CartModalProps) {
-    const { cart, updateCartItemQuantity, removeFromCart, submitOrder, apiConfig, addToCart, menu } = useDining();
+    const { cart, updateCartItemQuantity, removeFromCart, submitOrder, apiConfig, addToCart, menu, session } = useDining();
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [error, setError] = useState<string | null>(null);
 
@@ -35,6 +36,12 @@ export function CartModal({ currency, isOpen, onClose, onOrderSuccess }: CartMod
     const [upsellSuggestions, setUpsellSuggestions] = useState<UpsellSuggestion[]>([]);
     const [loadingUpsell, setLoadingUpsell] = useState(false);
     const [addingUpsell, setAddingUpsell] = useState<string | null>(null);
+
+    // Bill Request state
+    const [billRequested, setBillRequested] = useState(false);
+    const [billResponse, setBillResponse] = useState<BillRequestResponse | null>(null);
+    const [requestingBill, setRequestingBill] = useState(false);
+    const [billError, setBillError] = useState<string | null>(null);
 
     const formatPrice = (price: number) => {
         return new Intl.NumberFormat('es-MX', {
@@ -45,10 +52,10 @@ export function CartModal({ currency, isOpen, onClose, onOrderSuccess }: CartMod
 
     // Fetch upsell suggestions when cart opens
     useEffect(() => {
-        if (isOpen && cart.items.length > 0 && apiConfig) {
+        if (isOpen && cart.items.length > 0 && apiConfig && !billRequested) {
             fetchUpsellSuggestions();
         }
-    }, [isOpen, cart.items.length]);
+    }, [isOpen, cart.items.length, billRequested]);
 
     const fetchUpsellSuggestions = async () => {
         if (!apiConfig) return;
@@ -117,7 +124,114 @@ export function CartModal({ currency, isOpen, onClose, onOrderSuccess }: CartMod
         }
     };
 
+    /**
+     * Handle Bill Request
+     * This is the critical flow for "Pedir Cuenta"
+     * 
+     * 1. Calls the request-bill endpoint
+     * 2. Blocks further ordering
+     * 3. Shows confirmation with total
+     * 4. Waiter gets notified via WebSocket
+     */
+    const handleRequestBill = async () => {
+        if (!apiConfig) return;
+
+        setRequestingBill(true);
+        setBillError(null);
+
+        try {
+            const response = await requestBill(apiConfig);
+            setBillResponse(response);
+            setBillRequested(true);
+        } catch (err) {
+            const message = err instanceof Error ? err.message : 'Error al solicitar la cuenta';
+            setBillError(message);
+        } finally {
+            setRequestingBill(false);
+        }
+    };
+
     if (!isOpen) return null;
+
+    // Bill Requested Success View
+    if (billRequested && billResponse) {
+        return (
+            <div className="fixed inset-0 z-50 flex flex-col bg-gradient-to-br from-emerald-50 to-teal-50">
+                {/* Header */}
+                <div className="flex items-center justify-between px-4 py-4 border-b border-emerald-200 bg-white/80 backdrop-blur-sm">
+                    <h2 className="text-xl font-bold text-emerald-900">Cuenta Solicitada</h2>
+                    <button
+                        onClick={onClose}
+                        className="w-10 h-10 rounded-full bg-gray-100 flex items-center justify-center"
+                    >
+                        <X className="w-5 h-5 text-gray-600" />
+                    </button>
+                </div>
+
+                {/* Success Content */}
+                <div className="flex-1 flex flex-col items-center justify-center p-6 text-center">
+                    {/* Success Icon */}
+                    <div className="w-24 h-24 rounded-full bg-gradient-to-br from-emerald-400 to-teal-500 flex items-center justify-center mb-6 animate-bounce">
+                        <CheckCircle className="w-12 h-12 text-white" />
+                    </div>
+
+                    {/* Message */}
+                    <h3 className="text-2xl font-bold text-gray-900 mb-2">
+                        ¡Cuenta Solicitada!
+                    </h3>
+                    <p className="text-gray-600 mb-6">
+                        Un mesero viene en camino para atenderte
+                    </p>
+
+                    {/* Total Display */}
+                    <div className="bg-white rounded-3xl p-6 shadow-lg border border-emerald-200 w-full max-w-sm mb-6">
+                        <p className="text-sm text-gray-500 mb-1">Tu total es</p>
+                        <p className="text-4xl font-bold text-gray-900 mb-2">
+                            {formatPrice(billResponse.total)}
+                        </p>
+                        <div className="text-sm text-gray-500 space-y-1">
+                            <div className="flex justify-between">
+                                <span>Subtotal</span>
+                                <span>{formatPrice(billResponse.subtotal)}</span>
+                            </div>
+                            <div className="flex justify-between">
+                                <span>IVA (16%)</span>
+                                <span>{formatPrice(billResponse.tax)}</span>
+                            </div>
+                        </div>
+                        {billResponse.tip_suggested > 0 && (
+                            <div className="mt-3 pt-3 border-t border-gray-100">
+                                <div className="flex justify-between text-sm text-emerald-600">
+                                    <span>Propina sugerida (15%)</span>
+                                    <span>{formatPrice(billResponse.tip_suggested)}</span>
+                                </div>
+                            </div>
+                        )}
+                    </div>
+
+                    {/* Wait Time */}
+                    <div className="flex items-center gap-2 text-gray-500">
+                        <Clock className="w-4 h-4" />
+                        <span className="text-sm">
+                            Tiempo estimado: ~{billResponse.estimated_wait_minutes} minutos
+                        </span>
+                    </div>
+
+                    {/* Items Count */}
+                    <p className="text-xs text-gray-400 mt-4">
+                        {billResponse.items.length} artículos en tu cuenta
+                    </p>
+                </div>
+
+                {/* Footer Message */}
+                <div className="bg-white/80 backdrop-blur-sm border-t border-emerald-200 p-4 text-center safe-bottom">
+                    <p className="text-sm text-emerald-700">
+                        ✨ ¡Gracias por tu visita! Esperamos verte pronto
+                    </p>
+                </div>
+            </div>
+        );
+    }
 
     return (
         <div className="fixed inset-0 z-50 flex flex-col bg-white">
@@ -139,6 +253,32 @@ export function CartModal({ currency, isOpen, onClose, onOrderSuccess }: CartMod
                         <span className="text-6xl mb-4">🛒</span>
                         <p className="text-lg">Tu carrito está vacío</p>
                         <p className="text-sm">Agrega algo delicioso</p>
+
+                        {/* Show Request Bill button if there's an active order */}
+                        {session?.current_order_id && (
+                            <div className="mt-6 w-full max-w-xs px-4">
+                                <button
+                                    onClick={handleRequestBill}
+                                    disabled={requestingBill}
+                                    className="w-full bg-gradient-to-r from-emerald-500 to-teal-600 text-white font-bold py-4 rounded-2xl flex items-center justify-center gap-2 hover:from-emerald-600 hover:to-teal-700 active:scale-[0.98] transition-all disabled:opacity-70"
+                                >
+                                    {requestingBill ? (
+                                        <>
+                                            <Loader2 className="w-5 h-5 animate-spin" />
+                                            Solicitando...
+                                        </>
+                                    ) : (
+                                        <>
+                                            <Receipt className="w-5 h-5" />
+                                            Pedir la Cuenta
+                                        </>
+                                    )}
+                                </button>
+                                <p className="text-xs text-gray-400 text-center mt-2">
+                                    Total actual: {formatPrice(session.current_order_total || 0)}
+                                </p>
+                            </div>
+                        )}
                     </div>
                 ) : (
                     <>
@@ -258,24 +398,55 @@ export function CartModal({ currency, isOpen, onClose, onOrderSuccess }: CartMod
                         </div>
                     )}
 
-                    {/* Submit Button */}
-                    <button
-                        onClick={handleSubmitOrder}
-                        disabled={isSubmitting}
-                        className="w-full bg-orange-500 text-white font-bold py-4 rounded-2xl flex items-center justify-center gap-2 hover:bg-orange-600 active:scale-[0.98] transition-all disabled:opacity-70 disabled:cursor-not-allowed"
-                    >
-                        {isSubmitting ? (
-                            <>
-                                <Loader2 className="w-5 h-5 animate-spin" />
-                                Enviando a cocina...
-                            </>
-                        ) : (
-                            <>
-                                Enviar pedido
-                                <ChevronRight className="w-5 h-5" />
-                            </>
+                    {/* Bill Error Message */}
+                    {billError && (
+                        <div className="bg-red-50 text-red-600 text-sm p-3 rounded-xl mb-3">
+                            {billError}
+                        </div>
+                    )}
+
+                    {/* Action Buttons */}
+                    <div className="space-y-3">
+                        {/* Submit Order Button */}
+                        <button
+                            onClick={handleSubmitOrder}
+                            disabled={isSubmitting}
+                            className="w-full bg-orange-500 text-white font-bold py-4 rounded-2xl flex items-center justify-center gap-2 hover:bg-orange-600 active:scale-[0.98] transition-all disabled:opacity-70 disabled:cursor-not-allowed"
+                        >
+                            {isSubmitting ? (
+                                <>
+                                    <Loader2 className="w-5 h-5 animate-spin" />
+                                    Enviando a cocina...
+                                </>
+                            ) : (
+                                <>
+                                    Enviar pedido
+                                    <ChevronRight className="w-5 h-5" />
+                                </>
+                            )}
+                        </button>
+
+                        {/* Request Bill Button */}
+                        {session?.current_order_id && (
+                            <button
+                                onClick={handleRequestBill}
+                                disabled={requestingBill}
+                                className="w-full bg-gradient-to-r from-emerald-500 to-teal-600 text-white font-bold py-3 rounded-2xl flex items-center justify-center gap-2 hover:from-emerald-600 hover:to-teal-700 active:scale-[0.98] transition-all disabled:opacity-70"
+                            >
+                                {requestingBill ? (
+                                    <>
+                                        <Loader2 className="w-5 h-5 animate-spin" />
+                                        Solicitando cuenta...
+                                    </>
+                                ) : (
+                                    <>
+                                        <Receipt className="w-5 h-5" />
+                                        Pedir la Cuenta
+                                    </>
+                                )}
+                            </button>
                         )}
-                    </button>
+                    </div>
 
                     <p className="text-center text-xs text-gray-400 mt-3">
                         Tu pedido será enviado directamente a cocina

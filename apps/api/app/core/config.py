@@ -44,6 +44,11 @@ class Settings(BaseSettings):
     # AI Integration
     perplexity_api_key: str = ""
     
+    # Observability - Sentry
+    sentry_dsn: str = ""  # Empty = disabled
+    sentry_environment: str = "development"
+    sentry_traces_sample_rate: float = 0.1  # 10% of transactions
+    
     class Config:
         env_file = ".env"
         env_file_encoding = "utf-8"

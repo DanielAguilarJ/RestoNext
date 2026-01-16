@@ -16,11 +16,14 @@ services:
       timeout: 5s
       retries: 5
 
-  # Redis for WebSocket pub/sub
+  # Redis for WebSocket pub/sub and Rate Limiting
   redis:
     image: redis:7-alpine
     ports:
       - "6379:6379"
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes
     healthcheck:
       test: [ "CMD", "redis-cli", "ping" ]
       interval: 5s
@@ -35,9 +38,16 @@ services:
     ports:
       - "8000:8000"
     environment:
+      # Database
       DATABASE_URL: postgresql+asyncpg://restonext:restonext_dev@db:5432/restonext
+      # Redis
       REDIS_URL: redis://redis:6379
+      # Auth
       JWT_SECRET: dev-secret-change-in-production
+      # Sentry (optional - leave empty to disable)
+      SENTRY_DSN: ${SENTRY_DSN:-}
+      SENTRY_ENVIRONMENT: ${SENTRY_ENVIRONMENT:-development}
+      SENTRY_TRACES_SAMPLE_RATE: ${SENTRY_TRACES_SAMPLE_RATE:-0.1}
     depends_on:
       db:
         condition: service_healthy
@@ -67,3 +77,4 @@ services:
 
 volumes:
   postgres_data:
+  redis_data:

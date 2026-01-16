@@ -31,6 +31,8 @@ class ConnectionManager:
             "kitchen": set(),
             "bar": set(),
             "waiter": set(),
+            "cashier": set(),  # For bill/payment notifications
+            "pos": set(),      # For POS stations
             "all": set(),
         }
         self.redis_client: Optional[redis.Redis] = None
@@ -168,6 +170,49 @@ class ConnectionManager:
             }
         }
         await self.broadcast_to_channel(message, "waiter")
+        await self.broadcast_to_channel(message, "pos")
+    
+    async def notify_bill_requested(
+        self, 
+        table_id: str,
+        table_number: int,
+        tenant_id: str,
+        total: float,
+        subtotal: float,
+        tax: float,
+        items_count: int,
+        currency: str = "MXN"
+    ):
+        """
+        High-priority notification when customer requests the bill.
+        
+        Broadcasts to:
+        - waiter: Primary notification for service
+        - cashier: Prepare for payment
+        - pos: Dashboard visibility
+        
+        This is a critical path for customer experience - instant delivery required.
+        """
+        message = {
+            "event": "table:bill_requested",
+            "priority": "high",
+            "payload": {
+                "table_id": table_id,
+                "table_number": table_number,
+                "tenant_id": tenant_id,
+                "total": total,
+                "subtotal": subtotal,
+                "tax": tax,
+                "items_count": items_count,
+                "currency": currency,
+                "message": f"Mesa {table_number} pide la cuenta ({currency} ${total:,.2f})",
+                "action_url": f"/cashier?table={table_id}"
+            }
+        }
+        
+        # Broadcast to all relevant channels
+        await self.broadcast_to_channel(message, "waiter")
+        await self.broadcast_to_channel(message, "cashier")
         await self.broadcast_to_channel(message, "pos")
     
     async def listen_redis(self):

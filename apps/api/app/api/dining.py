@@ -22,7 +22,7 @@ from sqlalchemy.orm import selectinload
 
 from app.core.database import get_db
 from app.core.websocket_manager import ws_manager
-from app.core.rate_limiter import RateLimiter, get_service_request_limiter
+from app.core.rate_limiter import RateLimiter, get_service_request_limiter, get_bill_request_limiter
 from app.models.models import (
     Tenant, Table, TableStatus, 
     Order, OrderItem, OrderStatus, OrderSource, OrderItemStatus,
@@ -35,7 +35,7 @@ from app.schemas.dining_schemas import (
     DiningOrderCreate, DiningOrderResponse, DiningOrderItemResponse,
     ServiceRequestCreate, ServiceRequestResponse, ActiveServiceRequests,
     TableSessionInfo, TableTokenValidation,
-    BillPublic, BillItemPublic,
+    BillPublic, BillItemPublic, BillRequestResponse,
     OrderStatusPublic,
     UpsellRequest, UpsellResponse, UpsellSuggestion
 )
@@ -723,9 +723,144 @@ async def get_current_bill(
     )
 
 
+@router.post("/{tenant_id}/table/{table_id}/request-bill", response_model=BillRequestResponse)
+async def request_bill(
+    ctx: TableContext = Depends(get_current_table),
+    db: AsyncSession = Depends(get_db),
+    _rate_limit: None = Depends(get_bill_request_limiter())
+):
+    """
+    Request the bill / check for the table.
+    
+    CRITICAL ENDPOINT for closing the service cycle:
+    1. Validates there are active orders to bill
+    2. Calculates complete total with tax breakdown
+    3. Changes table status to 'bill_requested'
+    4. Creates a bill service request for tracking
+    5. Sends HIGH PRIORITY WebSocket notification to:
+       - waiter channel
+       - cashier channel  
+       - pos channel
+    6. Returns full bill breakdown so tablet can display "Tu total es $X"
+    
+    Rate limited to prevent spam (2 requests per 5 minutes).
+    """
+    # Find all active orders for this table
+    result = await db.execute(
+        select(Order)
+        .where(
+            and_(
+                Order.table_id == ctx.table_id,
+                Order.status.in_([
+                    OrderStatus.OPEN, 
+                    OrderStatus.IN_PROGRESS, 
+                    OrderStatus.READY, 
+                    OrderStatus.DELIVERED
+                ])
+            )
+        )
+        .options(selectinload(Order.items))
+    )
+    orders = result.scalars().all()
+    
+    if not orders:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="No hay consumo para cobrar. Tu mesa no tiene pedidos activos."
+        )
+    
+    # Calculate bill totals
+    bill_items = []
+    subtotal = 0.0
+    
+    for order in orders:
+        for item in order.items:
+            modifiers_total = sum(
+                m.get("price_delta", 0) for m in (item.selected_modifiers or [])
+            )
+            item_subtotal = item.unit_price * item.quantity
+            
+            bill_items.append(BillItemPublic(
+                name=item.menu_item_name,
+                quantity=item.quantity,
+                unit_price=item.unit_price,
+                modifiers_total=modifiers_total,
+                subtotal=item_subtotal
+            ))
+            subtotal += item_subtotal
+    
+    # Calculate tax and totals
+    tax_rate = 0.16  # IVA Mexico
+    tax = subtotal * tax_rate
+    tip_suggested = subtotal * 0.15  # 15% suggested tip
+    total = subtotal + tax
+    
+    # Change table status to bill_requested
+    ctx.table.status = TableStatus.BILL_REQUESTED
+    
+    # Create or update service request for bill
+    existing_request = await db.execute(
+        select(ServiceRequest).where(
+            and_(
+                ServiceRequest.table_id == ctx.table_id,
+                ServiceRequest.request_type == ServiceRequestType.BILL,
+                ServiceRequest.status == ServiceRequestStatus.PENDING
+            )
+        )
+    )
+    existing = existing_request.scalar_one_or_none()
+    
+    request_timestamp = datetime.utcnow()
+    
+    if not existing:
+        # Create new bill request
+        service_request = ServiceRequest(
+            tenant_id=ctx.tenant_id,
+            table_id=ctx.table_id,
+            request_type=ServiceRequestType.BILL,
+            status=ServiceRequestStatus.PENDING,
+            message=f"Total: ${total:,.2f}"
+        )
+        db.add(service_request)
+    else:
+        request_timestamp = existing.created_at
+    
+    await db.commit()
+    
+    # CRITICAL: Send WebSocket notification to waiter/cashier/POS
+    await ws_manager.notify_bill_requested(
+        table_id=str(ctx.table_id),
+        table_number=ctx.table_number,
+        tenant_id=str(ctx.tenant_id),
+        total=total,
+        subtotal=subtotal,
+        tax=tax,
+        items_count=len(bill_items),
+        currency=ctx.tenant.currency
+    )
+    
+    return BillRequestResponse(
+        success=True,
+        table_number=ctx.table_number,
+        table_id=ctx.table_id,
+        message=f"Tu cuenta es de {ctx.tenant.currency} ${total:,.2f}. Un mesero viene en camino.",
+        items=bill_items,
+        subtotal=subtotal,
+        tax=tax,
+        discount=0,
+        tip_suggested=tip_suggested,
+        total=total,
+        currency=ctx.tenant.currency,
+        status="payment_requested",
+        estimated_wait_minutes=2,
+        requested_at=request_timestamp
+    )
+
+
 # ============================================
 # Session / Validation Endpoints
 # ============================================
+
 
 @router.get("/{tenant_id}/table/{table_id}/session", response_model=TableSessionInfo)
 async def get_table_session(
