@@ -29,6 +29,7 @@ from app.api.loyalty import router as loyalty_router
 from app.api.reservations import router as reservations_router
 from app.api.promotions import router as promotions_router
 from app.api.menu import router as menu_router
+from app.api.dining import router as dining_router
 
 settings = get_settings()
 
@@ -85,6 +86,8 @@ app.include_router(loyalty_router, prefix="/api/loyalty", tags=["Loyalty"])
 app.include_router(reservations_router, prefix="/api/reservations", tags=["Reservations"])
 app.include_router(promotions_router, prefix="/api/promotions", tags=["Promotions"])
 app.include_router(menu_router, prefix="/api", tags=["Menu"])
+# Public dining endpoints (no /api prefix - consumer facing)
+app.include_router(dining_router, prefix="/api", tags=["Self-Service Dining"])
 
 
 # ============================================

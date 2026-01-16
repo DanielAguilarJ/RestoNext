@@ -134,6 +134,42 @@ class ConnectionManager:
         }
         await self.broadcast_to_channel(message, "bar")
     
+    async def notify_service_request(self, request_data: dict):
+        """
+        Notify POS/Waiter stations of new service request.
+        Used for self-service dining module.
+        """
+        message = {
+            "event": "service_request:new",
+            "payload": request_data
+        }
+        await self.broadcast_to_channel(message, "waiter")
+        # Also broadcast to POS/cashier for visibility
+        await self.broadcast_to_channel(message, "pos")
+    
+    async def notify_service_request_resolved(self, request_data: dict):
+        """Notify that a service request has been resolved"""
+        message = {
+            "event": "service_request:resolved",
+            "payload": request_data
+        }
+        await self.broadcast_to_channel(message, "waiter")
+    
+    async def notify_table_order_update(self, table_id: str, order_data: dict):
+        """
+        Notify about order updates for a specific table.
+        Used to update POS view when self-service order is placed.
+        """
+        message = {
+            "event": "table:order_update",
+            "payload": {
+                "table_id": table_id,
+                **order_data
+            }
+        }
+        await self.broadcast_to_channel(message, "waiter")
+        await self.broadcast_to_channel(message, "pos")
+    
     async def listen_redis(self):
         """
         Background task to listen for Redis pub/sub messages.

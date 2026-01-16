@@ -145,6 +145,29 @@ class ReservationPaymentStatus(str, enum.Enum):
     REFUNDED = "refunded"
 
 
+class OrderSource(str, enum.Enum):
+    """Source of order creation for hybrid flow"""
+    POS = "pos"                    # Created by waiter via POS
+    SELF_SERVICE = "self_service"  # Created by customer via tablet/QR
+    DELIVERY_APP = "delivery_app"  # External delivery platforms
+    KIOSK = "kiosk"                # Self-service kiosk
+
+
+class ServiceRequestType(str, enum.Enum):
+    """Types of service requests from customers"""
+    WAITER = "waiter"              # Call waiter
+    BILL = "bill"                  # Request bill
+    REFILL = "refill"              # Request refill (drinks)
+    CUSTOM = "custom"              # Custom request with message
+
+
+class ServiceRequestStatus(str, enum.Enum):
+    """Status of service requests"""
+    PENDING = "pending"
+    ACKNOWLEDGED = "acknowledged"  # Staff has seen it
+    RESOLVED = "resolved"
+
+
 
 # ============================================
 # Tenant / Restaurant Model
@@ -205,6 +228,18 @@ class Tenant(Base):
     # Onboarding state (NEW)
     onboarding_complete: Mapped[bool] = mapped_column(Boolean, default=False)
     onboarding_step: Mapped[str] = mapped_column(String(32), nullable=False, default="basic")
+    
+    # ============================================
+    # Add-on / Feature Flagging (NEW)
+    # ============================================
+    # JSONB for active add-ons/modules the tenant has purchased
+    # Example: {"self_service": true, "delivery": false, "kds_pro": true, "analytics_ai": true}
+    active_addons: Mapped[dict] = mapped_column(
+        JSONB, nullable=False, default={"self_service": False, "delivery": False, "kds_pro": False}
+    )
+    # JSONB for custom feature configuration
+    # Example: {"self_service": {"allow_bill_request": true, "require_deposit": false}}
+    features_config: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
     
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
@@ -339,7 +374,7 @@ class MenuItem(Base):
 # ============================================
 
 class Table(Base):
-    """Restaurant tables with status tracking"""
+    """Restaurant tables with status tracking and QR-based self-service support"""
     __tablename__ = "tables"
     
     id: Mapped[uuid.UUID] = mapped_column(
@@ -361,6 +396,21 @@ class Table(Base):
 
     # For Table Merging in Reservations
     adjacent_table_ids: Mapped[Optional[list]] = mapped_column(JSONB, default=list)  # List of UUIDs
+    
+    # ============================================
+    # Auto-Service / QR Ordering (NEW)
+    # ============================================
+    # Rotative secret token for secure table-based ordering without login
+    # Regenerated when table is cleared or on-demand by staff
+    qr_secret_token: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), default=uuid.uuid4, nullable=False
+    )
+    # When the token was last rotated
+    qr_token_generated_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, nullable=False
+    )
+    # Enable/disable self-service for this specific table
+    self_service_enabled: Mapped[bool] = mapped_column(Boolean, default=True)
     
     __table_args__ = (
         UniqueConstraint('tenant_id', 'number', name='uq_tenant_table_number'),
@@ -404,6 +454,16 @@ class Order(Base):
     )
     # JSONB for delivery info: { "address": "...", "driver_name": "...", "platform": "UberEats" }
     delivery_info: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)
+    
+    # ============================================
+    # Order Source Tracking (NEW - Auto-Service)
+    # ============================================
+    # Tracks where the order originated (POS, self-service tablet, kiosk, etc.)
+    order_source: Mapped[OrderSource] = mapped_column(
+        SQLEnum(OrderSource), default=OrderSource.POS
+    )
+    # For self-service: optional session/guest identifier
+    guest_session_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
 
     
     status: Mapped[OrderStatus] = mapped_column(
@@ -1335,3 +1395,62 @@ class OrderPromotion(Base):
     order: Mapped["Order"] = relationship(back_populates="applied_promotions")
     promotion: Mapped["Promotion"] = relationship(back_populates="applied_orders")
 
+
+# ============================================
+# Auto-Service / Table Ordering (NEW)
+# ============================================
+
+class ServiceRequest(Base):
+    """
+    Service requests from customers via self-service tablets/QR.
+    Enables customers to call waiter, request bill, or send custom messages.
+    
+    Flow:
+    1. Customer taps "Call Waiter" on tablet
+    2. ServiceRequest created with type='waiter', status='pending'
+    3. WebSocket notification sent to POS/waiter devices
+    4. Staff marks as 'acknowledged' when they see it
+    5. Staff marks as 'resolved' when handled
+    """
+    __tablename__ = "service_requests"
+    
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    tenant_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("tenants.id"), nullable=False
+    )
+    table_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("tables.id"), nullable=False
+    )
+    
+    # Type of request
+    request_type: Mapped[ServiceRequestType] = mapped_column(
+        SQLEnum(ServiceRequestType), nullable=False
+    )
+    
+    # Status workflow
+    status: Mapped[ServiceRequestStatus] = mapped_column(
+        SQLEnum(ServiceRequestStatus), default=ServiceRequestStatus.PENDING
+    )
+    
+    # Optional message for custom requests
+    message: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    
+    # Who handled the request
+    resolved_by: Mapped[Optional[uuid.UUID]] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id"), nullable=True
+    )
+    resolved_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    
+    # Relationships
+    table: Mapped["Table"] = relationship()
+
+
+# ============================================
+# Table relationship to ServiceRequests
+# ============================================
+# Note: Add this to Table class if not using backref:
+# service_requests: Mapped[List["ServiceRequest"]] = relationship(back_populates="table")
