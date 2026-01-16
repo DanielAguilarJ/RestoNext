@@ -847,3 +847,217 @@ class PurchaseOrderItem(Base):
     purchase_order: Mapped["PurchaseOrder"] = relationship(back_populates="items")
     ingredient: Mapped["Ingredient"] = relationship()
 
+
+# ============================================
+# Catering & Events Models
+# ============================================
+
+class LeadStatus(str, enum.Enum):
+    NEW = "new"
+    CONTACTED = "contacted"
+    QUOTING = "quoting"
+    WON = "won"
+    LOST = "lost"
+
+class EventStatus(str, enum.Enum):
+    DRAFT = "draft"
+    CONFIRMED = "confirmed"
+    IN_PROGRESS = "in_progress"
+    COMPLETED = "completed"
+    CANCELLED = "cancelled"
+
+class QuoteStatus(str, enum.Enum):
+    DRAFT = "draft"
+    SENT = "sent"
+    VIEWED = "viewed"
+    ACCEPTED = "accepted"
+    REJECTED = "rejected"
+    EXPIRED = "expired"
+
+class EventLead(Base):
+    """
+    CRM entry for potential catering clients.
+    Source of truth before an actual Event is created.
+    """
+    __tablename__ = "event_leads"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    tenant_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("tenants.id"), nullable=False
+    )
+
+    client_name: Mapped[str] = mapped_column(String(128), nullable=False)
+    contact_email: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    contact_phone: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
+    
+    event_date: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    guest_count: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    event_type: Mapped[Optional[str]] = mapped_column(String(64), nullable=True) # Wedding, Corporate, etc.
+    
+    status: Mapped[LeadStatus] = mapped_column(
+        SQLEnum(LeadStatus), default=LeadStatus.NEW
+    )
+    
+    notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    source: Mapped[Optional[str]] = mapped_column(String(64), nullable=True) # Web, Referral, etc.
+    
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, onupdate=datetime.utcnow
+    )
+
+    # Relationships
+    tenant: Mapped["Tenant"] = relationship()
+    events: Mapped[List["Event"]] = relationship(back_populates="lead")
+
+
+class Event(Base):
+    """
+    The core Event entity.
+    Links to a Customer (User) or is standalone.
+    """
+    __tablename__ = "events"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    tenant_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("tenants.id"), nullable=False
+    )
+    lead_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("event_leads.id"), nullable=True
+    )
+    
+    name: Mapped[str] = mapped_column(String(200), nullable=False) # e.g., "Boda de Ana y Juan"
+    start_time: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    end_time: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    
+    guest_count: Mapped[int] = mapped_column(Integer, default=0)
+    location: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    status: Mapped[EventStatus] = mapped_column(
+        SQLEnum(EventStatus), default=EventStatus.DRAFT
+    )
+    
+    # Financials
+    total_amount: Mapped[float] = mapped_column(Float, default=0.0)
+    
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, onupdate=datetime.utcnow
+    )
+
+    # Relationships
+    tenant: Mapped["Tenant"] = relationship()
+    lead: Mapped["EventLead"] = relationship(back_populates="events")
+    menu_selections: Mapped[List["EventMenuSelection"]] = relationship(
+        back_populates="event", cascade="all, delete-orphan"
+    )
+    beo: Mapped[Optional["BEO"]] = relationship(back_populates="event", uselist=False)
+    quotes: Mapped[List["CateringQuote"]] = relationship(back_populates="event")
+
+
+class EventMenuSelection(Base):
+    """
+    Menu items selected for the event.
+    Similar to OrderItem but for planning.
+    """
+    __tablename__ = "event_menu_selections"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    event_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("events.id"), nullable=False
+    )
+    menu_item_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("menu_items.id"), nullable=False
+    )
+    
+    # Snapshot of name/price at time of selection
+    item_name: Mapped[str] = mapped_column(String(128), nullable=False)
+    unit_price: Mapped[float] = mapped_column(Float, default=0.0)
+    quantity: Mapped[int] = mapped_column(Integer, default=1)
+    
+    notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+
+    # Relationships
+    event: Mapped["Event"] = relationship(back_populates="menu_selections")
+    menu_item: Mapped["MenuItem"] = relationship()
+
+
+class BEO(Base):
+    """
+    Banquet Event Order.
+    Contains logistical details, schedule, and specific instructions.
+    JSONB used heavily for flexible layout sections.
+    """
+    __tablename__ = "beos"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    event_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("events.id"), nullable=False
+    )
+    tenant_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("tenants.id"), nullable=False
+    )
+    
+    # JSONB Structured Data
+    # schedule: [{"time": "18:00", "activity": "Cocktail", "notes": "..."}]
+    schedule: Mapped[list] = mapped_column(JSONB, default=list)
+    
+    # setup_instructions: {"tables": "Round", "linen_color": "White", "av_needs": "Projector"}
+    setup_instructions: Mapped[dict] = mapped_column(JSONB, default=dict)
+    
+    # internal_notes: for staff only
+    internal_notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    
+    version: Mapped[int] = mapped_column(Integer, default=1)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, onupdate=datetime.utcnow
+    )
+
+    # Relationships
+    event: Mapped["Event"] = relationship(back_populates="beo")
+
+
+class CateringQuote(Base):
+    """
+    Quotes sent to clients (EventView).
+    Can be converted to an Invoice.
+    """
+    __tablename__ = "catering_quotes"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    event_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("events.id"), nullable=False
+    )
+    tenant_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("tenants.id"), nullable=False
+    )
+    
+    # Valid until
+    valid_until: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    status: Mapped[QuoteStatus] = mapped_column(
+        SQLEnum(QuoteStatus), default=QuoteStatus.DRAFT
+    )
+    
+    # Token for public access (magic link)
+    public_token: Mapped[str] = mapped_column(
+        String(64), unique=True, default=lambda: str(uuid.uuid4())
+    )
+    
+    subtotal: Mapped[float] = mapped_column(Float, default=0.0)
+    tax: Mapped[float] = mapped_column(Float, default=0.0)
+    total: Mapped[float] = mapped_column(Float, default=0.0)
+    
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+    # Relationships
+    event: Mapped["Event"] = relationship(back_populates="quotes")
+

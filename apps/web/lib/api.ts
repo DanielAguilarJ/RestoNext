@@ -628,3 +628,56 @@ export const inventoryApi = {
         return apiRequest<InventoryTransaction[]>(`/inventory/${id}/transactions`);
     }
 };
+
+// ============================================
+// Billing API (Facturación)
+// ============================================
+
+export interface SelfInvoiceRequest {
+    order_id: string;
+    receptor_rfc: string;
+    receptor_nombre: string;
+    receptor_cp: string;
+    uso_cfdi: string;
+}
+
+export interface InvoiceResponse {
+    id: string;
+    order_id: string;
+    uuid?: string;
+    status: string;
+    receptor_rfc: string;
+    receptor_nombre: string;
+    subtotal: number;
+    iva: number;
+    total: number;
+    pdf_url?: string;
+    xml_url?: string;
+    created_at: string;
+}
+
+export const billingApi = {
+    /**
+     * Create a self-invoice (Auto-factura)
+     */
+    createSelfInvoice: async (data: SelfInvoiceRequest): Promise<InvoiceResponse> => {
+        return apiRequest<InvoiceResponse>('/billing/self-invoice', {
+            method: 'POST',
+            body: JSON.stringify(data),
+        });
+    },
+
+    /**
+     * Get invoice by ID
+     */
+    getInvoice: async (id: string): Promise<InvoiceResponse> => {
+        return apiRequest<InvoiceResponse>(`/billing/invoices/${id}`);
+    },
+
+    /**
+     * Get invoices for a specific order
+     */
+    getOrderInvoices: async (orderId: string): Promise<InvoiceResponse[]> => {
+        return apiRequest<InvoiceResponse[]>(`/billing/order/${orderId}/invoices`);
+    }
+};
