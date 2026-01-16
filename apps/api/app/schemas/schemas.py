@@ -275,6 +275,10 @@ class OrderCreate(BaseModel):
     table_id: UUID
     items: List[OrderItemCreate]
     notes: Optional[str] = None
+    # Omnichannel
+    service_type: str = "dine_in"
+    customer_id: Optional[UUID] = None
+    delivery_info: Optional[dict] = None
 
 
 class OrderResponse(BaseModel):
@@ -287,6 +291,10 @@ class OrderResponse(BaseModel):
     tax: float
     total: float
     notes: Optional[str]
+    # Omnichannel
+    service_type: str
+    customer_id: Optional[UUID]
+    delivery_info: Optional[dict]
     items: List[OrderItemResponse]
     created_at: datetime
     updated_at: datetime
@@ -404,3 +412,109 @@ class ForecastRequest(BaseModel):
 class ForecastResponse(BaseModel):
     ingredient: str
     predictions: List[dict]  # [{date, predicted_demand, lower_bound, upper_bound}]
+
+
+# ============================================
+# Customer & Loyalty Schemas (NEW)
+# ============================================
+
+class AddressSchema(BaseModel):
+    label: str  # Casa, Trabajo
+    address: str
+    instructions: Optional[str] = None
+
+class CustomerCreate(BaseModel):
+    name: str
+    email: Optional[EmailStr] = None
+    phone: Optional[str] = None
+    addresses: List[AddressSchema] = []
+    notes: Optional[str] = None
+
+class CustomerResponse(BaseModel):
+    id: UUID
+    name: str
+    email: Optional[str]
+    phone: Optional[str]
+    loyalty_points: float
+    wallet_balance: float
+    tier_level: str
+    addresses: List[dict]
+    created_at: datetime
+    
+    class Config:
+        from_attributes = True
+
+class LoyaltyTransactionResponse(BaseModel):
+    id: UUID
+    type: str
+    points_delta: float
+    amount_delta: float
+    description: str
+    created_at: datetime
+    
+    class Config:
+        from_attributes = True
+
+
+# ============================================
+# Reservations & Commissions Schemas (NEW)
+# ============================================
+
+class ReservationCreate(BaseModel):
+    customer_id: Optional[UUID] = None
+    customer_name: Optional[str] = None # Quick create without full customer profile
+    agent_id: Optional[UUID] = None
+    table_id: Optional[UUID] = None
+    reservation_time: datetime
+    party_size: int = 2
+    notes: Optional[str] = None
+    tags: List[str] = []
+
+class ReservationResponse(BaseModel):
+    id: UUID
+    customer_id: Optional[UUID]
+    agent_id: Optional[UUID]
+    table_id: Optional[UUID]
+    reservation_time: datetime
+    party_size: int
+    status: str
+    notes: Optional[str]
+    tags: List[str]
+    
+    class Config:
+        from_attributes = True
+
+
+# ============================================
+# Promotions Schemas (NEW)
+# ============================================
+
+class PromotionRuleSchema(BaseModel):
+    days: Optional[List[int]] = None # 0=Mon, 6=Sun
+    time_start: Optional[str] = None # "HH:MM"
+    time_end: Optional[str] = None
+    buy_item_ids: Optional[List[UUID]] = None
+    min_qty: Optional[int] = None
+
+class PromotionEffectSchema(BaseModel):
+    type: str # discount_percentage, fixed_price, buy_x_get_y
+    value: float
+
+class PromotionCreate(BaseModel):
+    name: str
+    description: Optional[str] = None
+    rules: PromotionRuleSchema
+    effect: PromotionEffectSchema
+    start_date: Optional[datetime] = None
+    end_date: Optional[datetime] = None
+
+class PromotionResponse(BaseModel):
+    id: UUID
+    name: str
+    description: Optional[str]
+    rules: dict
+    effect: dict
+    is_active: bool
+    
+    class Config:
+        from_attributes = True

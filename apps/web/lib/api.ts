@@ -681,3 +681,76 @@ export const billingApi = {
         return apiRequest<InvoiceResponse[]>(`/billing/order/${orderId}/invoices`);
     }
 };
+
+// ============================================
+// Cashier API (Caja)
+// ============================================
+
+export interface CashShift {
+    shift_id: string;
+    opened_at: string;
+    closed_at?: string;
+    opening_amount: number;
+    register_id?: string;
+    cash_sales: number;
+    card_sales: number;
+    total_drops: number;
+    expected_cash: number;
+    transactions_count: number;
+}
+
+export interface CashTransaction {
+    id: string;
+    type: string;
+    amount: number;
+    payment_method?: string;
+    order_id?: string;
+    notes?: string;
+    created_at: string;
+}
+
+export const cashierApi = {
+    /**
+     * Get the current open shift
+     */
+    getCurrentShift: async (): Promise<CashShift> => {
+        return apiRequest<CashShift>('/shift/current');
+    },
+
+    /**
+     * Open a new cash shift
+     */
+    openShift: async (openingAmount: number, registerId?: string): Promise<any> => {
+        return apiRequest('/shift/open', {
+            method: 'POST',
+            body: JSON.stringify({ opening_amount: openingAmount, register_id: registerId }),
+        });
+    },
+
+    /**
+     * Record a cash drop (withdrawal)
+     */
+    recordDrop: async (amount: number, notes?: string): Promise<any> => {
+        return apiRequest('/shift/drop', {
+            method: 'POST',
+            body: JSON.stringify({ amount, notes }),
+        });
+    },
+
+    /**
+     * Close the current shift
+     */
+    closeShift: async (data: { real_cash: number; cash_breakdown?: any; notes?: string }): Promise<any> => {
+        return apiRequest('/shift/close', {
+            method: 'POST',
+            body: JSON.stringify(data),
+        });
+    },
+
+    /**
+     * List all transactions for current shift
+     */
+    getTransactions: async (): Promise<{ transactions: CashTransaction[] }> => {
+        return apiRequest('/shift/transactions');
+    }
+};

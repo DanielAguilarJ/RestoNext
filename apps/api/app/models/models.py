@@ -103,6 +103,29 @@ class PurchaseOrderStatus(str, enum.Enum):
     CANCELLED = "cancelled"   # Cancelada
 
 
+class ServiceType(str, enum.Enum):
+    """Omnichannel service types"""
+    DINE_IN = "dine_in"       # Comedor
+    DELIVERY = "delivery"     # Domicilio
+    TAKE_AWAY = "take_away"   # Para llevar
+    DRIVE_THRU = "drive_thru" # Auto-mac
+
+
+class ReservationStatus(str, enum.Enum):
+    PENDING = "pending"
+    CONFIRMED = "confirmed"
+    SEATED = "seated"
+    CANCELLED = "cancelled"
+    NO_SHOW = "no_show"
+
+
+class LoyaltyTransactionType(str, enum.Enum):
+    EARN = "earn"       # Acumular
+    REDEEM = "redeem"   # Redimir
+    ADJUSTMENT = "adjustment"
+
+
+
 # ============================================
 # Tenant / Restaurant Model
 # ============================================
@@ -349,6 +372,17 @@ class Order(Base):
         UUID(as_uuid=True), ForeignKey("users.id"), nullable=False
     )
     
+    # Omnichannel Support (NEW)
+    customer_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("customers.id"), nullable=True
+    )
+    service_type: Mapped[ServiceType] = mapped_column(
+        SQLEnum(ServiceType), default=ServiceType.DINE_IN
+    )
+    # JSONB for delivery info: { "address": "...", "driver_name": "...", "platform": "UberEats" }
+    delivery_info: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)
+
+    
     status: Mapped[OrderStatus] = mapped_column(
         SQLEnum(OrderStatus), default=OrderStatus.OPEN
     )
@@ -370,6 +404,10 @@ class Order(Base):
     items: Mapped[List["OrderItem"]] = relationship(back_populates="order")
     bill_splits: Mapped[List["BillSplit"]] = relationship(back_populates="order")
     invoices: Mapped[List["Invoice"]] = relationship(back_populates="order")
+    # Relationships for new modules
+    customer: Mapped[Optional["Customer"]] = relationship(back_populates="orders")
+    applied_promotions: Mapped[List["OrderPromotion"]] = relationship(back_populates="order")
+
 
 
 class OrderItem(Base):
@@ -1059,5 +1097,205 @@ class CateringQuote(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
     # Relationships
+    # Relationships
     event: Mapped["Event"] = relationship(back_populates="quotes")
+
+
+# ============================================
+# Loyalty & Customer CRM Models (NEW)
+# ============================================
+
+class Customer(Base):
+    """
+    Central Customer Database (CRM).
+    Used for Delivery addresses, Reservations, and Loyalty.
+    """
+    __tablename__ = "customers"
+    
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    tenant_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("tenants.id"), nullable=False
+    )
+    
+    name: Mapped[str] = mapped_column(String(128), nullable=False)
+    email: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    phone: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
+    
+    # JSONB for multiple delivery addresses
+    # Example: [{"label": "Casa", "address": "..."}, {"label": "Oficina", "address": "..."}]
+    addresses: Mapped[list] = mapped_column(JSONB, default=list)
+    
+    # Loyalty Status
+    loyalty_points: Mapped[float] = mapped_column(Float, default=0.0)
+    wallet_balance: Mapped[float] = mapped_column(Float, default=0.0) # Monedero electrónico
+    tier_level: Mapped[str] = mapped_column(String(32), default="Bronze")
+    
+    notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    
+    __table_args__ = (
+        UniqueConstraint('tenant_id', 'phone', name='uq_tenant_customer_phone'),
+        UniqueConstraint('tenant_id', 'email', name='uq_tenant_customer_email'),
+    )
+    
+    # Relationships
+    orders: Mapped[List["Order"]] = relationship(back_populates="customer")
+    reservations: Mapped[List["Reservation"]] = relationship(back_populates="customer")
+    loyalty_transactions: Mapped[List["LoyaltyTransaction"]] = relationship(back_populates="customer")
+
+
+class LoyaltyTransaction(Base):
+    """Audit log for points and wallet balance changes"""
+    __tablename__ = "loyalty_transactions"
+    
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    customer_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("customers.id"), nullable=False
+    )
+    order_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("orders.id"), nullable=True
+    )
+    
+    type: Mapped[LoyaltyTransactionType] = mapped_column(SQLEnum(LoyaltyTransactionType))
+    points_delta: Mapped[float] = mapped_column(Float, default=0.0)
+    amount_delta: Mapped[float] = mapped_column(Float, default=0.0)
+    
+    description: Mapped[str] = mapped_column(String(255))
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    
+    customer: Mapped["Customer"] = relationship(back_populates="loyalty_transactions")
+
+
+# ============================================
+# Reservations & Commissions (NEW)
+# ============================================
+
+class CommissionAgent(Base):
+    """
+    External entities that drive traffic (Concierges, Taxis, Hotels).
+    """
+    __tablename__ = "commission_agents"
+    
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    tenant_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("tenants.id"), nullable=False
+    )
+    
+    name: Mapped[str] = mapped_column(String(128), nullable=False)
+    type: Mapped[str] = mapped_column(String(64), default="concierge")
+    commission_rate: Mapped[float] = mapped_column(Float, default=0.10) # 10% defaults
+    
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    
+    reservations: Mapped[List["Reservation"]] = relationship(back_populates="agent")
+
+
+class Reservation(Base):
+    """Table reservations with optional Agent commission"""
+    __tablename__ = "reservations"
+    
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    tenant_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("tenants.id"), nullable=False
+    )
+    
+    customer_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("customers.id"), nullable=True
+    )
+    agent_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("commission_agents.id"), nullable=True
+    )
+    table_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("tables.id"), nullable=True
+    )
+    
+    reservation_time: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    party_size: Mapped[int] = mapped_column(Integer, default=2)
+    status: Mapped[ReservationStatus] = mapped_column(
+        SQLEnum(ReservationStatus), default=ReservationStatus.PENDING
+    )
+    
+    notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    tags: Mapped[Optional[list]] = mapped_column(JSONB, default=list) # ["birthday", "anniversary"]
+    
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    
+    # Relationships
+    customer: Mapped["Customer"] = relationship(back_populates="reservations")
+    agent: Mapped["CommissionAgent"] = relationship(back_populates="reservations")
+    table: Mapped["Table"] = relationship()
+
+
+# ============================================
+# Promotions Engine (NEW)
+# ============================================
+
+class Promotion(Base):
+    """
+    Flexible promotion rules engine.
+    Examples:
+    - 2x1 Beers on Thursdays 18:00-20:00
+    - Combo Burger + Soda = $150
+    """
+    __tablename__ = "promotions"
+    
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    tenant_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("tenants.id"), nullable=False
+    )
+    
+    name: Mapped[str] = mapped_column(String(128), nullable=False)
+    description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    
+    # JSONB Rules Engine
+    # {
+    #   "days": [1, 4], # Mon, Thu
+    #   "time_start": "18:00",
+    #   "time_end": "20:00",
+    #   "buy_item_ids": ["uuid..."],
+    #   "min_qty": 2
+    # }
+    rules: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
+    
+    # JSONB Effect
+    # { "type": "discount_percentage", "value": 50 } 
+    # { "type": "fixed_price", "value": 150 }
+    effect: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
+    
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    start_date: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    end_date: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    
+    applied_orders: Mapped[List["OrderPromotion"]] = relationship(back_populates="promotion")
+
+
+class OrderPromotion(Base):
+    """Tracks which promotions were applied to an order for analytics"""
+    __tablename__ = "order_promotions"
+    
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    order_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("orders.id"), nullable=False
+    )
+    promotion_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("promotions.id"), nullable=False
+    )
+    
+    discount_amount: Mapped[float] = mapped_column(Float, default=0.0)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    
+    order: Mapped["Order"] = relationship(back_populates="applied_promotions")
+    promotion: Mapped["Promotion"] = relationship(back_populates="applied_orders")
 

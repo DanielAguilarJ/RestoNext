@@ -120,6 +120,20 @@ class CurrentShiftResponse(BaseModel):
     transactions_count: int
 
 
+class TransactionDetail(BaseModel):
+    id: str
+    type: str
+    amount: float
+    payment_method: Optional[str]
+    order_id: Optional[str]
+    notes: Optional[str]
+    created_at: datetime
+
+
+class TransactionListResponse(BaseModel):
+    transactions: list[TransactionDetail]
+
+
 # ============================================
 # Helper Functions
 # ============================================
@@ -419,3 +433,42 @@ async def record_sale(
     await db.commit()
     
     return {"message": "Sale recorded", "transaction_id": str(transaction.id)}
+
+
+@router.get("/transactions", response_model=TransactionListResponse)
+async def list_transactions(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """List all transactions for the current open shift"""
+    shift = await get_open_shift(
+        current_user.id, current_user.tenant_id, db
+    )
+    
+    if not shift:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No open shift found"
+        )
+    
+    result = await db.execute(
+        select(CashTransaction)
+        .where(CashTransaction.shift_id == shift.id)
+        .order_by(CashTransaction.created_at.desc())
+    )
+    transactions = result.scalars().all()
+    
+    return TransactionListResponse(
+        transactions=[
+            TransactionDetail(
+                id=str(t.id),
+                type=t.transaction_type.value,
+                amount=t.amount,
+                payment_method=t.payment_method.value if t.payment_method else None,
+                order_id=str(t.order_id) if t.order_id else None,
+                notes=t.notes,
+                created_at=t.created_at
+            )
+            for t in transactions
+        ]
+    )

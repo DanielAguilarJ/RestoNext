@@ -203,9 +203,10 @@ interface SplitCheckProps {
     orderId: string;
     orderItems: OrderItem[];
     onComplete?: () => void;
+    onPay?: (amount: number, method: "cash" | "card") => Promise<void>;
 }
 
-export function SplitCheck({ orderId, orderItems, onComplete }: SplitCheckProps) {
+export function SplitCheck({ orderId, orderItems, onComplete, onPay }: SplitCheckProps) {
     const [splits, setSplits] = useState<Split[]>([
         { id: "split-1", label: "Persona 1", itemIds: orderItems.map(i => i.id), paid: false },
         { id: "split-2", label: "Persona 2", itemIds: [], paid: false },
@@ -313,7 +314,18 @@ export function SplitCheck({ orderId, orderItems, onComplete }: SplitCheckProps)
     };
 
     // Pay split
-    const handlePay = (splitId: string, method: "cash" | "card") => {
+    const handlePay = async (splitId: string, method: "cash" | "card") => {
+        const total = getSplitTotal(splits.find(s => s.id === splitId)!);
+
+        if (onPay) {
+            try {
+                await onPay(total, method);
+            } catch (error) {
+                alert("Error al procesar pago");
+                return;
+            }
+        }
+
         setSplits((prev) =>
             prev.map((split) =>
                 split.id === splitId

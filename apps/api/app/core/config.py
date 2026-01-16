@@ -29,7 +29,11 @@ class Settings(BaseSettings):
     # App Info
     app_name: str = "RestoNext MX"
     debug: bool = True
-    allowed_origins: list[str] = ["http://localhost:3000", "http://127.0.0.1:3000"]
+    allowed_origins: list[str] = [
+        "http://localhost:3000", 
+        "http://127.0.0.1:3000",
+        "https://resto-next-ten.vercel.app"
+    ]
     
     # PAC (Proveedor Autorizado de Certificación) Configuration
     pac_provider: str = "mock"  # mock, finkok, facturama
