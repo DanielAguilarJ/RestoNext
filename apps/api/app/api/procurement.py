@@ -1,6 +1,10 @@
 """
 RestoNext MX - Procurement API Routes
 Smart procurement with AI-powered demand forecasting
+
+FEATURE GATING:
+- AI Procurement features (generate-suggestions, generate-proposal) require Enterprise plan
+- Basic procurement (suppliers, orders) available to all plans
 """
 
 from typing import List, Optional
@@ -14,9 +18,10 @@ from sqlalchemy.orm import selectinload
 
 from app.core.database import get_db
 from app.core.security import get_current_user, require_manager_or_admin
+from app.core.permissions import require_feature, Feature, UserHasFeature
 from app.models.models import (
     User, Supplier, SupplierIngredient, PurchaseOrder, 
-    PurchaseOrderStatus, Ingredient
+    PurchaseOrderStatus, Ingredient, Tenant
 )
 from app.schemas.procurement_schemas import (
     SupplierCreate, SupplierUpdate, SupplierResponse,
@@ -45,12 +50,14 @@ router = APIRouter(prefix="/procurement", tags=["Procurement"])
 @router.post(
     "/generate-suggestions",
     response_model=ProcurementSuggestionsResponse,
-    summary="Generate AI-powered purchase suggestions"
+    summary="Generate AI-powered purchase suggestions",
+    description="🔒 Requires Enterprise plan"
 )
 async def generate_suggestions(
     forecast_days: int = Query(default=7, ge=1, le=30),
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_manager_or_admin)
+    current_user: User = Depends(require_manager_or_admin),
+    _feature_check: Tenant = Depends(require_feature(Feature.AI_PROCUREMENT))
 ):
     """
     Generate smart procurement suggestions based on:
@@ -60,6 +67,8 @@ async def generate_suggestions(
     - Preferred supplier pricing
     
     Returns suggestions grouped by supplier with estimated costs.
+    
+    🔒 ENTERPRISE PLAN REQUIRED
     """
     recommender = PurchaseRecommender(db, current_user.tenant_id)
     return await recommender.generate_procurement_suggestions(forecast_days)
@@ -69,17 +78,21 @@ async def generate_suggestions(
     "/generate-proposal",
     response_model=List[PurchaseOrderResponse],
     status_code=status.HTTP_201_CREATED,
-    summary="Generate and CREATE draft Purchase Orders using AI"
+    summary="Generate and CREATE draft Purchase Orders using AI",
+    description="🔒 Requires Enterprise plan"
 )
 async def generate_proposal(
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_manager_or_admin)
+    current_user: User = Depends(require_manager_or_admin),
+    _feature_check: Tenant = Depends(require_feature(Feature.AI_PROCUREMENT))
 ):
     """
     Orchestrate the full AI procurement flow:
-    1. Forecast demand
+    1. Forecast demand using AI
     2. Create draft Purchase Orders automatically
     3. Return created orders
+    
+    🔒 ENTERPRISE PLAN REQUIRED
     """
     recommender = PurchaseRecommender(db, current_user.tenant_id)
     created_orders = await recommender.generate_ai_purchase_proposal(user_id=current_user.id)

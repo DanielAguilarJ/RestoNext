@@ -18,7 +18,7 @@ from fastapi import APIRouter, HTTPException, Depends, Query
 from fastapi.responses import FileResponse, StreamingResponse
 from pydantic import BaseModel
 
-from app.core.auth import get_current_user, require_roles
+from app.core.security import get_current_user, require_roles
 from app.core.scheduler import list_backups, get_backup_path, run_job_manually
 from app.models.models import User, UserRole
 
@@ -232,3 +232,150 @@ async def run_job(
         )
     
     return result
+
+
+# ============================================
+# SaaS Metrics Dashboard
+# ============================================
+
+from sqlalchemy import select, func
+from sqlalchemy.ext.asyncio import AsyncSession
+from app.core.database import get_db
+from app.models.models import Tenant
+
+
+class TenantPlanInfo(BaseModel):
+    """Tenant with plan information."""
+    id: str
+    name: str
+    slug: str
+    plan: str
+    estimated_revenue: float
+    is_active: bool
+    created_at: str
+
+
+class SaaSStatsResponse(BaseModel):
+    """SaaS platform statistics."""
+    total_tenants: int
+    active_tenants: int
+    tenants_by_plan: dict[str, int]
+    estimated_mrr: float  # Monthly Recurring Revenue
+    tenants: list[TenantPlanInfo]
+    ai_usage: list[dict]  # AI token usage per tenant
+
+
+# Plan pricing constants (MXN/month)
+PLAN_PRICING = {
+    "starter": 999.00,
+    "professional": 2499.00,
+    "enterprise": 5999.00,
+}
+
+
+def _get_tenant_plan(tenant: Tenant) -> str:
+    """Determine tenant plan from active_addons."""
+    addons = tenant.active_addons or {}
+    
+    if addons.get("analytics_ai", False):
+        return "enterprise"
+    elif addons.get("self_service", False) or addons.get("kds_pro", False):
+        return "professional"
+    else:
+        return "starter"
+
+
+@router.get(
+    "/saas-stats",
+    response_model=SaaSStatsResponse,
+    summary="SaaS Platform Statistics",
+    description="Get overall platform metrics including tenants, revenue, and AI usage. Requires Super Admin."
+)
+async def get_saas_stats(
+    current_user: User = Depends(require_roles([UserRole.ADMIN])),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Get SaaS platform statistics for the admin dashboard.
+    
+    Returns:
+    - Total and active tenant counts
+    - Breakdown by subscription plan
+    - Estimated Monthly Recurring Revenue (MRR)
+    - AI usage metrics per tenant (for cost monitoring)
+    
+    Use this to:
+    - Monitor platform growth
+    - Identify high-value customers
+    - Track AI costs by tenant
+    """
+    # Get all tenants
+    result = await db.execute(
+        select(Tenant).order_by(Tenant.created_at.desc())
+    )
+    tenants = result.scalars().all()
+    
+    # Calculate stats
+    total_tenants = len(tenants)
+    active_tenants = sum(1 for t in tenants if t.is_active)
+    
+    # Group by plan
+    tenants_by_plan = {"starter": 0, "professional": 0, "enterprise": 0}
+    estimated_mrr = 0.0
+    
+    tenant_list = []
+    for tenant in tenants:
+        plan = _get_tenant_plan(tenant)
+        tenants_by_plan[plan] += 1
+        
+        if tenant.is_active:
+            estimated_mrr += PLAN_PRICING.get(plan, 0)
+        
+        tenant_list.append(TenantPlanInfo(
+            id=str(tenant.id),
+            name=tenant.name,
+            slug=tenant.slug,
+            plan=plan,
+            estimated_revenue=PLAN_PRICING.get(plan, 0),
+            is_active=tenant.is_active,
+            created_at=tenant.created_at.isoformat()
+        ))
+    
+    # AI usage tracking (would typically come from a separate tracking table)
+    # For now, we'll return placeholder data structure
+    ai_usage = [
+        {
+            "tenant_id": str(tenant.id),
+            "tenant_name": tenant.name,
+            "ai_requests_30d": 0,  # Would be tracked in production
+            "estimated_cost_usd": 0.0,
+        }
+        for tenant in tenants
+        if _get_tenant_plan(tenant) == "enterprise"  # Only enterprise uses AI
+    ]
+    
+    return SaaSStatsResponse(
+        total_tenants=total_tenants,
+        active_tenants=active_tenants,
+        tenants_by_plan=tenants_by_plan,
+        estimated_mrr=estimated_mrr,
+        tenants=tenant_list,
+        ai_usage=ai_usage
+    )
+
+
+@router.get(
+    "/health",
+    summary="System Health Check",
+    description="Simple health check endpoint."
+)
+async def health_check():
+    """
+    Health check endpoint for monitoring.
+    """
+    return {
+        "status": "healthy",
+        "service": "RestoNext API",
+        "version": "1.0.0"
+    }
+

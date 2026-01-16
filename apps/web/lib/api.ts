@@ -911,3 +911,135 @@ export const promotionsApi = {
         });
     }
 };
+
+// ============================================
+// Admin / SaaS Stats API
+// ============================================
+
+export interface TenantPlanInfo {
+    id: string;
+    name: string;
+    slug: string;
+    plan: 'starter' | 'professional' | 'enterprise';
+    estimated_revenue: number;
+    is_active: boolean;
+    created_at: string;
+}
+
+export interface AIUsageInfo {
+    tenant_id: string;
+    tenant_name: string;
+    ai_requests_30d: number;
+    estimated_cost_usd: number;
+}
+
+export interface SaaSStatsResponse {
+    total_tenants: number;
+    active_tenants: number;
+    tenants_by_plan: {
+        starter: number;
+        professional: number;
+        enterprise: number;
+    };
+    estimated_mrr: number;
+    tenants: TenantPlanInfo[];
+    ai_usage: AIUsageInfo[];
+}
+
+export interface BackupInfo {
+    filename: string;
+    size: string;
+    size_bytes: number;
+    created: string;
+}
+
+export const adminApi = {
+    /**
+     * Get SaaS platform statistics
+     * Requires Super Admin role
+     */
+    getSaaSStats: async (): Promise<SaaSStatsResponse> => {
+        return apiRequest<SaaSStatsResponse>('/admin/saas-stats');
+    },
+
+    /**
+     * List database backups
+     */
+    listBackups: async (): Promise<{ total: number; backups: BackupInfo[] }> => {
+        return apiRequest('/admin/backups');
+    },
+
+    /**
+     * Trigger immediate backup
+     */
+    createBackup: async (): Promise<{ status: string; message: string }> => {
+        return apiRequest('/admin/backups/create', { method: 'POST' });
+    },
+
+    /**
+     * Delete a backup file
+     */
+    deleteBackup: async (filename: string): Promise<{ message: string }> => {
+        return apiRequest(`/admin/backups/${filename}`, { method: 'DELETE' });
+    },
+
+    /**
+     * Run a scheduled job manually
+     */
+    runJob: async (jobName: string): Promise<{ status: string; message: string }> => {
+        return apiRequest(`/admin/jobs/${jobName}/run`, { method: 'POST' });
+    },
+
+    /**
+     * Health check
+     */
+    healthCheck: async (): Promise<{ status: string; service: string; version: string }> => {
+        return apiRequest('/admin/health');
+    }
+};
+
+// ============================================
+// Tenant Context / Feature Access API
+// ============================================
+
+export interface TenantContext {
+    id: string;
+    name: string;
+    slug: string;
+    plan: 'starter' | 'professional' | 'enterprise';
+    features: string[];
+    addons: {
+        self_service: boolean;
+        delivery: boolean;
+        kds_pro: boolean;
+        analytics_ai: boolean;
+    };
+}
+
+export const tenantApi = {
+    /**
+     * Get current tenant context with plan and features
+     */
+    getContext: async (): Promise<TenantContext> => {
+        // This would come from the auth context or a dedicated endpoint
+        // For now, we'll use the user's tenant info
+        const user = await authApi.me();
+        if (!user) throw new Error('Not authenticated');
+
+        // The actual plan info would come from a dedicated endpoint
+        return apiRequest<TenantContext>('/tenant/context');
+    },
+
+    /**
+     * Check if current tenant has access to a feature
+     */
+    hasFeature: async (feature: string): Promise<boolean> => {
+        try {
+            const context = await tenantApi.getContext();
+            return context.features.includes(feature);
+        } catch {
+            return false;
+        }
+    }
+};
+

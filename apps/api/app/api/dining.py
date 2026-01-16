@@ -23,6 +23,7 @@ from sqlalchemy.orm import selectinload
 from app.core.database import get_db
 from app.core.websocket_manager import ws_manager
 from app.core.rate_limiter import RateLimiter, get_service_request_limiter, get_bill_request_limiter
+from app.core.permissions import Feature, has_feature
 from app.models.models import (
     Tenant, Table, TableStatus, 
     Order, OrderItem, OrderStatus, OrderSource, OrderItemStatus,
@@ -933,20 +934,31 @@ async def validate_table_token(
 # AI Upselling Endpoint
 # ============================================
 
-@router.post("/{tenant_id}/table/{table_id}/suggest-upsell", response_model=UpsellResponse)
+@router.post(
+    "/{tenant_id}/table/{table_id}/suggest-upsell", 
+    response_model=UpsellResponse,
+    summary="Get AI upselling suggestions",
+    description="AI-powered suggestions require Enterprise plan. Gracefully degrades to random suggestions."
+)
 async def suggest_upsell(
     request_data: UpsellRequest,
     ctx: TableContext = Depends(get_current_table),
     db: AsyncSession = Depends(get_db)
 ):
     """
-    Get AI-powered upselling suggestions based on cart contents.
+    Get upselling suggestions based on cart contents.
+    
+    🔒 FEATURE GATING:
+    - Enterprise Plan: AI-powered suggestions using Perplexity
+    - Other Plans: Random top-rated items (graceful degradation)
     
     Analyzes the current cart and recommends complementary items
     from the menu that would pair well with the customer's order.
     
     Returns 2 suggestions with appetizing reasons in Spanish.
     """
+    # Check if tenant has AI upselling feature
+    use_ai = has_feature(ctx.tenant, Feature.AI_UPSELLING)
     # Fetch all available menu items for this tenant
     result = await db.execute(
         select(MenuCategory)
@@ -979,25 +991,56 @@ async def suggest_upsell(
     if not available_items:
         return UpsellResponse(suggestions=[], source="empty_menu")
     
-    # Get AI suggestions
-    ai_service = AIService()
-    suggestions = await ai_service.suggest_upsell(
-        cart_items=cart_item_names,
-        available_menu_items=available_items,
-        restaurant_type=ctx.tenant.trade_name or ctx.tenant.name,
-        max_suggestions=2
-    )
-    
-    return UpsellResponse(
-        suggestions=[
-            UpsellSuggestion(
-                id=s.get("id"),
-                name=s.get("name"),
-                price=s.get("price", 0),
-                image_url=s.get("image_url"),
-                reason=s.get("reason", "Sugerencia del chef")
-            )
-            for s in suggestions
-        ],
-        source="ai" if ai_service.api_key else "random"
-    )
+    # Feature-gated AI suggestions
+    if use_ai:
+        # Enterprise plan: Use AI-powered suggestions
+        ai_service = AIService()
+        suggestions = await ai_service.suggest_upsell(
+            cart_items=cart_item_names,
+            available_menu_items=available_items,
+            restaurant_type=ctx.tenant.trade_name or ctx.tenant.name,
+            max_suggestions=2
+        )
+        
+        return UpsellResponse(
+            suggestions=[
+                UpsellSuggestion(
+                    id=s.get("id"),
+                    name=s.get("name"),
+                    price=s.get("price", 0),
+                    image_url=s.get("image_url"),
+                    reason=s.get("reason", "Sugerencia del chef")
+                )
+                for s in suggestions
+            ],
+            source="ai"
+        )
+    else:
+        # Non-Enterprise: Random top picks (graceful degradation)
+        import random
+        random_picks = random.sample(
+            available_items, 
+            min(2, len(available_items))
+        )
+        
+        default_reasons = [
+            "¡Recomendación del chef!",
+            "El favorito de nuestros clientes",
+            "Complemento perfecto para tu orden",
+            "¡No te lo pierdas!"
+        ]
+        
+        return UpsellResponse(
+            suggestions=[
+                UpsellSuggestion(
+                    id=item.get("id"),
+                    name=item.get("name"),
+                    price=item.get("price", 0),
+                    image_url=item.get("image_url"),
+                    reason=random.choice(default_reasons)
+                )
+                for item in random_picks
+            ],
+            source="random"
+        )
+
