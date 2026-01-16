@@ -6,7 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, desc
 
 from app.core.database import get_db
-from app.core.auth import get_current_user
+from app.core.security import get_current_user
 from app.models.models import User, Customer, LoyaltyTransaction, LoyaltyTransactionType, LoyaltyTier
 from app.schemas.schemas import LoyaltyTransactionResponse
 from app.services.loyalty_service import LoyaltyService
