@@ -96,6 +96,10 @@ const config: Config = {
                 "glow-pulse": "glowPulse 2s ease-in-out infinite",
                 "border-glow": "borderGlow 2s ease-in-out infinite",
                 "ripple": "ripple 0.6s linear",
+                "shimmer-slide": "shimmerSlide 1.5s infinite",
+                "pulse-subtle": "pulseSubtle 2s ease-in-out infinite",
+                "pop": "pop 0.3s ease-out",
+                "slide-in-left": "slideInLeft 0.3s ease-out",
             },
             keyframes: {
                 slideIn: {
@@ -175,6 +179,23 @@ const config: Config = {
                 ripple: {
                     "0%": { transform: "scale(1)", opacity: "1" },
                     "100%": { transform: "scale(1.5)", opacity: "0" },
+                },
+                shimmerSlide: {
+                    "0%": { transform: "translateX(-100%)" },
+                    "100%": { transform: "translateX(100%)" },
+                },
+                pulseSubtle: {
+                    "0%, 100%": { opacity: "1" },
+                    "50%": { opacity: "0.6" },
+                },
+                pop: {
+                    "0%": { transform: "scale(1)" },
+                    "50%": { transform: "scale(1.3)" },
+                    "100%": { transform: "scale(1)" },
+                },
+                slideInLeft: {
+                    "0%": { transform: "translateX(-100%)", opacity: "0" },
+                    "100%": { transform: "translateX(0)", opacity: "1" },
                 },
             },
             boxShadow: {

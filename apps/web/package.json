@@ -26,6 +26,7 @@
         "date-fns": "^4.1.0",
         "dexie": "^4.2.1",
         "esc-pos-encoder": "^3.0.0",
+        "framer-motion": "^12.26.2",
         "lucide-react": "^0.312.0",
         "mingo": "^7.1.1",
         "next": "14.1.0",
