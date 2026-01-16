@@ -24,7 +24,7 @@ import {
     Wifi, WifiOff, Bell, CloudOff, RefreshCw
 } from "lucide-react";
 import Link from "next/link";
-import { menuApi, ordersApi, cashierApi } from "@/lib/api";
+import { menuApi, ordersApi, cashierApi, tableTransferApi } from "@/lib/api";
 import { MenuCategory, MenuItem } from "../../../../packages/shared/src/index";
 import { CategorySelector } from "@/components/pos/CategorySelector";
 import { MenuGrid } from "@/components/pos/MenuGrid";
@@ -38,6 +38,9 @@ import {
     TableStatusNotification
 } from "@/hooks/useServiceSocket";
 import { isOnline, onNetworkChange, syncQueueManager, PendingOrderData } from "@/lib/offline";
+import { ProductDetailsModal } from "@/components/pos/ProductDetailsModal";
+import { TableTransferModal } from "@/components/pos/TableTransferModal";
+import { usePosAudio } from "@/hooks/usePosAudio";
 
 // ============================================
 // Types
@@ -59,6 +62,22 @@ export default function POSPage() {
     const [isLoading, setIsLoading] = useState(true);
     const [isSending, setIsSending] = useState(false);
     const { toast, toasts, removeToast, success, error: toastError } = useToast();
+
+    // ============================================
+    // Product Modifiers State
+    // ============================================
+    const [selectedProductForModifiers, setSelectedProductForModifiers] = useState<MenuItem | null>(null);
+    const [showProductModal, setShowProductModal] = useState(false);
+
+    // ============================================
+    // Table Transfer State
+    // ============================================
+    const [showTransferModal, setShowTransferModal] = useState(false);
+
+    // ============================================
+    // Audio Feedback
+    // ============================================
+    const { playSuccess, playError, playClick } = usePosAudio();
 
     // ============================================
     // Shift Enforcement State
@@ -272,6 +291,15 @@ export default function POSPage() {
     const cartItemCount = cart.reduce((sum, item) => sum + item.quantity, 0);
 
     const handleAddItem = (item: MenuItem) => {
+        // Check if item has modifiers - if so, open the modal
+        if (item.modifier_groups && item.modifier_groups.length > 0) {
+            setSelectedProductForModifiers(item);
+            setShowProductModal(true);
+            playClick();
+            return;
+        }
+
+        // No modifiers - add directly to cart
         addToCart({
             menu_item_id: item.$id,
             menu_item_name: item.name,
@@ -279,11 +307,72 @@ export default function POSPage() {
             quantity: 1,
             selected_modifiers: [],
         });
+        playSuccess();
         toast({
             title: "Agregado",
             description: `${item.name} agregado al pedido`,
             duration: 1500,
         });
+    };
+
+    // Handle adding item with modifiers from modal
+    // Signature matches ProductDetailsModal's onAddToCart callback
+    const handleAddItemWithModifiers = (
+        item: MenuItem,
+        modifiers: Array<{ group_name: string; option_id: string; option_name: string; price_delta: number }>,
+        quantity: number,
+        notes: string
+    ) => {
+        const modifierSummary = modifiers.map(m => m.option_name).join(", ");
+        const displayName = modifierSummary ? `${item.name} (${modifierSummary})` : item.name;
+        const priceWithModifiers = item.price + modifiers.reduce((sum, m) => sum + m.price_delta, 0);
+
+        // Convert to the SelectedModifier format expected by store
+        const selectedModifiers = modifiers.map(m => ({
+            group: m.group_name,
+            option: m.option_name,
+            option_id: m.option_id,
+            price_delta: m.price_delta,
+        }));
+
+        addToCart({
+            menu_item_id: item.$id,
+            menu_item_name: displayName,
+            price: priceWithModifiers,
+            quantity: quantity,
+            selected_modifiers: selectedModifiers,
+            notes: notes || undefined,
+        });
+
+        playSuccess();
+        setShowProductModal(false);
+        setSelectedProductForModifiers(null);
+        toast({
+            title: "Agregado",
+            description: `${displayName} agregado al pedido`,
+            duration: 1500,
+        });
+    };
+
+    // Handle table transfer
+    const handleTableTransfer = async (sourceId: string, destId: string): Promise<boolean> => {
+        try {
+            const result = await tableTransferApi.transfer(sourceId, destId);
+            if (result.success) {
+                playSuccess();
+                success("Mesa Transferida", result.message);
+                // Update table statuses
+                updateTableStatus(sourceId, 'free');
+                updateTableStatus(destId, 'occupied');
+                setSelectedTable(null);
+                return true;
+            }
+            return false;
+        } catch (error) {
+            playError();
+            toastError("Error", "No se pudo transferir la mesa");
+            return false;
+        }
     };
 
     // ============================================
@@ -569,6 +658,17 @@ export default function POSPage() {
                         </button>
                     </FeatureGate>
 
+                    {/* Move Table Button */}
+                    <button
+                        onClick={() => setShowTransferModal(true)}
+                        className="p-3 bg-amber-500/10 text-amber-600 dark:text-amber-400 
+                                 rounded-xl hover:bg-amber-500/20 transition-all
+                                 min-w-[48px] min-h-[48px] flex items-center justify-center"
+                        title="Mover Mesa"
+                    >
+                        <ArrowLeft className="w-5 h-5 rotate-180" />
+                    </button>
+
                     {/* Cart Button */}
                     <button
                         onClick={() => setShowCart(true)}
@@ -611,6 +711,26 @@ export default function POSPage() {
                 onRemoveItem={removeFromCart}
                 onSendOrder={handleSendOrder}
                 isSending={isSending}
+            />
+
+            {/* Product Details Modal (for items with modifiers) */}
+            <ProductDetailsModal
+                item={selectedProductForModifiers}
+                isOpen={showProductModal}
+                onClose={() => {
+                    setShowProductModal(false);
+                    setSelectedProductForModifiers(null);
+                }}
+                onAddToCart={handleAddItemWithModifiers}
+            />
+
+            {/* Table Transfer Modal */}
+            <TableTransferModal
+                isOpen={showTransferModal}
+                sourceTable={selectedTable ? { id: selectedTable.id, number: selectedTable.number } : null}
+                onClose={() => setShowTransferModal(false)}
+                onTransfer={handleTableTransfer}
+                fetchFreeTables={tableTransferApi.getFreeTables}
             />
 
             {/* Service Request Popup - Shows even when taking order */}

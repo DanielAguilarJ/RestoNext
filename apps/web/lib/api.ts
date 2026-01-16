@@ -147,6 +147,98 @@ export const authApi = {
         } catch {
             return null;
         }
+    },
+
+    /**
+     * Login with PIN for fast POS access
+     */
+    pinLogin: async (pin: string, tenantId?: string): Promise<LoginResponse & { success: boolean }> => {
+        const response = await fetch(`${API_BASE_URL}/auth/pin-login`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                pin,
+                tenant_id: tenantId
+            }),
+        });
+
+        if (!response.ok) {
+            return {
+                success: false,
+                access_token: '',
+                token_type: 'bearer',
+                user: {} as User
+            };
+        }
+
+        const data = await response.json();
+        if (data.access_token) {
+            TokenStorage.set(data.access_token);
+        }
+        return { ...data, success: true };
+    },
+
+    /**
+     * Set up PIN for current user
+     */
+    setupPin: async (pin: string): Promise<{ success: boolean; message: string }> => {
+        return apiRequest('/auth/setup-pin', {
+            method: 'POST',
+            body: JSON.stringify({ pin }),
+        });
+    },
+
+    /**
+     * Remove PIN for current user
+     */
+    removePin: async (): Promise<{ success: boolean; message: string }> => {
+        return apiRequest('/auth/remove-pin', {
+            method: 'DELETE',
+        });
+    }
+};
+
+// ============================================
+// Table Transfer API
+// ============================================
+
+interface FreeTable {
+    id: string;
+    number: number;
+    capacity: number;
+}
+
+interface TableTransferResponse {
+    success: boolean;
+    message: string;
+    transferred_orders: number;
+    source_table_number: number;
+    destination_table_number: number;
+}
+
+export const tableTransferApi = {
+    /**
+     * Get all free tables for transfer destination
+     */
+    getFreeTables: async (): Promise<FreeTable[]> => {
+        const response = await apiRequest<{ tables: FreeTable[] }>('/pos/tables/free');
+        return response.tables;
+    },
+
+    /**
+     * Transfer orders from one table to another
+     */
+    transfer: async (sourceTableId: string, destTableId: string): Promise<TableTransferResponse> => {
+        return apiRequest<TableTransferResponse>('/pos/tables/transfer', {
+            method: 'POST',
+            body: JSON.stringify({
+                source_table_id: sourceTableId,
+                destination_table_id: destTableId,
+                transfer_all_orders: true,
+            }),
+        });
     }
 };
 

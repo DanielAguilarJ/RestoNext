@@ -1,10 +1,20 @@
 """
 RestoNext MX - Authentication API Routes
 Login, registration, and user management
+
+Includes:
+- Email/password login
+- PIN-based fast login for POS
+- User management
+- Tenant registration
 """
 
+from typing import Optional
+from uuid import UUID
+from pydantic import BaseModel, Field
+
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import select
+from sqlalchemy import select, and_
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
@@ -21,6 +31,138 @@ from app.schemas.schemas import (
 )
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
+
+
+# ============================================
+# PIN Login Schemas
+# ============================================
+
+class PinLoginRequest(BaseModel):
+    """Request body for PIN-based authentication"""
+    pin: str = Field(..., min_length=4, max_length=6, pattern=r"^\d{4,6}$")
+    tenant_id: Optional[UUID] = None  # Optional if only one tenant
+
+
+class PinSetupRequest(BaseModel):
+    """Request body for setting up a PIN"""
+    pin: str = Field(..., min_length=4, max_length=6, pattern=r"^\d{4,6}$")
+
+
+# ============================================
+# PIN Authentication Endpoints
+# ============================================
+
+@router.post("/pin-login")
+async def pin_login(
+    credentials: PinLoginRequest,
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Authenticate user with PIN for fast POS access.
+    
+    PIN login is designed for speed:
+    - 4-6 digit numeric PIN
+    - Optional tenant_id (required for multi-tenant setups)
+    - Returns JWT token same as regular login
+    
+    PIN must be set up first using /auth/setup-pin endpoint.
+    """
+    # Build query based on whether tenant_id is provided
+    if credentials.tenant_id:
+        query = select(User).where(
+            and_(
+                User.pin_hash == get_password_hash(credentials.pin),
+                User.tenant_id == credentials.tenant_id,
+                User.is_active == True
+            )
+        )
+    else:
+        # If no tenant_id, search by PIN only (works for single-tenant setups)
+        query = select(User).where(
+            and_(
+                User.pin_hash == get_password_hash(credentials.pin),
+                User.is_active == True
+            )
+        )
+    
+    result = await db.execute(query)
+    users = result.scalars().all()
+    
+    # For security, if multiple users have same PIN (unlikely), require tenant_id
+    if len(users) > 1:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Multiple users found. Please provide tenant_id.",
+        )
+    
+    if len(users) == 0:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid PIN",
+        )
+    
+    user = users[0]
+    
+    # Generate token
+    token = create_access_token(
+        user_id=str(user.id),
+        tenant_id=str(user.tenant_id),
+        role=user.role.value,
+    )
+    
+    return {
+        "success": True,
+        "access_token": token.access_token,
+        "token_type": token.token_type,
+        "expires_in": token.expires_in,
+        "user": {
+            "id": str(user.id),
+            "name": user.name,
+            "email": user.email,
+            "role": user.role.value,
+        }
+    }
+
+
+@router.post("/setup-pin")
+async def setup_pin(
+    pin_data: PinSetupRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Set up or update PIN for the current user.
+    
+    Requires authenticated user (email/password login first).
+    PIN must be 4-6 digits.
+    """
+    # Hash and store the PIN
+    current_user.pin_hash = get_password_hash(pin_data.pin)
+    
+    await db.commit()
+    
+    return {
+        "success": True,
+        "message": "PIN configured successfully"
+    }
+
+
+@router.delete("/remove-pin")
+async def remove_pin(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Remove PIN for the current user.
+    """
+    current_user.pin_hash = None
+    
+    await db.commit()
+    
+    return {
+        "success": True,
+        "message": "PIN removed successfully"
+    }
 
 
 @router.post("/login")

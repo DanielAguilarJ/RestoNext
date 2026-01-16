@@ -284,6 +284,9 @@ class User(Base):
         SQLEnum(UserRole), nullable=False, default=UserRole.WAITER
     )
     
+    # PIN for fast POS login (4-6 digit hashed)
+    pin_hash: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     
