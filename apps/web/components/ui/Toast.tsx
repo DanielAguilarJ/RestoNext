@@ -125,6 +125,7 @@ interface ToastContainerProps {
         type: ToastType;
         title: string;
         message?: string;
+        duration?: number;
     }>;
     onClose: (id: string) => void;
 }
@@ -146,11 +147,12 @@ export function useToast() {
         type: ToastType;
         title: string;
         message?: string;
+        duration?: number;
     }>>([]);
 
-    const addToast = (type: ToastType, title: string, message?: string) => {
+    const addToast = (type: ToastType, title: string, message?: string, duration?: number) => {
         const id = Math.random().toString(36).substring(7);
-        setToasts((prev) => [...prev, { id, type, title, message }]);
+        setToasts((prev) => [...prev, { id, type, title, message, duration }]);
     };
 
     const removeToast = (id: string) => {
@@ -165,9 +167,9 @@ export function useToast() {
         error: (title: string, message?: string) => addToast("error", title, message),
         warning: (title: string, message?: string) => addToast("warning", title, message),
         info: (title: string, message?: string) => addToast("info", title, message),
-        toast: (props: { title?: string; description?: string; variant?: "default" | "destructive" }) => {
+        toast: (props: { title?: string; description?: string; variant?: "default" | "destructive"; duration?: number }) => {
             const type = props.variant === "destructive" ? "error" : "info";
-            addToast(type, props.title || "Notification", props.description);
+            addToast(type, props.title || "Notification", props.description, props.duration);
         }
     };
 }

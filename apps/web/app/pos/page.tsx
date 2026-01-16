@@ -15,7 +15,7 @@ import { MenuCategory, MenuItem } from "../../../../packages/shared/src/index";
 import { CategorySelector } from "@/components/pos/CategorySelector";
 import { MenuGrid } from "@/components/pos/MenuGrid";
 import { CartSidebar } from "@/components/pos/CartSidebar";
-import { useToast } from "@/components/ui/use-toast";
+import { useToast, ToastContainer } from "@/components/ui/use-toast";
 
 export default function POSPage() {
     const { selectedTable, setSelectedTable, cart, addToCart, removeFromCart, incrementCartItem, clearCart } =
@@ -26,7 +26,7 @@ export default function POSPage() {
     const [showCart, setShowCart] = useState(false);
     const [isLoading, setIsLoading] = useState(true);
     const [isSending, setIsSending] = useState(false);
-    const { toast } = useToast();
+    const { toast, toasts, removeToast } = useToast();
 
     // Fetch Menu Data
     useEffect(() => {
@@ -218,6 +218,8 @@ export default function POSPage() {
                 onSendOrder={handleSendOrder}
                 isSending={isSending}
             />
+
+            <ToastContainer toasts={toasts} onClose={removeToast} />
         </div>
     );
 }
