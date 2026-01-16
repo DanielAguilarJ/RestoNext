@@ -25,7 +25,6 @@ from app.core.database import init_db
 from app.core.websocket_manager import ws_manager
 from app.core.scheduler import init_scheduler, start_scheduler, shutdown_scheduler
 
-# Import routers
 from app.api.auth import router as auth_router
 from app.api.pos import router as pos_router
 from app.api.billing import router as billing_router
@@ -43,6 +42,7 @@ from app.api.promotions import router as promotions_router
 from app.api.menu import router as menu_router
 from app.api.dining import router as dining_router
 from app.api.admin_tables import router as admin_tables_router
+from app.api.admin import router as admin_router
 
 settings = get_settings()
 
@@ -206,6 +206,8 @@ app.include_router(menu_router, prefix="/api", tags=["Menu"])
 app.include_router(dining_router, prefix="/api", tags=["Self-Service Dining"])
 # Admin endpoints for table management
 app.include_router(admin_tables_router, prefix="/api", tags=["Admin - Tables"])
+# Admin endpoints for system management (backups, jobs)
+app.include_router(admin_router, prefix="/api", tags=["Admin - System"])
 
 
 # ============================================
@@ -313,15 +315,66 @@ async def customer_websocket(websocket: WebSocket, table_number: int):
     except WebSocketDisconnect:
         ws_manager.disconnect(websocket, f"table_{table_number}")
 
-
 # ============================================
-# Health Check
+# Health Check (Production Monitoring)
 # ============================================
 
 @app.get("/health")
 async def health_check():
-    """Health check endpoint for Docker/K8s"""
-    return {"status": "healthy", "service": "restonext-api"}
+    """
+    Health check endpoint for Docker/K8s/Railway.
+    
+    Verifies:
+    - Database connectivity
+    - Redis connectivity
+    
+    Returns 200 if all systems healthy, 503 if any failure.
+    """
+    from datetime import datetime
+    from sqlalchemy import text
+    import redis.asyncio as aioredis
+    
+    health_status = {
+        "status": "healthy",
+        "service": "restonext-api",
+        "timestamp": datetime.utcnow().isoformat(),
+        "checks": {}
+    }
+    
+    all_healthy = True
+    
+    # Check Database
+    try:
+        from app.core.database import async_session_maker
+        async with async_session_maker() as db:
+            await db.execute(text("SELECT 1"))
+        health_status["checks"]["database"] = {"status": "healthy"}
+    except Exception as e:
+        health_status["checks"]["database"] = {
+            "status": "unhealthy",
+            "error": str(e)[:100]
+        }
+        all_healthy = False
+    
+    # Check Redis
+    try:
+        redis_client = aioredis.from_url(settings.redis_url)
+        await redis_client.ping()
+        await redis_client.close()
+        health_status["checks"]["redis"] = {"status": "healthy"}
+    except Exception as e:
+        health_status["checks"]["redis"] = {
+            "status": "unhealthy",
+            "error": str(e)[:100]
+        }
+        all_healthy = False
+    
+    # Set overall status
+    if not all_healthy:
+        health_status["status"] = "degraded"
+        return JSONResponse(content=health_status, status_code=503)
+    
+    return health_status
 
 
 @app.get("/api/system/scheduler")

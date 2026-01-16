@@ -1,0 +1,348 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bienvenido a RestoNext</title>
+    <style>
+        /* Reset and base styles */
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #0a0a0a;
+            color: #ffffff;
+            line-height: 1.6;
+        }
+        
+        .email-container {
+            max-width: 600px;
+            margin: 0 auto;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+            border-radius: 16px;
+            overflow: hidden;
+            box-shadow: 0 20px 60px rgba(0, 255, 136, 0.15);
+        }
+        
+        /* Header */
+        .header {
+            background: linear-gradient(135deg, #00ff88 0%, #00d4ff 100%);
+            padding: 40px 30px;
+            text-align: center;
+        }
+        
+        .logo {
+            font-size: 42px;
+            margin-bottom: 10px;
+        }
+        
+        .brand-name {
+            font-size: 28px;
+            font-weight: 700;
+            color: #0a0a0a;
+            letter-spacing: 2px;
+        }
+        
+        .brand-tagline {
+            font-size: 14px;
+            color: #1a1a2e;
+            margin-top: 5px;
+            text-transform: uppercase;
+            letter-spacing: 3px;
+        }
+        
+        /* Content */
+        .content {
+            padding: 40px 30px;
+        }
+        
+        .greeting {
+            font-size: 24px;
+            font-weight: 600;
+            color: #00ff88;
+            margin-bottom: 20px;
+        }
+        
+        .welcome-text {
+            font-size: 16px;
+            color: #b8b8b8;
+            margin-bottom: 30px;
+        }
+        
+        .tenant-name {
+            background: linear-gradient(135deg, rgba(0, 255, 136, 0.1) 0%, rgba(0, 212, 255, 0.1) 100%);
+            border: 1px solid rgba(0, 255, 136, 0.3);
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 30px;
+            text-align: center;
+        }
+        
+        .tenant-name h2 {
+            font-size: 24px;
+            color: #ffffff;
+            margin-bottom: 5px;
+        }
+        
+        .tenant-name p {
+            font-size: 14px;
+            color: #00ff88;
+        }
+        
+        /* Credentials box */
+        .credentials-box {
+            background: #0d1117;
+            border-radius: 12px;
+            padding: 25px;
+            margin-bottom: 30px;
+            border-left: 4px solid #00ff88;
+        }
+        
+        .credentials-title {
+            font-size: 18px;
+            font-weight: 600;
+            color: #ffffff;
+            margin-bottom: 20px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .credential-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 12px 0;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        
+        .credential-row:last-child {
+            border-bottom: none;
+        }
+        
+        .credential-label {
+            color: #888;
+            font-size: 14px;
+        }
+        
+        .credential-value {
+            color: #00ff88;
+            font-weight: 600;
+            font-family: 'Courier New', monospace;
+            font-size: 15px;
+        }
+        
+        /* CTA Button */
+        .cta-container {
+            text-align: center;
+            margin: 30px 0;
+        }
+        
+        .cta-button {
+            display: inline-block;
+            background: linear-gradient(135deg, #00ff88 0%, #00d4ff 100%);
+            color: #0a0a0a;
+            padding: 16px 40px;
+            border-radius: 50px;
+            text-decoration: none;
+            font-weight: 700;
+            font-size: 16px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            transition: transform 0.3s ease;
+        }
+        
+        .cta-button:hover {
+            transform: translateY(-2px);
+        }
+        
+        /* Warning box */
+        .warning-box {
+            background: rgba(255, 193, 7, 0.1);
+            border: 1px solid rgba(255, 193, 7, 0.3);
+            border-radius: 8px;
+            padding: 15px;
+            margin-top: 25px;
+        }
+        
+        .warning-box p {
+            color: #ffc107;
+            font-size: 13px;
+            display: flex;
+            align-items: flex-start;
+            gap: 10px;
+        }
+        
+        /* Steps */
+        .steps {
+            margin-top: 30px;
+        }
+        
+        .steps-title {
+            font-size: 16px;
+            font-weight: 600;
+            color: #ffffff;
+            margin-bottom: 15px;
+        }
+        
+        .step {
+            display: flex;
+            align-items: flex-start;
+            gap: 15px;
+            margin-bottom: 15px;
+        }
+        
+        .step-number {
+            background: linear-gradient(135deg, #00ff88 0%, #00d4ff 100%);
+            color: #0a0a0a;
+            width: 28px;
+            height: 28px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 700;
+            font-size: 14px;
+            flex-shrink: 0;
+        }
+        
+        .step-text {
+            color: #b8b8b8;
+            font-size: 14px;
+        }
+        
+        /* Footer */
+        .footer {
+            background: #0d1117;
+            padding: 30px;
+            text-align: center;
+            border-top: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        
+        .footer-text {
+            color: #666;
+            font-size: 12px;
+            margin-bottom: 10px;
+        }
+        
+        .footer-brand {
+            color: #00ff88;
+            font-size: 14px;
+            font-weight: 600;
+        }
+        
+        .social-links {
+            margin-top: 15px;
+        }
+        
+        .social-link {
+            color: #888;
+            text-decoration: none;
+            margin: 0 10px;
+            font-size: 12px;
+        }
+        
+        .social-link:hover {
+            color: #00ff88;
+        }
+    </style>
+</head>
+<body>
+    <div class="email-container">
+        <!-- Header -->
+        <div class="header">
+            <div class="logo">🍽️</div>
+            <div class="brand-name">RESTONEXT</div>
+            <div class="brand-tagline">Restaurant Management SaaS</div>
+        </div>
+        
+        <!-- Content -->
+        <div class="content">
+            <h1 class="greeting">¡Hola, {{ admin_name }}!</h1>
+            
+            <p class="welcome-text">
+                Bienvenido a <strong>RestoNext</strong>, la plataforma de gestión de restaurantes más avanzada de México. Tu cuenta ha sido creada exitosamente y está lista para usar.
+            </p>
+            
+            <div class="tenant-name">
+                <h2>{{ tenant_name }}</h2>
+                <p>✨ Tu restaurante está listo</p>
+            </div>
+            
+            <!-- Credentials -->
+            <div class="credentials-box">
+                <div class="credentials-title">
+                    🔐 Credenciales de Acceso
+                </div>
+                
+                <div class="credential-row">
+                    <span class="credential-label">Email</span>
+                    <span class="credential-value">{{ email }}</span>
+                </div>
+                
+                <div class="credential-row">
+                    <span class="credential-label">Contraseña</span>
+                    <span class="credential-value">{{ password }}</span>
+                </div>
+            </div>
+            
+            <!-- CTA -->
+            <div class="cta-container">
+                <a href="{{ login_url }}" class="cta-button">
+                    🚀 Iniciar Sesión
+                </a>
+            </div>
+            
+            <!-- Warning -->
+            <div class="warning-box">
+                <p>
+                    ⚠️ Por seguridad, te recomendamos cambiar tu contraseña inmediatamente después de tu primer inicio de sesión.
+                </p>
+            </div>
+            
+            <!-- Next Steps -->
+            <div class="steps">
+                <div class="steps-title">📋 Próximos Pasos</div>
+                
+                <div class="step">
+                    <span class="step-number">1</span>
+                    <span class="step-text">Inicia sesión con tus credenciales</span>
+                </div>
+                
+                <div class="step">
+                    <span class="step-number">2</span>
+                    <span class="step-text">Completa el asistente de configuración</span>
+                </div>
+                
+                <div class="step">
+                    <span class="step-number">3</span>
+                    <span class="step-text">Configura tu menú y precios</span>
+                </div>
+                
+                <div class="step">
+                    <span class="step-number">4</span>
+                    <span class="step-text">¡Comienza a recibir pedidos!</span>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Footer -->
+        <div class="footer">
+            <p class="footer-text">
+                Este correo fue enviado automáticamente porque se creó una nueva cuenta en RestoNext.
+            </p>
+            <p class="footer-brand">
+                🍽️ RestoNext MX © {{ year }}
+            </p>
+            <div class="social-links">
+                <a href="#" class="social-link">Soporte</a>
+                <a href="#" class="social-link">Documentación</a>
+                <a href="#" class="social-link">Términos</a>
+            </div>
+        </div>
+    </div>
+</body>
+</html>

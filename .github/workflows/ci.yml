@@ -1,0 +1,149 @@
+# ============================================
+# RestoNext MX - CI Pipeline
+# ============================================
+# GitHub Actions workflow for continuous integration
+#
+# Triggers: Push to main branch
+# Jobs:
+#   1. Backend tests (pytest)
+#   2. Frontend lint (if applicable)
+#
+# Author: RestoNext Team
+# ============================================
+
+name: CI Pipeline
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+env:
+  PYTHON_VERSION: "3.11"
+  NODE_VERSION: "18"
+
+jobs:
+  # ============================================
+  # Backend Tests (FastAPI + pytest)
+  # ============================================
+  backend-tests:
+    name: Backend Tests
+    runs-on: ubuntu-latest
+    
+    # Service containers for testing
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_USER: test_user
+          POSTGRES_PASSWORD: test_password
+          POSTGRES_DB: test_restonext
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      DATABASE_URL: postgresql+asyncpg://test_user:test_password@localhost:5432/test_restonext
+      REDIS_URL: redis://localhost:6379
+      JWT_SECRET: test-secret-for-ci
+      SCHEDULER_ENABLED: "false"
+    
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+      
+      - name: 🐍 Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: 'pip'
+          cache-dependency-path: 'apps/api/requirements.txt'
+      
+      - name: 📦 Install dependencies
+        working-directory: apps/api
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+      
+      - name: 🧪 Run tests
+        working-directory: apps/api
+        run: |
+          pytest -v --tb=short --color=yes
+      
+      - name: 📊 Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results
+          path: apps/api/.pytest_cache/
+          retention-days: 7
+
+  # ============================================
+  # Frontend Lint (Next.js)
+  # ============================================
+  frontend-lint:
+    name: Frontend Lint
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+      
+      - name: 📦 Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: 'apps/web/package-lock.json'
+      
+      - name: 📦 Install dependencies
+        working-directory: apps/web
+        run: npm ci
+      
+      - name: 🔍 Run ESLint
+        working-directory: apps/web
+        run: npm run lint || true  # Don't fail on lint warnings for now
+      
+      - name: 🏗️ Build check
+        working-directory: apps/web
+        run: npm run build
+
+  # ============================================
+  # Security Scan (optional)
+  # ============================================
+  security-scan:
+    name: Security Scan
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+      
+      - name: 🐍 Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      
+      - name: 🔒 Run pip-audit
+        working-directory: apps/api
+        continue-on-error: true
+        run: |
+          pip install pip-audit
+          pip-audit -r requirements.txt || true

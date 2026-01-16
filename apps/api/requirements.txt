@@ -36,6 +36,13 @@ pydantic[email]
 pydantic-settings
 
 # ============================================
+# Email Service
+# ============================================
+fastapi-mail
+jinja2
+aiosmtplib
+
+# ============================================
 # AI & Data Science
 # ============================================
 pandas
@@ -69,3 +76,4 @@ sentry-sdk[fastapi]
 pytest
 pytest-asyncio
 httpx
+

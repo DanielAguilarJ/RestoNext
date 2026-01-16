@@ -1,0 +1,5 @@
+# Backup files (keep .gitkeep and README)
+*.sql
+*.sql.gz
+!.gitkeep
+!README.md

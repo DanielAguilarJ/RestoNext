@@ -7,14 +7,28 @@ Tasks:
 1. daily_close_job - Close/flag stale orders at 4 AM
 2. inventory_snapshot_job - Daily inventory snapshot for historical tracking
 3. expire_loyalty_points - Process expired loyalty points
+4. db_backup_job - Database backup with local storage and rotation
 
-Schedule: All tasks run at 4:00 AM Mexico City time
+Schedule: All tasks run at early morning hours (Mexico City time)
+
+Backup Strategy (Local-First):
+- Uses pg_dump for PostgreSQL database backup
+- Compresses to .sql.gz format
+- Stores in apps/api/backups/ directory
+- Automatic 7-day rotation (deletes older backups)
+- Handles disk full errors gracefully
 """
 
 import logging
+import os
+import gzip
+import shutil
+import subprocess
 from datetime import datetime, timedelta
+from pathlib import Path
 from typing import Optional
 from uuid import UUID
+from urllib.parse import urlparse
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
@@ -37,6 +51,11 @@ settings = get_settings()
 
 # Global scheduler instance
 scheduler: Optional[AsyncIOScheduler] = None
+
+# Backup configuration
+BACKUP_DIR = Path(__file__).parent.parent.parent / "backups"
+BACKUP_RETENTION_DAYS = 7
+MAX_BACKUP_SIZE_GB = 5  # Maximum total backup storage in GB
 
 
 # ============================================
@@ -68,8 +87,17 @@ def init_scheduler() -> AsyncIOScheduler:
     scheduler = create_scheduler()
     
     # ============================================
-    # Register Jobs - All run at 4:00 AM Mexico City
+    # Register Jobs - All run at early morning (Mexico City)
     # ============================================
+    
+    # 0. Database Backup - 3:00 AM (before any other jobs)
+    scheduler.add_job(
+        db_backup_job,
+        trigger=CronTrigger(hour=3, minute=0, timezone="America/Mexico_City"),
+        id="db_backup_job",
+        name="Database Backup",
+        replace_existing=True,
+    )
     
     # 1. Daily Order Closure - 4:00 AM
     scheduler.add_job(
@@ -99,6 +127,7 @@ def init_scheduler() -> AsyncIOScheduler:
     )
     
     logger.info("📅 Scheduler initialized with business automation jobs")
+    logger.info("   - db_backup_job: 03:00 AM")
     logger.info("   - daily_close_job: 04:00 AM")
     logger.info("   - inventory_snapshot_job: 04:05 AM")
     logger.info("   - expire_loyalty_points_job: 04:10 AM")
@@ -343,6 +372,276 @@ async def expire_loyalty_points_job():
 
 
 # ============================================
+# Job 4: Database Backup (Local-First Strategy)
+# ============================================
+
+def _parse_database_url(database_url: str) -> dict:
+    """
+    Parse DATABASE_URL into components for pg_dump.
+    Handles Railway/Heroku style URLs.
+    """
+    # Convert asyncpg URL back to standard postgres
+    url = database_url.replace("postgresql+asyncpg://", "postgresql://")
+    url = url.replace("postgres+asyncpg://", "postgresql://")
+    
+    parsed = urlparse(url)
+    
+    return {
+        "host": parsed.hostname or "localhost",
+        "port": parsed.port or 5432,
+        "user": parsed.username or "postgres",
+        "password": parsed.password or "",
+        "database": parsed.path.lstrip("/") if parsed.path else "restonext",
+    }
+
+
+def _get_backup_dir_size_bytes() -> int:
+    """Calculate total size of backup directory in bytes."""
+    total_size = 0
+    if BACKUP_DIR.exists():
+        for file in BACKUP_DIR.glob("*.sql.gz"):
+            total_size += file.stat().st_size
+    return total_size
+
+
+def _rotate_old_backups():
+    """
+    Delete backups older than BACKUP_RETENTION_DAYS.
+    Also enforces MAX_BACKUP_SIZE_GB limit.
+    """
+    if not BACKUP_DIR.exists():
+        return
+    
+    now = datetime.now()
+    deleted_count = 0
+    
+    # Delete by age
+    for backup_file in BACKUP_DIR.glob("*.sql.gz"):
+        file_age = now - datetime.fromtimestamp(backup_file.stat().st_mtime)
+        if file_age.days > BACKUP_RETENTION_DAYS:
+            try:
+                backup_file.unlink()
+                deleted_count += 1
+                logger.info(f"🗑️ Deleted old backup: {backup_file.name}")
+            except Exception as e:
+                logger.error(f"Failed to delete backup {backup_file.name}: {e}")
+    
+    # Enforce size limit - delete oldest first if over limit
+    max_bytes = MAX_BACKUP_SIZE_GB * 1024 * 1024 * 1024
+    while _get_backup_dir_size_bytes() > max_bytes:
+        oldest_file = None
+        oldest_time = None
+        
+        for backup_file in BACKUP_DIR.glob("*.sql.gz"):
+            mtime = backup_file.stat().st_mtime
+            if oldest_time is None or mtime < oldest_time:
+                oldest_time = mtime
+                oldest_file = backup_file
+        
+        if oldest_file:
+            try:
+                oldest_file.unlink()
+                deleted_count += 1
+                logger.info(f"🗑️ Deleted backup (size limit): {oldest_file.name}")
+            except Exception:
+                break  # Avoid infinite loop
+        else:
+            break
+    
+    if deleted_count > 0:
+        logger.info(f"✅ Rotated {deleted_count} old backup(s)")
+
+
+def _format_bytes(size_bytes: int) -> str:
+    """Format bytes to human readable string."""
+    if size_bytes < 1024:
+        return f"{size_bytes} B"
+    elif size_bytes < 1024 * 1024:
+        return f"{size_bytes / 1024:.1f} KB"
+    elif size_bytes < 1024 * 1024 * 1024:
+        return f"{size_bytes / (1024 * 1024):.1f} MB"
+    else:
+        return f"{size_bytes / (1024 * 1024 * 1024):.2f} GB"
+
+
+async def db_backup_job():
+    """
+    Create a compressed backup of the PostgreSQL database.
+    
+    Strategy (Local-First):
+    - Uses pg_dump to create SQL backup
+    - Compresses with gzip
+    - Stores locally in apps/api/backups/
+    - Automatic rotation after 7 days
+    - Graceful handling of disk full errors
+    
+    File naming: restonext_backup_YYYYMMDD_HHMMSS.sql.gz
+    """
+    logger.info("🔄 Running db_backup_job...")
+    
+    # Ensure backup directory exists
+    try:
+        BACKUP_DIR.mkdir(parents=True, exist_ok=True)
+    except OSError as e:
+        logger.error(f"❌ Cannot create backup directory: {e}")
+        return
+    
+    # Rotate old backups first
+    _rotate_old_backups()
+    
+    # Check available disk space (rough check)
+    try:
+        disk_usage = shutil.disk_usage(BACKUP_DIR)
+        free_gb = disk_usage.free / (1024 * 1024 * 1024)
+        if free_gb < 0.5:  # Less than 500MB free
+            logger.error(f"❌ Disk space critically low: {free_gb:.2f} GB free. Skipping backup.")
+            return
+    except Exception as e:
+        logger.warning(f"⚠️ Could not check disk space: {e}")
+    
+    # Parse database URL
+    try:
+        db_config = _parse_database_url(settings.database_url)
+    except Exception as e:
+        logger.error(f"❌ Failed to parse DATABASE_URL: {e}")
+        return
+    
+    # Generate filename
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    backup_filename = f"restonext_backup_{timestamp}.sql.gz"
+    backup_path = BACKUP_DIR / backup_filename
+    temp_sql_path = BACKUP_DIR / f"temp_{timestamp}.sql"
+    
+    try:
+        # Set PGPASSWORD environment variable for pg_dump
+        env = os.environ.copy()
+        env["PGPASSWORD"] = db_config["password"]
+        
+        # Run pg_dump
+        logger.info(f"📦 Creating backup: {backup_filename}")
+        
+        pg_dump_cmd = [
+            "pg_dump",
+            "-h", db_config["host"],
+            "-p", str(db_config["port"]),
+            "-U", db_config["user"],
+            "-d", db_config["database"],
+            "-f", str(temp_sql_path),
+            "--no-owner",
+            "--no-acl",
+            "--clean",
+            "--if-exists",
+        ]
+        
+        result = subprocess.run(
+            pg_dump_cmd,
+            env=env,
+            capture_output=True,
+            text=True,
+            timeout=600  # 10 minute timeout
+        )
+        
+        if result.returncode != 0:
+            error_msg = result.stderr or "Unknown pg_dump error"
+            logger.error(f"❌ pg_dump failed: {error_msg}")
+            # Clean up temp file if exists
+            if temp_sql_path.exists():
+                temp_sql_path.unlink()
+            return
+        
+        # Compress the backup
+        logger.info("🗜️ Compressing backup...")
+        with open(temp_sql_path, 'rb') as f_in:
+            with gzip.open(backup_path, 'wb', compresslevel=9) as f_out:
+                shutil.copyfileobj(f_in, f_out)
+        
+        # Remove uncompressed temp file
+        temp_sql_path.unlink()
+        
+        # Get backup size
+        backup_size = backup_path.stat().st_size
+        backup_size_str = _format_bytes(backup_size)
+        
+        logger.info(f"✅ db_backup_job completed: {backup_filename} ({backup_size_str})")
+        
+        # Log total backup storage
+        total_backup_size = _get_backup_dir_size_bytes()
+        logger.info(f"📊 Total backup storage: {_format_bytes(total_backup_size)}")
+        
+    except subprocess.TimeoutExpired:
+        logger.error("❌ pg_dump timed out after 10 minutes")
+        if temp_sql_path.exists():
+            temp_sql_path.unlink()
+    except OSError as e:
+        # Handle disk full errors
+        if "No space left on device" in str(e) or e.errno == 28:
+            logger.error("❌ DISK FULL: Cannot create backup. Please free up disk space.")
+            # Try to clean up partial files
+            if temp_sql_path.exists():
+                temp_sql_path.unlink()
+            if backup_path.exists():
+                backup_path.unlink()
+        else:
+            logger.error(f"❌ OS error during backup: {e}")
+    except Exception as e:
+        logger.error(f"❌ db_backup_job failed: {str(e)}")
+        # Clean up any partial files
+        if temp_sql_path.exists():
+            try:
+                temp_sql_path.unlink()
+            except:
+                pass
+        if backup_path.exists():
+            try:
+                backup_path.unlink()
+            except:
+                pass
+
+
+def list_backups() -> list[dict]:
+    """
+    List all available backup files.
+    Returns list of dicts with filename, size, and created time.
+    """
+    backups = []
+    
+    if not BACKUP_DIR.exists():
+        return backups
+    
+    for backup_file in sorted(BACKUP_DIR.glob("*.sql.gz"), reverse=True):
+        stat = backup_file.stat()
+        backups.append({
+            "filename": backup_file.name,
+            "size": _format_bytes(stat.st_size),
+            "size_bytes": stat.st_size,
+            "created": datetime.fromtimestamp(stat.st_mtime).isoformat(),
+        })
+    
+    return backups
+
+
+def get_backup_path(filename: str) -> Optional[Path]:
+    """
+    Get full path to a backup file.
+    Returns None if file doesn't exist or is outside backup directory.
+    """
+    if not BACKUP_DIR.exists():
+        return None
+    
+    # Sanitize filename to prevent directory traversal
+    safe_filename = Path(filename).name
+    if not safe_filename.endswith(".sql.gz"):
+        return None
+    
+    backup_path = BACKUP_DIR / safe_filename
+    
+    if backup_path.exists() and backup_path.is_file():
+        return backup_path
+    
+    return None
+
+
+# ============================================
 # Manual Job Triggers (for testing/admin)
 # ============================================
 
@@ -351,7 +650,7 @@ async def run_job_manually(job_name: str) -> dict:
     Run a specific job manually (for admin panel or testing).
     
     Args:
-        job_name: One of 'daily_close', 'inventory_snapshot', 'expire_points'
+        job_name: One of 'daily_close', 'inventory_snapshot', 'expire_points', 'db_backup'
     
     Returns:
         dict with status and message
@@ -360,10 +659,11 @@ async def run_job_manually(job_name: str) -> dict:
         "daily_close": daily_close_job,
         "inventory_snapshot": inventory_snapshot_job,
         "expire_points": expire_loyalty_points_job,
+        "db_backup": db_backup_job,
     }
     
     if job_name not in jobs:
-        return {"status": "error", "message": f"Unknown job: {job_name}"}
+        return {"status": "error", "message": f"Unknown job: {job_name}. Available: {list(jobs.keys())}"}
     
     try:
         await jobs[job_name]()
@@ -395,3 +695,4 @@ def get_scheduler_status() -> dict:
         "timezone": "America/Mexico_City",
         "jobs": jobs_info
     }
+

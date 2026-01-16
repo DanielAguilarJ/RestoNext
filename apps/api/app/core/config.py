@@ -1,4 +1,7 @@
+import json
+import os
 from functools import lru_cache
+from typing import Optional
 from pydantic import model_validator
 from pydantic_settings import BaseSettings
 
@@ -29,11 +32,54 @@ class Settings(BaseSettings):
     # App Info
     app_name: str = "RestoNext MX"
     debug: bool = True
-    allowed_origins: list[str] = [
-        "http://localhost:3000", 
-        "http://127.0.0.1:3000",
-        "https://resto-next-ten.vercel.app"
-    ]
+    
+    # CORS Configuration
+    # Can be set via BACKEND_CORS_ORIGINS env var as JSON array
+    # Example: '["https://restonext.vercel.app", "https://myrestaurant.com"]'
+    backend_cors_origins: Optional[str] = None
+    
+    @property
+    def allowed_origins(self) -> list[str]:
+        """
+        Get allowed CORS origins.
+        
+        Reads from BACKEND_CORS_ORIGINS env var (JSON array) if set,
+        otherwise falls back to defaults.
+        """
+        # Default origins
+        defaults = [
+            "http://localhost:3000", 
+            "http://127.0.0.1:3000",
+            "https://resto-next-ten.vercel.app"
+        ]
+        
+        # Try to parse BACKEND_CORS_ORIGINS from environment
+        cors_env = self.backend_cors_origins or os.getenv("BACKEND_CORS_ORIGINS", "")
+        
+        if cors_env:
+            try:
+                # Parse as JSON array
+                parsed = json.loads(cors_env)
+                if isinstance(parsed, list):
+                    # Combine with defaults, remove duplicates
+                    return list(dict.fromkeys(defaults + [str(o) for o in parsed]))
+            except json.JSONDecodeError:
+                # Try comma-separated fallback
+                origins = [o.strip() for o in cors_env.split(",") if o.strip()]
+                if origins:
+                    return list(dict.fromkeys(defaults + origins))
+        
+        return defaults
+    
+    # SMTP Email Configuration
+    smtp_host: str = ""  # e.g., smtp.gmail.com
+    smtp_port: int = 587
+    smtp_user: str = ""
+    smtp_password: str = ""
+    smtp_from_email: str = ""  # Defaults to smtp_user if not set
+    smtp_from_name: str = "RestoNext MX"
+    smtp_tls: bool = True
+    smtp_ssl: bool = False
     
     # PAC (Proveedor Autorizado de Certificación) Configuration
     pac_provider: str = "mock"  # mock, finkok, facturama
@@ -49,6 +95,11 @@ class Settings(BaseSettings):
     sentry_environment: str = "development"
     sentry_traces_sample_rate: float = 0.1  # 10% of transactions
     
+    # Backup Configuration
+    backup_retention_days: int = 7
+    backup_max_size_gb: int = 5
+    backup_admin_email: str = ""  # Email to notify on backup status
+    
     class Config:
         env_file = ".env"
         env_file_encoding = "utf-8"
@@ -59,3 +110,4 @@ class Settings(BaseSettings):
 def get_settings() -> Settings:
     """Cached settings instance"""
     return Settings()
+

@@ -94,6 +94,29 @@ def generate_slug(name: str) -> str:
     return f"{slug}-{str(uuid4())[:6]}"
 
 
+async def _send_welcome_email(
+    to_email: str,
+    tenant_name: str,
+    admin_name: str,
+    email: str,
+    password: str
+) -> bool:
+    """Send welcome email with credentials to new tenant admin."""
+    try:
+        from app.services.email_service import get_email_service
+        email_service = get_email_service()
+        return await email_service.send_welcome_email(
+            to_email=to_email,
+            tenant_name=tenant_name,
+            admin_name=admin_name,
+            email=email,
+            password=password
+        )
+    except ImportError:
+        console.print("[yellow]Email service not available[/yellow]")
+        return False
+
+
 async def _create_tenant_async(
     name: str,
     email: str,
@@ -284,8 +307,25 @@ def create_tenant(
             
             console.print(table)
             
+            # Send welcome email with credentials
+            console.print("\n[bold blue]📧 Sending welcome email...[/bold blue]")
+            try:
+                email_sent = asyncio.run(_send_welcome_email(
+                    to_email=email,
+                    tenant_name=name,
+                    admin_name=admin_name,
+                    email=email,
+                    password=password
+                ))
+                if email_sent:
+                    console.print("[green]✅ Welcome email sent successfully![/green]")
+                else:
+                    console.print("[yellow]⚠️ Email service disabled - credentials not sent[/yellow]")
+            except Exception as email_error:
+                console.print(f"[yellow]⚠️ Could not send email: {email_error}[/yellow]")
+            
             console.print("\n[yellow]📝 Next steps:[/yellow]")
-            console.print(f"   1. Login at https://your-domain.com/login")
+            console.print(f"   1. Login at https://restonext.vercel.app/login")
             console.print(f"   2. Complete onboarding wizard")
             console.print(f"   3. Configure menu and prices")
             
