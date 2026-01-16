@@ -28,6 +28,7 @@ from app.api.customers import router as customers_router
 from app.api.loyalty import router as loyalty_router
 from app.api.reservations import router as reservations_router
 from app.api.promotions import router as promotions_router
+from app.api.menu import router as menu_router
 
 settings = get_settings()
 
@@ -83,6 +84,7 @@ app.include_router(customers_router, prefix="/api/customers", tags=["Customers"]
 app.include_router(loyalty_router, prefix="/api/loyalty", tags=["Loyalty"])
 app.include_router(reservations_router, prefix="/api/reservations", tags=["Reservations"])
 app.include_router(promotions_router, prefix="/api/promotions", tags=["Promotions"])
+app.include_router(menu_router, prefix="/api", tags=["Menu"])
 
 
 # ============================================

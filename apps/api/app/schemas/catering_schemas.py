@@ -138,3 +138,17 @@ class CateringQuoteResponse(BaseModel):
     
     class Config:
         from_attributes = True
+
+# =======================
+# AI Schemas
+# =======================
+
+class AICateringProposalRequest(BaseModel):
+    event_type: str = Field(..., example="Wedding")
+    guest_count: int = Field(..., ge=1)
+    budget_per_person: float = Field(..., gt=0)
+    theme: str = Field(..., example="Vintage Garden")
+
+class AICateringProposalResponse(BaseModel):
+    suggested_menu: List[Dict[str, Any]]
+    sales_pitch: str

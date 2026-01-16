@@ -15,6 +15,7 @@ export default function InventoryPage() {
     const [loading, setLoading] = useState(true);
     const [filter, setFilter] = useState<'all' | 'low'>('all');
     const [search, setSearch] = useState('');
+    const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
 
     // Modal states
     const [isCreateOpen, setIsCreateOpen] = useState(false);
@@ -150,8 +151,8 @@ export default function InventoryPage() {
                     <button
                         onClick={() => setFilter('all')}
                         className={`px-6 py-2 rounded-lg text-sm font-medium transition-all ${filter === 'all'
-                                ? 'bg-white dark:bg-gray-700 text-teal-600 shadow-md transform scale-105'
-                                : 'text-gray-500 hover:text-gray-700 dark:text-gray-400'
+                            ? 'bg-white dark:bg-gray-700 text-teal-600 shadow-md transform scale-105'
+                            : 'text-gray-500 hover:text-gray-700 dark:text-gray-400'
                             }`}
                     >
                         Todo
@@ -159,18 +160,129 @@ export default function InventoryPage() {
                     <button
                         onClick={() => setFilter('low')}
                         className={`px-6 py-2 rounded-lg text-sm font-medium transition-all flex items-center gap-2 ${filter === 'low'
-                                ? 'bg-white dark:bg-gray-700 text-red-600 shadow-md transform scale-105'
-                                : 'text-gray-500 hover:text-gray-700 dark:text-gray-400'
+                            ? 'bg-white dark:bg-gray-700 text-red-600 shadow-md transform scale-105'
+                            : 'text-gray-500 hover:text-gray-700 dark:text-gray-400'
                             }`}
                     >
                         <AlertTriangle className="w-4 h-4" />
                         Faltantes
                     </button>
                 </div>
+
+                {/* View Toggle */}
+                <div className="flex bg-white/60 dark:bg-gray-800/60 rounded-xl p-1.5 border border-gray-200 dark:border-gray-700 shadow-sm ml-auto sm:ml-0">
+                    <button
+                        onClick={() => setViewMode('grid')}
+                        className={`p-2 rounded-lg transition-all ${viewMode === 'grid'
+                            ? 'bg-white dark:bg-gray-700 text-teal-600 shadow-md'
+                            : 'text-gray-500 hover:text-gray-700 dark:text-gray-400'
+                            }`}
+                        title="Vista Cuadrícula"
+                    >
+                        <div className="w-5 h-5 grid grid-cols-2 gap-0.5">
+                            <div className="bg-current rounded-[1px]"></div>
+                            <div className="bg-current rounded-[1px]"></div>
+                            <div className="bg-current rounded-[1px]"></div>
+                            <div className="bg-current rounded-[1px]"></div>
+                        </div>
+                    </button>
+                    <button
+                        onClick={() => setViewMode('list')}
+                        className={`p-2 rounded-lg transition-all ${viewMode === 'list'
+                            ? 'bg-white dark:bg-gray-700 text-teal-600 shadow-md'
+                            : 'text-gray-500 hover:text-gray-700 dark:text-gray-400'
+                            }`}
+                        title="Vista Lista"
+                    >
+                        <div className="w-5 h-5 flex flex-col gap-1 justify-center">
+                            <div className="h-0.5 bg-current rounded-full w-full"></div>
+                            <div className="h-0.5 bg-current rounded-full w-full"></div>
+                            <div className="h-0.5 bg-current rounded-full w-full"></div>
+                        </div>
+                    </button>
+                </div>
             </div>
 
-            {/* Inventory Grid */}
-            <div className="relative z-10 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
+            {/* Inventory Content */}
+            {
+                viewMode === 'list' ? (
+                    /* Data Grid View */
+                    <div className="relative z-10 w-full overflow-hidden rounded-2xl glass border border-white/20 shadow-xl">
+                        <div className="overflow-x-auto">
+                            <table className="w-full text-sm">
+                                <thead className="bg-gray-50/50 dark:bg-gray-800/50 border-b border-gray-200 dark:border-gray-700">
+                                    <tr>
+                                        <th className="py-4 px-6 text-left font-medium text-gray-500 dark:text-gray-400">Insumo / SKU</th>
+                                        <th className="py-4 px-6 text-left font-medium text-gray-500 dark:text-gray-400">Estado Stock</th>
+                                        <th className="py-4 px-6 text-right font-medium text-gray-500 dark:text-gray-400">Cantidad</th>
+                                        <th className="py-4 px-6 text-right font-medium text-gray-500 dark:text-gray-400">Costo Unit.</th>
+                                        <th className="py-4 px-6 text-right font-medium text-gray-500 dark:text-gray-400">Valor Total</th>
+                                        <th className="py-4 px-6 text-center font-medium text-gray-500 dark:text-gray-400">Uso</th>
+                                        <th className="py-4 px-6 text-right font-medium text-gray-500 dark:text-gray-400">Acciones</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
+                                    {filteredIngredients.map((item) => {
+                                        const isLowStock = item.stock_quantity <= item.min_stock_alert;
+                                        return (
+                                            <tr key={item.id} className="hover:bg-white/40 dark:hover:bg-gray-800/40 transition-colors group">
+                                                <td className="py-4 px-6">
+                                                    <div className="flex items-center gap-3">
+                                                        <div className={`w-8 h-8 rounded-lg flex items-center justify-center text-lg ${isLowStock ? 'bg-red-100 dark:bg-red-900/30' : 'bg-gray-100 dark:bg-gray-800'}`}>
+                                                            📦
+                                                        </div>
+                                                        <div>
+                                                            <p className="font-medium text-gray-900 dark:text-white">{item.name}</p>
+                                                            <p className="text-xs text-gray-500 font-mono">{item.sku || '---'}</p>
+                                                        </div>
+                                                    </div>
+                                                </td>
+                                                <td className="py-4 px-6">
+                                                    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${isLowStock
+                                                        ? 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300'
+                                                        : 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300'
+                                                        }`}>
+                                                        {isLowStock ? '⚠️ Bajo Stock' : '✅ Óptimo'}
+                                                    </span>
+                                                </td>
+                                                <td className="py-4 px-6 text-right">
+                                                    <span className="font-bold text-gray-900 dark:text-white">{item.stock_quantity.toLocaleString()}</span>
+                                                    <span className="text-gray-500 ml-1 text-xs">{item.unit}</span>
+                                                </td>
+                                                <td className="py-4 px-6 text-right text-gray-600 dark:text-gray-300">
+                                                    ${item.cost_per_unit.toFixed(2)}
+                                                </td>
+                                                <td className="py-4 px-6 text-right font-medium text-gray-900 dark:text-white">
+                                                    ${(item.stock_quantity * item.cost_per_unit).toLocaleString('es-MX', { minimumFractionDigits: 2 })}
+                                                </td>
+                                                <td className="py-4 px-6 text-center">
+                                                    <div className="flex items-center justify-center gap-1 text-xs text-gray-500 bg-gray-100 dark:bg-gray-800 rounded-lg py-1 px-2 mx-auto w-fit">
+                                                        <ChefHat className="w-3 h-3" /> {item.usage_count || 0}
+                                                    </div>
+                                                </td>
+                                                <td className="py-4 px-6 text-right">
+                                                    <div className="flex items-center justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                                                        <button
+                                                            onClick={() => handleAdjustStock(item)}
+                                                            className="text-teal-600 hover:text-teal-700 bg-teal-50 hover:bg-teal-100 p-1.5 rounded-lg transition-colors"
+                                                            title="Ajustar"
+                                                        >
+                                                            <Settings className="w-4 h-4" />
+                                                        </button>
+                                                    </div>
+                                                </td>
+                                            </tr>
+                                        );
+                                    })}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                ) : null
+            }
+
+            {/* Grid View Logic (Existing) */}
+            <div className={`relative z-10 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5 ${viewMode === 'list' ? 'hidden' : ''}`}>
                 {loading ? (
                     [...Array(8)].map((_, i) => (
                         <div key={i} className="glass p-5 rounded-2xl animate-pulse">
@@ -283,6 +395,6 @@ export default function InventoryPage() {
                     })
                 )}
             </div>
-        </main>
+        </main >
     );
 }

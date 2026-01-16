@@ -84,14 +84,17 @@ export function CartSidebar({
             {/* Cart Panel */}
             <div className="fixed top-0 right-0 bottom-0 w-full max-w-md glass-dark z-50 flex flex-col animate-slide-in-right">
                 {/* Cart Header */}
-                <div className="p-4 border-b border-white/10 flex items-center justify-between">
-                    <h2 className="text-xl font-bold text-white flex items-center gap-2">
-                        <ShoppingCart className="w-6 h-6 text-brand-400" />
+                {/* Cart Header */}
+                <div className="p-5 border-b border-white/10 flex items-center justify-between glass-subtle">
+                    <h2 className="text-2xl font-bold text-white flex items-center gap-3">
+                        <div className="p-2 bg-brand-500/20 rounded-xl">
+                            <ShoppingCart className="w-6 h-6 text-brand-500" />
+                        </div>
                         Tu Pedido
                     </h2>
                     <button
                         onClick={onClose}
-                        className="p-2 hover:bg-white/10 rounded-xl transition-colors"
+                        className="p-3 hover:bg-white/10 rounded-xl transition-all active:scale-95 touch-target"
                     >
                         <X className="w-6 h-6 text-gray-400" />
                     </button>
@@ -102,15 +105,23 @@ export function CartSidebar({
                     {!selectedCustomer ? (
                         <div className="space-y-2">
                             <div className="flex gap-2">
-                                <Input
-                                    className="bg-black/30 border-white/20 text-white h-9"
-                                    placeholder="Teléfono o nombre..."
-                                    value={customerQuery}
-                                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setCustomerQuery(e.target.value)}
-                                    onKeyDown={(e: React.KeyboardEvent<HTMLInputElement>) => e.key === 'Enter' && handleSearch()}
-                                />
-                                <Button size="sm" onClick={handleSearch} disabled={isSearching} className="bg-brand-600 hover:bg-brand-700">
-                                    <Search className="w-4 h-4" />
+                                <div className="relative flex-1">
+                                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+                                    <Input
+                                        className="bg-black/40 border-white/10 text-white h-12 pl-10 rounded-xl focus:border-brand-500/50 focus:ring-brand-500/20"
+                                        placeholder="Buscar cliente (Tel/Nombre)..."
+                                        value={customerQuery}
+                                        onChange={(e: React.ChangeEvent<HTMLInputElement>) => setCustomerQuery(e.target.value)}
+                                        onKeyDown={(e: React.KeyboardEvent<HTMLInputElement>) => e.key === 'Enter' && handleSearch()}
+                                    />
+                                </div>
+                                <Button
+                                    size="lg"
+                                    onClick={handleSearch}
+                                    disabled={isSearching}
+                                    className="h-12 w-12 p-0 bg-brand-600 hover:bg-brand-700 rounded-xl shadow-lg shadow-brand-900/20"
+                                >
+                                    <Search className="w-5 h-5" />
                                 </Button>
                             </div>
                             {searchResults.length > 0 && (
@@ -191,23 +202,25 @@ export function CartSidebar({
                                     )}
                                 </div>
 
-                                <div className="flex items-center gap-2">
+                                <div className="flex items-center gap-3 bg-black/20 rounded-xl p-1">
                                     <button
                                         onClick={() => onRemoveItem(index)}
-                                        className="w-9 h-9 flex items-center justify-center 
-                                                 bg-white/10 hover:bg-red-500/50 rounded-full transition-colors"
+                                        className="w-10 h-10 flex items-center justify-center 
+                                                 bg-white/5 hover:bg-red-500/20 text-gray-400 hover:text-red-500 
+                                                 rounded-lg transition-all active:scale-90 touch-target"
                                     >
-                                        <Minus className="w-4 h-4 text-white" />
+                                        <Minus className="w-5 h-5" />
                                     </button>
-                                    <span className="w-8 text-center font-bold text-white text-lg">
+                                    <span className="w-6 text-center font-bold text-white text-lg">
                                         {item.quantity}
                                     </span>
                                     <button
                                         onClick={() => onIncrementItem(index)}
-                                        className="w-9 h-9 flex items-center justify-center 
-                                                 bg-brand-500 hover:bg-brand-600 rounded-full transition-colors"
+                                        className="w-10 h-10 flex items-center justify-center 
+                                                 bg-brand-500 hover:bg-brand-600 text-white shadow-lg shadow-brand-900/20
+                                                 rounded-lg transition-all active:scale-90 touch-target"
                                     >
-                                        <Plus className="w-4 h-4 text-white" />
+                                        <Plus className="w-5 h-5" />
                                     </button>
                                 </div>
                             </div>

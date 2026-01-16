@@ -16,8 +16,10 @@ from app.schemas.catering_schemas import (
     EventLeadCreate, EventLeadUpdate, EventLeadResponse,
     EventCreate, EventUpdate, EventResponse,
     EventMenuSelectionCreate, BEOCreate, BEOResponse,
-    CateringQuoteCreate, CateringQuoteResponse
+    CateringQuoteCreate, CateringQuoteResponse,
+    AICateringProposalRequest, AICateringProposalResponse
 )
+from app.services.ai_service import AIService
 
 router = APIRouter()
 
@@ -288,3 +290,40 @@ def generate_quote(
     db.commit()
     db.refresh(quote)
     return quote
+
+
+@router.post("/events/ai-proposal", response_model=AICateringProposalResponse)
+async def generate_ai_catering_proposal(
+    request: AICateringProposalRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Expert AI Catering Planner.
+    Analyzes trends and proposes a menu using current inventory items.
+    """
+    # 1. Fetch Tenant Location
+    tenant = db.query(Tenant).filter(Tenant.id == current_user.tenant_id).first()
+    location = "Mexico, CDMX"
+    if tenant and tenant.fiscal_address and isinstance(tenant.fiscal_address, dict):
+        location = f"{tenant.fiscal_address.get('city', '')}, {tenant.fiscal_address.get('state', '')}"
+
+    # 2. Get Current Menu Items for Context
+    menu_items_res = db.execute(
+        select(MenuItem.name).where(MenuItem.tenant_id == current_user.tenant_id, MenuItem.is_available == True)
+    )
+    available_items = [r[0] for r in menu_items_res.all()]
+
+    # 3. Call AI Service
+    ai_service = AIService()
+    proposal = await ai_service.plan_catering_event(
+        event_type=request.event_type,
+        guest_count=request.guest_count,
+        budget_per_person=request.budget_per_person,
+        theme=request.theme,
+        location=location,
+        available_menu_items=available_items
+    )
+    
+    return proposal
+

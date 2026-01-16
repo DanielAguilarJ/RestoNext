@@ -215,6 +215,10 @@ class MenuItemResponse(BaseModel):
     class Config:
         from_attributes = True
 
+class MenuItemOptimizationResponse(BaseModel):
+    suggested_description: str
+    market_price_analysis: str
+
 
 class MenuCategoryCreate(BaseModel):
     name: str
