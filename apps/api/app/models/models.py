@@ -94,6 +94,14 @@ class TransactionType(str, enum.Enum):
     WASTE = "waste"            # Merma
 
 
+class LoyaltyTransactionType(str, enum.Enum):
+    EARN = "earn"
+    REDEEM = "redeem"
+    ADJUSTMENT = "adjustment"
+    EXPIRE = "expire"
+    REFUND = "refund"
+
+
 class PurchaseOrderStatus(str, enum.Enum):
     """Status workflow for purchase orders"""
     DRAFT = "draft"           # Sugerencia generada por sistema
