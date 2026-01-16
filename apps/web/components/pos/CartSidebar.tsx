@@ -1,6 +1,11 @@
-import { X, ShoppingCart, Package, Minus, Plus, Send } from "lucide-react";
+import { useState, useEffect } from "react";
+import { X, ShoppingCart, Package, Minus, Plus, Send, User, Search, Award, Wallet } from "lucide-react";
 import { formatPrice } from "@/lib/utils";
 import { CartItem } from "@/lib/store";
+import { customersApi, loyaltyApi, Customer, LoyaltySummary } from "@/lib/api";
+import { Button } from "../../components/ui/button";
+import { Input } from "../../components/ui/input";
+import { useToast } from "../../components/ui/use-toast";
 
 interface CartSidebarProps {
     isOpen: boolean;
@@ -23,6 +28,49 @@ export function CartSidebar({
     onSendOrder,
     isSending = false
 }: CartSidebarProps) {
+    const [customerQuery, setCustomerQuery] = useState("");
+    const [isSearching, setIsSearching] = useState(false);
+    const [searchResults, setSearchResults] = useState<Customer[]>([]);
+    const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
+    const [loyaltySummary, setLoyaltySummary] = useState<LoyaltySummary | null>(null);
+    const { toast } = useToast();
+
+    // Handle searching
+    const handleSearch = async () => {
+        if (!customerQuery.trim()) return;
+        setIsSearching(true);
+        try {
+            const results = await customersApi.list(customerQuery);
+            setSearchResults(results);
+            if (results.length === 0) {
+                toast({ description: "No customer found." });
+            }
+        } catch (e) {
+            console.error(e);
+        } finally {
+            setIsSearching(false);
+        }
+    };
+
+    // Attach customer
+    const selectCustomer = async (c: Customer) => {
+        setSelectedCustomer(c);
+        setSearchResults([]);
+        setCustomerQuery("");
+        try {
+            const summary = await loyaltyApi.getSummary(c.id);
+            setLoyaltySummary(summary);
+        } catch (e) {
+            console.error(e);
+        }
+    };
+
+    // Detach
+    const clearCustomer = () => {
+        setSelectedCustomer(null);
+        setLoyaltySummary(null);
+    };
+
     if (!isOpen) return null;
 
     return (
@@ -47,6 +95,70 @@ export function CartSidebar({
                     >
                         <X className="w-6 h-6 text-gray-400" />
                     </button>
+                </div>
+
+                {/* Customer Section */}
+                <div className="p-4 bg-white/5 border-b border-white/10">
+                    {!selectedCustomer ? (
+                        <div className="space-y-2">
+                            <div className="flex gap-2">
+                                <Input
+                                    className="bg-black/30 border-white/20 text-white h-9"
+                                    placeholder="Teléfono o nombre..."
+                                    value={customerQuery}
+                                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setCustomerQuery(e.target.value)}
+                                    onKeyDown={(e: React.KeyboardEvent<HTMLInputElement>) => e.key === 'Enter' && handleSearch()}
+                                />
+                                <Button size="sm" onClick={handleSearch} disabled={isSearching} className="bg-brand-600 hover:bg-brand-700">
+                                    <Search className="w-4 h-4" />
+                                </Button>
+                            </div>
+                            {searchResults.length > 0 && (
+                                <div className="bg-slate-800 rounded border border-slate-700 max-h-40 overflow-y-auto">
+                                    {searchResults.map(c => (
+                                        <div key={c.id} onClick={() => selectCustomer(c)} className="p-2 hover:bg-slate-700 cursor-pointer text-sm text-white flex justify-between">
+                                            <span>{c.name}</span>
+                                            <span className="text-slate-400">{c.phone}</span>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+                    ) : (
+                        <div className="bg-slate-800/80 rounded-lg p-3 border border-brand-500/30">
+                            <div className="flex justify-between items-start mb-2">
+                                <div className="flex items-center gap-2">
+                                    <div className="w-8 h-8 rounded-full bg-brand-500/20 flex items-center justify-center">
+                                        <User className="w-4 h-4 text-brand-400" />
+                                    </div>
+                                    <div>
+                                        <p className="text-sm font-bold text-white leading-none">{selectedCustomer.name}</p>
+                                        <p className="text-xs text-brand-400 mt-1">{selectedCustomer.tier_level}</p>
+                                    </div>
+                                </div>
+                                <button onClick={clearCustomer} className="p-1 hover:bg-white/10 rounded">
+                                    <X className="w-4 h-4 text-slate-400" />
+                                </button>
+                            </div>
+
+                            {loyaltySummary && (
+                                <div className="flex gap-4 mt-2 pt-2 border-t border-white/10">
+                                    <div className="flex items-center gap-1.5">
+                                        <Award className="w-3.5 h-3.5 text-yellow-500" />
+                                        <span className="text-xs text-slate-300">
+                                            <span className="text-white font-bold">{loyaltySummary.points.toFixed(0)}</span> pts
+                                        </span>
+                                    </div>
+                                    <div className="flex items-center gap-1.5">
+                                        <Wallet className="w-3.5 h-3.5 text-emerald-500" />
+                                        <span className="text-xs text-slate-300">
+                                            <span className="text-white font-bold">${loyaltySummary.wallet_balance.toFixed(2)}</span>
+                                        </span>
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                    )}
                 </div>
 
                 {/* Cart Items */}

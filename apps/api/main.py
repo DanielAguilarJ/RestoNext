@@ -24,6 +24,10 @@ from app.api.printer import router as printer_router
 from app.api.procurement import router as procurement_router
 from app.api.inventory import router as inventory_router
 from app.api.catering import router as catering_router
+from app.api.customers import router as customers_router
+from app.api.loyalty import router as loyalty_router
+from app.api.reservations import router as reservations_router
+from app.api.promotions import router as promotions_router
 
 settings = get_settings()
 
@@ -75,6 +79,10 @@ app.include_router(printer_router, prefix="/api")
 app.include_router(procurement_router, prefix="/api")
 app.include_router(inventory_router, prefix="/api")
 app.include_router(catering_router, prefix="/api/catering", tags=["Catering"])
+app.include_router(customers_router, prefix="/api/customers", tags=["Customers"])
+app.include_router(loyalty_router, prefix="/api/loyalty", tags=["Loyalty"])
+app.include_router(reservations_router, prefix="/api/reservations", tags=["Reservations"])
+app.include_router(promotions_router, prefix="/api/promotions", tags=["Promotions"])
 
 
 # ============================================

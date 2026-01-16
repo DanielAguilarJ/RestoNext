@@ -754,3 +754,160 @@ export const cashierApi = {
         return apiRequest('/shift/transactions');
     }
 };
+
+// ============================================
+// Customers & CRM API
+// ============================================
+
+export interface Customer {
+    id: string;
+    tenant_id: string;
+    name: string;
+    email?: string;
+    phone?: string;
+    notes?: string;
+    addresses: Array<{
+        label: string;
+        address: string;
+        instructions?: string;
+    }>;
+    loyalty_points: number;
+    wallet_balance: number;
+    tier_level: string;
+    created_at: string;
+}
+
+export const customersApi = {
+    list: async (search?: string): Promise<Customer[]> => {
+        const query = search ? `?search=${search}` : '';
+        return apiRequest<Customer[]>(`/customers${query}`);
+    },
+
+    create: async (data: any): Promise<Customer> => {
+        return apiRequest<Customer>('/customers', {
+            method: 'POST',
+            body: JSON.stringify(data),
+        });
+    },
+
+    update: async (id: string, data: any): Promise<Customer> => {
+        return apiRequest<Customer>(`/customers/${id}`, {
+            method: 'PUT',
+            body: JSON.stringify(data),
+        });
+    },
+
+    addAddress: async (id: string, address: { label: string; address: string; instructions?: string }): Promise<Customer> => {
+        return apiRequest<Customer>(`/customers/${id}/addresses`, {
+            method: 'POST',
+            body: JSON.stringify(address),
+        });
+    }
+};
+
+// ============================================
+// Loyalty API
+// ============================================
+
+export interface LoyaltySummary {
+    points: number;
+    wallet_balance: number;
+    tier: string;
+}
+
+export interface LoyaltyTransaction {
+    id: string;
+    type: string;
+    points_delta: number;
+    amount_delta: number;
+    description: string;
+    created_at: string;
+}
+
+export const loyaltyApi = {
+    getSummary: async (customerId: string): Promise<LoyaltySummary> => {
+        return apiRequest<LoyaltySummary>(`/loyalty/${customerId}`);
+    },
+
+    getHistory: async (customerId: string): Promise<LoyaltyTransaction[]> => {
+        return apiRequest<LoyaltyTransaction[]>(`/loyalty/${customerId}/transactions`);
+    }
+};
+
+// ============================================
+// Reservations API
+// ============================================
+
+export interface Reservation {
+    id: string;
+    customer_id?: string;
+    agent_id?: string;
+    table_id?: string;
+    reservation_time: string;
+    party_size: number;
+    status: string;
+    notes?: string;
+    tags: string[];
+}
+
+export const reservationsApi = {
+    list: async (date?: Date, status?: string): Promise<Reservation[]> => {
+        const searchParams = new URLSearchParams();
+        if (date) searchParams.append('date', date.toISOString());
+        if (status) searchParams.append('status', status);
+
+        const query = searchParams.toString();
+        return apiRequest<Reservation[]>(query ? `/reservations?${query}` : '/reservations');
+    },
+
+    create: async (data: any): Promise<Reservation> => {
+        return apiRequest<Reservation>('/reservations', {
+            method: 'POST',
+            body: JSON.stringify(data),
+        });
+    },
+
+    updateStatus: async (id: string, status: string, tableId?: string): Promise<Reservation> => {
+        return apiRequest<Reservation>(`/reservations/${id}/status`, {
+            method: 'PUT',
+            body: JSON.stringify({ status, table_id: tableId }),
+        });
+    },
+
+    getAgents: async (): Promise<Array<{ id: string; name: string; type: string }>> => {
+        return apiRequest('/reservations/agents');
+    }
+};
+
+// ============================================
+// Promotions API
+// ============================================
+
+export interface Promotion {
+    id: string;
+    name: string;
+    description?: string;
+    rules: any;
+    effect: any;
+    is_active: boolean;
+}
+
+export const promotionsApi = {
+    listActive: async (): Promise<Promotion[]> => {
+        return apiRequest<Promotion[]>('/promotions/active');
+    },
+
+    create: async (data: any): Promise<Promotion> => {
+        return apiRequest<Promotion>('/promotions', {
+            method: 'POST',
+            body: JSON.stringify(data),
+        });
+    },
+
+    validateCart: async (cartItems: any[]): Promise<any> => {
+        return apiRequest('/promotions/validate-cart', {
+            method: 'POST',
+            body: JSON.stringify(cartItems),
+        });
+    }
+};

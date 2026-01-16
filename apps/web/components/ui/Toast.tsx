@@ -165,5 +165,9 @@ export function useToast() {
         error: (title: string, message?: string) => addToast("error", title, message),
         warning: (title: string, message?: string) => addToast("warning", title, message),
         info: (title: string, message?: string) => addToast("info", title, message),
+        toast: (props: { title?: string; description?: string; variant?: "default" | "destructive" }) => {
+            const type = props.variant === "destructive" ? "error" : "info";
+            addToast(type, props.title || "Notification", props.description);
+        }
     };
 }
