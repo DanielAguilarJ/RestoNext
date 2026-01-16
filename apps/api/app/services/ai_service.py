@@ -224,3 +224,123 @@ class AIService:
                 sales_pitch="Standard catering proposal pending manual review."
             )
 
+    async def suggest_upsell(
+        self,
+        cart_items: List[str],
+        available_menu_items: List[Dict[str, Any]],
+        restaurant_type: str = "Mexican Restaurant",
+        max_suggestions: int = 2
+    ) -> List[Dict[str, Any]]:
+        """
+        AI-powered upselling suggestions based on cart contents.
+        
+        Analyzes current cart and recommends complementary items from
+        the available menu that would pair well with the customer's order.
+        
+        Args:
+            cart_items: List of item names currently in cart
+            available_menu_items: List of menu items to suggest from
+                Each item: {id, name, description, price, category}
+            restaurant_type: Type of restaurant for context
+            max_suggestions: Maximum number of suggestions to return
+            
+        Returns:
+            List of suggested menu items with reason
+            [{id, name, price, reason}, ...]
+        """
+        if not self.api_key:
+            # Fallback: return random suggestions without AI
+            import random
+            available = [
+                item for item in available_menu_items 
+                if item.get("name") not in cart_items
+            ]
+            suggestions = random.sample(available, min(max_suggestions, len(available)))
+            return [
+                {
+                    "id": s.get("id"),
+                    "name": s.get("name"),
+                    "price": s.get("price"),
+                    "reason": "Sugerencia del chef"
+                }
+                for s in suggestions
+            ]
+
+        # Build menu context for AI
+        menu_context = "\n".join([
+            f"- {item['name']} (${item.get('price', 0)}) - {item.get('category', 'General')}"
+            for item in available_menu_items
+            if item.get("name") not in cart_items
+        ][:20])  # Limit to 20 items to avoid token overflow
+
+        system_prompt = (
+            f"You are an expert upselling assistant for a {restaurant_type}. "
+            "Analyze the customer's current order and suggest 2 complementary items from the menu that would enhance their experience. "
+            "Consider food pairing (e.g., drinks with food, appetizers before mains, desserts after). "
+            "Return ONLY a JSON array with exactly 2 items. Each item must have: "
+            "'name' (exact match from menu), 'reason' (short, appetizing in Spanish, max 10 words). "
+            "Example: [{\"name\": \"Cerveza Artesanal\", \"reason\": \"Perfecto maridaje con tu taco\"}]"
+        )
+
+        user_prompt = (
+            f"Customer's cart: {', '.join(cart_items)}\n\n"
+            f"Available menu items to suggest from:\n{menu_context}\n\n"
+            "Suggest 2 complementary items."
+        )
+
+        try:
+            async with httpx.AsyncClient(timeout=15.0) as client:
+                response = await client.post(
+                    self.base_url,
+                    headers={
+                        "Authorization": f"Bearer {self.api_key}",
+                        "Content-Type": "application/json"
+                    },
+                    json={
+                        "model": self.model,
+                        "messages": [
+                            {"role": "system", "content": system_prompt},
+                            {"role": "user", "content": user_prompt}
+                        ],
+                        "temperature": 0.4
+                    }
+                )
+                
+                if response.status_code != 200:
+                    logger.error(f"Upsell AI Error: {response.status_code}")
+                    return []
+
+                content = response.json()["choices"][0]["message"]["content"]
+                clean_content = content.replace("```json", "").replace("```", "").strip()
+                
+                try:
+                    suggestions = json.loads(clean_content)
+                except json.JSONDecodeError:
+                    logger.error(f"Failed to parse upsell response: {content}")
+                    return []
+                
+                # Match AI suggestions with actual menu items
+                result = []
+                for suggestion in suggestions[:max_suggestions]:
+                    suggested_name = suggestion.get("name", "")
+                    # Find matching menu item
+                    for item in available_menu_items:
+                        if item.get("name", "").lower() == suggested_name.lower():
+                            result.append({
+                                "id": item.get("id"),
+                                "name": item.get("name"),
+                                "price": item.get("price"),
+                                "image_url": item.get("image_url"),
+                                "reason": suggestion.get("reason", "Sugerencia del chef")
+                            })
+                            break
+                
+                return result
+
+        except httpx.RequestError as e:
+            logger.error(f"Upsell AI Connection Error: {str(e)}")
+            return []
+        except Exception as e:
+            logger.exception("Unexpected error in upsell suggestion")
+            return []
+

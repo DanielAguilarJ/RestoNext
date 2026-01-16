@@ -32,51 +32,51 @@ interface DiningProviderProps {
 export function DiningProvider({ children, tenantId, tableId, token }: DiningProviderProps) {
     // API Config
     const apiConfig = { tenantId, tableId, token };
-    
+
     // Session State
     const [session, setSession] = useState<TableSession | null>(null);
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
-    
+
     // Menu State
     const [menu, setMenu] = useState<PublicMenu | null>(null);
-    
+
     // Cart State
     const [cart, setCart] = useState<Cart>({ items: [], subtotal: 0 });
-    
+
     // Order State
     const [currentOrder, setCurrentOrder] = useState<OrderResponse | null>(null);
-    
+
     // Bill State
     const [bill, setBill] = useState<Bill | null>(null);
-    
+
     // Initialize session and menu
     useEffect(() => {
         async function initialize() {
             setIsLoading(true);
             setError(null);
-            
+
             try {
                 const [sessionData, menuData] = await Promise.all([
                     api.getSession(apiConfig),
                     api.getMenu(apiConfig)
                 ]);
-                
+
                 setSession(sessionData);
                 setMenu(menuData);
             } catch (err) {
-                const message = err instanceof api.DiningApiError 
-                    ? err.message 
+                const message = err instanceof api.DiningApiError
+                    ? err.message
                     : 'Error al conectar con el restaurante';
                 setError(message);
             } finally {
                 setIsLoading(false);
             }
         }
-        
+
         initialize();
     }, [tenantId, tableId, token]);
-    
+
     // Cart Functions
     const addToCart = useCallback((
         item: MenuItem,
@@ -86,7 +86,7 @@ export function DiningProvider({ children, tenantId, tableId, token }: DiningPro
     ) => {
         const modifiersTotal = modifiers.reduce((sum, m) => sum + m.price_delta, 0);
         const unitPrice = item.price + modifiersTotal;
-        
+
         const cartItem: CartItem = {
             id: `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
             menu_item: item,
@@ -95,7 +95,7 @@ export function DiningProvider({ children, tenantId, tableId, token }: DiningPro
             notes,
             unit_price: unitPrice
         };
-        
+
         setCart(prev => {
             const newItems = [...prev.items, cartItem];
             const newSubtotal = newItems.reduce(
@@ -105,7 +105,7 @@ export function DiningProvider({ children, tenantId, tableId, token }: DiningPro
             return { ...prev, items: newItems, subtotal: newSubtotal };
         });
     }, []);
-    
+
     const removeFromCart = useCallback((cartItemId: string) => {
         setCart(prev => {
             const newItems = prev.items.filter(item => item.id !== cartItemId);
@@ -116,7 +116,7 @@ export function DiningProvider({ children, tenantId, tableId, token }: DiningPro
             return { ...prev, items: newItems, subtotal: newSubtotal };
         });
     }, []);
-    
+
     const updateCartItemQuantity = useCallback((cartItemId: string, quantity: number) => {
         setCart(prev => {
             const newItems = prev.items.map(item =>
@@ -129,17 +129,17 @@ export function DiningProvider({ children, tenantId, tableId, token }: DiningPro
             return { ...prev, items: newItems, subtotal: newSubtotal };
         });
     }, []);
-    
+
     const clearCart = useCallback(() => {
         setCart({ items: [], subtotal: 0 });
     }, []);
-    
+
     // Order Functions
     const submitOrder = useCallback(async (): Promise<OrderResponse> => {
         if (cart.items.length === 0) {
             throw new Error('El carrito está vacío');
         }
-        
+
         const payload = {
             items: cart.items.map(item => ({
                 menu_item_id: item.menu_item.id,
@@ -149,26 +149,26 @@ export function DiningProvider({ children, tenantId, tableId, token }: DiningPro
             })),
             notes: cart.notes
         };
-        
+
         const order = await api.createOrder(apiConfig, payload);
         setCurrentOrder(order);
         clearCart();
-        
+
         // Refresh bill after order
         refreshBill();
-        
+
         return order;
     }, [cart, apiConfig, clearCart]);
-    
+
     // Service Request Functions
     const callWaiter = useCallback(async (message?: string): Promise<ServiceRequest> => {
         return api.createServiceRequest(apiConfig, 'waiter', message);
     }, [apiConfig]);
-    
+
     const requestBill = useCallback(async (): Promise<ServiceRequest> => {
         return api.createServiceRequest(apiConfig, 'bill');
     }, [apiConfig]);
-    
+
     // Bill Functions
     const refreshBill = useCallback(async () => {
         try {
@@ -178,36 +178,40 @@ export function DiningProvider({ children, tenantId, tableId, token }: DiningPro
             console.error('Error fetching bill:', err);
         }
     }, [apiConfig]);
-    
+
     const value: DiningContextType = {
+        // Config
+        apiConfig,
+
         // Session
         session,
         isLoading,
         error,
-        
+
         // Menu
         menu,
-        
+
         // Cart
         cart,
         addToCart,
         removeFromCart,
         updateCartItemQuantity,
         clearCart,
-        
+
         // Orders
         submitOrder,
         currentOrder,
-        
+
         // Service Requests
         callWaiter,
         requestBill,
-        
+
         // Bill
         bill,
         refreshBill
     };
-    
+
+
     return (
         <DiningContext.Provider value={value}>
             {children}

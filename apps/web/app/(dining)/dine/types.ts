@@ -135,30 +135,39 @@ export interface Bill {
     payment_methods: string[];
 }
 
+export interface DiningApiConfig {
+    tenantId: string;
+    tableId: string;
+    token: string;
+}
+
 export interface DiningContextType {
+    // Config
+    apiConfig: DiningApiConfig;
+
     // Session
     session: TableSession | null;
     isLoading: boolean;
     error: string | null;
-    
+
     // Menu
     menu: PublicMenu | null;
-    
+
     // Cart
     cart: Cart;
     addToCart: (item: MenuItem, quantity: number, modifiers: SelectedModifier[], notes?: string) => void;
     removeFromCart: (cartItemId: string) => void;
     updateCartItemQuantity: (cartItemId: string, quantity: number) => void;
     clearCart: () => void;
-    
+
     // Orders
     submitOrder: () => Promise<OrderResponse>;
     currentOrder: OrderResponse | null;
-    
+
     // Service Requests
     callWaiter: (message?: string) => Promise<ServiceRequest>;
     requestBill: () => Promise<ServiceRequest>;
-    
+
     // Bill
     bill: Bill | null;
     refreshBill: () => Promise<void>;

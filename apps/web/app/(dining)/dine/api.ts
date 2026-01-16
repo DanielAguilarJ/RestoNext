@@ -13,7 +13,7 @@ interface DiningApiConfig {
 
 class DiningApiError extends Error {
     status: number;
-    
+
     constructor(message: string, status: number) {
         super(message);
         this.name = 'DiningApiError';
@@ -27,17 +27,17 @@ async function diningRequest<T>(
     options: RequestInit = {}
 ): Promise<T> {
     const url = `${API_BASE_URL}/dining/${config.tenantId}/table/${config.tableId}${endpoint}?token=${config.token}`;
-    
+
     const headers: HeadersInit = {
         'Content-Type': 'application/json',
         ...options.headers,
     };
-    
+
     const response = await fetch(url, {
         ...options,
         headers,
     });
-    
+
     if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
         throw new DiningApiError(
@@ -45,11 +45,11 @@ async function diningRequest<T>(
             response.status
         );
     }
-    
+
     if (response.status === 204) {
         return {} as T;
     }
-    
+
     return response.json();
 }
 
@@ -77,7 +77,7 @@ export async function validateToken(
     token: string
 ): Promise<{ valid: boolean; session?: TableSession; error?: string }> {
     const url = `${API_BASE_URL}/dining/validate-token?tenant_id=${tenantId}&table_id=${tableId}&token=${token}`;
-    
+
     const response = await fetch(url);
     return response.json();
 }
@@ -157,6 +157,38 @@ export async function getActiveServiceRequests(config: DiningApiConfig): Promise
 
 export async function getBill(config: DiningApiConfig): Promise<Bill> {
     return diningRequest<Bill>(config, '/bill');
+}
+
+// ============================================
+// AI Upselling API
+// ============================================
+
+interface CartItemSimple {
+    name: string;
+    quantity: number;
+}
+
+interface UpsellSuggestion {
+    id: string;
+    name: string;
+    price: number;
+    image_url?: string;
+    reason: string;
+}
+
+interface UpsellResponse {
+    suggestions: UpsellSuggestion[];
+    source: 'ai' | 'random';
+}
+
+export async function getUpsellSuggestions(
+    config: DiningApiConfig,
+    cartItems: CartItemSimple[]
+): Promise<UpsellResponse> {
+    return diningRequest<UpsellResponse>(config, '/suggest-upsell', {
+        method: 'POST',
+        body: JSON.stringify({ cart_items: cartItems }),
+    });
 }
 
 // ============================================

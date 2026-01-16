@@ -262,3 +262,33 @@ class QRCodeResponse(BaseModel):
     token_expires_at: Optional[datetime] = None
     # For generating QR image
     qr_data: str  # Raw data to encode
+
+
+# ============================================
+# AI Upselling Schemas
+# ============================================
+
+class CartItemSimple(BaseModel):
+    """Simplified cart item for upsell request"""
+    name: str
+    quantity: int = 1
+
+
+class UpsellRequest(BaseModel):
+    """Request for AI upselling suggestions"""
+    cart_items: List[CartItemSimple]
+
+
+class UpsellSuggestion(BaseModel):
+    """Single upsell suggestion"""
+    id: str
+    name: str
+    price: float
+    image_url: Optional[str] = None
+    reason: str  # e.g., "Perfecto maridaje con tu taco"
+
+
+class UpsellResponse(BaseModel):
+    """Response with AI-generated upsell suggestions"""
+    suggestions: List[UpsellSuggestion]
+    source: str = "ai"  # "ai" or "random" (fallback)

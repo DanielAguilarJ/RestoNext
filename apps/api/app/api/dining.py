@@ -22,6 +22,7 @@ from sqlalchemy.orm import selectinload
 
 from app.core.database import get_db
 from app.core.websocket_manager import ws_manager
+from app.core.rate_limiter import RateLimiter, get_service_request_limiter
 from app.models.models import (
     Tenant, Table, TableStatus, 
     Order, OrderItem, OrderStatus, OrderSource, OrderItemStatus,
@@ -35,8 +36,11 @@ from app.schemas.dining_schemas import (
     ServiceRequestCreate, ServiceRequestResponse, ActiveServiceRequests,
     TableSessionInfo, TableTokenValidation,
     BillPublic, BillItemPublic,
-    OrderStatusPublic
+    OrderStatusPublic,
+    UpsellRequest, UpsellResponse, UpsellSuggestion
 )
+from app.services.ai_service import AIService
+
 
 router = APIRouter(prefix="/dining", tags=["Self-Service Dining"])
 
@@ -518,8 +522,10 @@ async def get_order_status(
 async def create_service_request(
     request_data: ServiceRequestCreate,
     ctx: TableContext = Depends(get_current_table),
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
+    _rate_limit: None = Depends(get_service_request_limiter())
 ):
+
     """
     Create a service request (call waiter, request bill, etc.)
     
@@ -786,3 +792,77 @@ async def validate_table_token(
             valid=False,
             error=e.detail
         )
+
+
+# ============================================
+# AI Upselling Endpoint
+# ============================================
+
+@router.post("/{tenant_id}/table/{table_id}/suggest-upsell", response_model=UpsellResponse)
+async def suggest_upsell(
+    request_data: UpsellRequest,
+    ctx: TableContext = Depends(get_current_table),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Get AI-powered upselling suggestions based on cart contents.
+    
+    Analyzes the current cart and recommends complementary items
+    from the menu that would pair well with the customer's order.
+    
+    Returns 2 suggestions with appetizing reasons in Spanish.
+    """
+    # Fetch all available menu items for this tenant
+    result = await db.execute(
+        select(MenuCategory)
+        .where(
+            and_(
+                MenuCategory.tenant_id == ctx.tenant_id,
+                MenuCategory.is_active == True
+            )
+        )
+        .options(selectinload(MenuCategory.items))
+    )
+    categories = result.scalars().all()
+    
+    # Build list of available menu items
+    available_items = []
+    cart_item_names = [item.name for item in request_data.cart_items]
+    
+    for cat in categories:
+        for item in cat.items:
+            if item.is_available and item.name not in cart_item_names:
+                available_items.append({
+                    "id": str(item.id),
+                    "name": item.name,
+                    "description": item.description,
+                    "price": item.price,
+                    "category": cat.name,
+                    "image_url": item.image_url
+                })
+    
+    if not available_items:
+        return UpsellResponse(suggestions=[], source="empty_menu")
+    
+    # Get AI suggestions
+    ai_service = AIService()
+    suggestions = await ai_service.suggest_upsell(
+        cart_items=cart_item_names,
+        available_menu_items=available_items,
+        restaurant_type=ctx.tenant.trade_name or ctx.tenant.name,
+        max_suggestions=2
+    )
+    
+    return UpsellResponse(
+        suggestions=[
+            UpsellSuggestion(
+                id=s.get("id"),
+                name=s.get("name"),
+                price=s.get("price", 0),
+                image_url=s.get("image_url"),
+                reason=s.get("reason", "Sugerencia del chef")
+            )
+            for s in suggestions
+        ],
+        source="ai" if ai_service.api_key else "random"
+    )

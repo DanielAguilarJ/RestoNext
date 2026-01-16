@@ -30,8 +30,10 @@ from app.api.reservations import router as reservations_router
 from app.api.promotions import router as promotions_router
 from app.api.menu import router as menu_router
 from app.api.dining import router as dining_router
+from app.api.admin_tables import router as admin_tables_router
 
 settings = get_settings()
+
 
 
 @asynccontextmanager
@@ -88,6 +90,8 @@ app.include_router(promotions_router, prefix="/api/promotions", tags=["Promotion
 app.include_router(menu_router, prefix="/api", tags=["Menu"])
 # Public dining endpoints (no /api prefix - consumer facing)
 app.include_router(dining_router, prefix="/api", tags=["Self-Service Dining"])
+# Admin endpoints for table management
+app.include_router(admin_tables_router, prefix="/api", tags=["Admin - Tables"])
 
 
 # ============================================
