@@ -695,6 +695,7 @@ export interface CashShift {
     cash_sales: number;
     card_sales: number;
     total_drops: number;
+    total_tips: number;  // Total tips collected during shift
     expected_cash: number;
     transactions_count: number;
 }
@@ -703,6 +704,7 @@ export interface CashTransaction {
     id: string;
     type: string;
     amount: number;
+    tip_amount: number;  // Tip for this transaction
     payment_method?: string;
     order_id?: string;
     notes?: string;
@@ -752,6 +754,22 @@ export const cashierApi = {
      */
     getTransactions: async (): Promise<{ transactions: CashTransaction[] }> => {
         return apiRequest('/shift/transactions');
+    },
+
+    /**
+     * Record a sale transaction with optional tip
+     */
+    recordSale: async (data: {
+        order_id: string;
+        amount: number;
+        tip_amount?: number;
+        payment_method: 'cash' | 'card' | 'transfer';
+        reference?: string;
+    }): Promise<CashTransaction> => {
+        return apiRequest<CashTransaction>('/shift/sale', {
+            method: 'POST',
+            body: JSON.stringify(data),
+        });
     }
 };
 

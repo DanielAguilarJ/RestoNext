@@ -353,6 +353,7 @@ export default function CashierPage() {
                         opening_amount: shift.opening_amount,
                         cash_sales: shift.cash_sales,
                         total_drops: shift.total_drops,
+                        total_tips: shift.total_tips || 0,
                         expected_cash: shift.expected_cash
                     }}
                     onCloseShift={async (data) => {

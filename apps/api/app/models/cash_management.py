@@ -89,6 +89,9 @@ class CashShift(Base):
     # Drops (sangrías) - total removed during shift
     total_drops: Mapped[float] = mapped_column(Float, default=0.0)
     
+    # Tips collected during shift
+    total_tips: Mapped[float] = mapped_column(Float, default=0.0)
+    
     # Closing values (set when shift is closed)
     expected_cash: Mapped[float] = mapped_column(Float, default=0.0)   # Calculated
     real_cash: Mapped[float] = mapped_column(Float, default=0.0)       # Counted by cashier
@@ -160,6 +163,9 @@ class CashTransaction(Base):
     order_id: Mapped[Optional[uuid.UUID]] = mapped_column(
         UUID(as_uuid=True), ForeignKey("orders.id"), nullable=True
     )
+    
+    # Tip amount for this transaction (recorded during payment)
+    tip_amount: Mapped[float] = mapped_column(Float, default=0.0)
     
     notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)

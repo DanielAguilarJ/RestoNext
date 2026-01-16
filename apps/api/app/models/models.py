@@ -63,6 +63,14 @@ class RouteDestination(str, enum.Enum):
     BAR = "bar"
 
 
+class PrinterTarget(str, enum.Enum):
+    """Printer routing targets for ticket splitting"""
+    KITCHEN = "kitchen"     # Main kitchen printer
+    BAR = "bar"             # Bar/drinks printer
+    DESSERT = "dessert"     # Dessert station printer
+    MAIN = "main"           # Main/cashier printer (receipts)
+
+
 class CFDIStatus(str, enum.Enum):
     PENDING = "pending"
     STAMPED = "stamped"
@@ -289,7 +297,11 @@ class User(Base):
 # ============================================
 
 class MenuCategory(Base):
-    """Menu categories (Appetizers, Main Courses, Drinks, etc.)"""
+    """Menu categories (Appetizers, Main Courses, Drinks, etc.)
+    
+    printer_target: Determines which printer station receives tickets for this category.
+    Example: 'Bebidas' category -> BAR printer, 'Postres' -> DESSERT printer
+    """
     __tablename__ = "menu_categories"
     
     id: Mapped[uuid.UUID] = mapped_column(
@@ -303,6 +315,11 @@ class MenuCategory(Base):
     description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     sort_order: Mapped[int] = mapped_column(Integer, default=0)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    
+    # Printer routing - determines which station printer receives tickets
+    printer_target: Mapped[PrinterTarget] = mapped_column(
+        SQLEnum(PrinterTarget), default=PrinterTarget.KITCHEN
+    )
     
     # Relationships
     tenant: Mapped["Tenant"] = relationship(back_populates="menu_categories")

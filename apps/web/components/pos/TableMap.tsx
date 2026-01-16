@@ -28,10 +28,17 @@ import { TableStatus } from '../../../../packages/shared/src/index';
 interface TableMapProps {
     onTableSelect?: (tableId: string) => void;
     autoRefresh?: boolean;
+    /** Tables with pending offline orders */
+    pendingTables?: Set<string>;
 }
 
-export function TableMap({ onTableSelect, autoRefresh = true }: TableMapProps) {
+export function TableMap({ onTableSelect, autoRefresh = true, pendingTables = new Set() }: TableMapProps) {
     const { tables, selectedTable, setSelectedTable, setTables, updateTableStatus } = usePOSStore();
+
+    // Check if table has pending sync (offline queued orders)
+    const hasPendingSync = (tableId: string) => {
+        return pendingTables.has(tableId);
+    };
 
     // Real-time table status via WebSocket
     const { pendingBillRequests, isConnected } = useServiceSocket({
@@ -131,6 +138,14 @@ export function TableMap({ onTableSelect, autoRefresh = true }: TableMapProps) {
                     badge: "bg-gradient-to-r from-purple-500 to-violet-500 text-white",
                     glow: "",
                 };
+            case "pending_sync":
+                return {
+                    container: "bg-gradient-to-br from-orange-50 to-amber-100 dark:from-orange-900/40 dark:to-amber-800/40 border-orange-400 hover:border-orange-500 shadow-orange-500/30 animate-pulse-soft",
+                    icon: "text-orange-600",
+                    text: "text-orange-700 dark:text-orange-400",
+                    badge: "bg-gradient-to-r from-orange-500 to-amber-500 text-white",
+                    glow: "ring-4 ring-orange-400/50 ring-offset-2",
+                };
             default:
                 return {
                     container: "bg-gray-50 border-gray-300",
@@ -154,6 +169,8 @@ export function TableMap({ onTableSelect, autoRefresh = true }: TableMapProps) {
                 return "Llama Mesero";
             case "reserved":
                 return "Reservada";
+            case "pending_sync":
+                return "Sincronizando";
             default:
                 return status;
         }
@@ -171,6 +188,8 @@ export function TableMap({ onTableSelect, autoRefresh = true }: TableMapProps) {
                 return <Bell className="w-4 h-4" />;
             case "reserved":
                 return <Clock className="w-4 h-4" />;
+            case "pending_sync":
+                return <Zap className="w-4 h-4" />;
             default:
                 return null;
         }
@@ -228,9 +247,11 @@ export function TableMap({ onTableSelect, autoRefresh = true }: TableMapProps) {
             {/* Table Grid */}
             <div className="grid grid-cols-3 gap-4">
                 {tables.map((table, index) => {
-                    const effectiveStatus = getEffectiveStatus(table);
+                    const tableId = (table as any).$id || table.id;
+                    const isPendingSync = hasPendingSync(tableId);
+                    const effectiveStatus = isPendingSync ? 'pending_sync' : getEffectiveStatus(table);
                     const styles = getStatusStyles(effectiveStatus);
-                    const isUrgent = effectiveStatus === 'bill_requested' || effectiveStatus === 'service_requested';
+                    const isUrgent = effectiveStatus === 'bill_requested' || effectiveStatus === 'service_requested' || isPendingSync;
 
                     return (
                         <button

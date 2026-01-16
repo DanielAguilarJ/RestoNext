@@ -9,18 +9,22 @@
  * - Live table status updates  
  * - Feature gating based on subscription plan
  * - Fat-finger optimized touch targets
+ * - Shift enforcement (must have active shift to operate)
+ * - Offline-first order submission with sync queue
  */
 
 import { useEffect, useState, useCallback } from "react";
+import { useRouter } from "next/navigation";
 import { TableMap } from "@/components/pos/TableMap";
 import { ServiceRequestPopup } from "@/components/pos/ServiceRequestPopup";
+import { ShiftRequiredModal } from "@/components/pos/ShiftRequiredModal";
 import { usePOSStore } from "@/lib/store";
 import {
     ArrowLeft, ShoppingCart, Sparkles, Send, SplitSquareHorizontal,
-    Wifi, WifiOff, Bell
+    Wifi, WifiOff, Bell, CloudOff, RefreshCw
 } from "lucide-react";
 import Link from "next/link";
-import { menuApi, ordersApi } from "@/lib/api";
+import { menuApi, ordersApi, cashierApi } from "@/lib/api";
 import { MenuCategory, MenuItem } from "../../../../packages/shared/src/index";
 import { CategorySelector } from "@/components/pos/CategorySelector";
 import { MenuGrid } from "@/components/pos/MenuGrid";
@@ -33,8 +37,19 @@ import {
     ServiceRequestNotification,
     TableStatusNotification
 } from "@/hooks/useServiceSocket";
+import { isOnline, onNetworkChange, syncQueueManager, PendingOrderData } from "@/lib/offline";
+
+// ============================================
+// Types
+// ============================================
+
+interface PendingSyncInfo {
+    count: number;
+    isSyncing: boolean;
+}
 
 export default function POSPage() {
+    const router = useRouter();
     const { selectedTable, setSelectedTable, cart, addToCart, removeFromCart, incrementCartItem, clearCart, updateTableStatus } =
         usePOSStore();
     const [categories, setCategories] = useState<MenuCategory[]>([]);
@@ -44,6 +59,19 @@ export default function POSPage() {
     const [isLoading, setIsLoading] = useState(true);
     const [isSending, setIsSending] = useState(false);
     const { toast, toasts, removeToast, success, error: toastError } = useToast();
+
+    // ============================================
+    // Shift Enforcement State
+    // ============================================
+    const [hasActiveShift, setHasActiveShift] = useState<boolean | null>(null); // null = loading
+    const [showShiftModal, setShowShiftModal] = useState(false);
+
+    // ============================================
+    // Offline Sync State
+    // ============================================
+    const [networkOnline, setNetworkOnline] = useState(true);
+    const [pendingSync, setPendingSync] = useState<PendingSyncInfo>({ count: 0, isSyncing: false });
+    const [pendingTables, setPendingTables] = useState<Set<string>>(new Set());
 
     // Feature access for plan-based gating (TODO: Get from auth context)
     const currentPlan = 'professional' as const; // This should come from user context
@@ -81,7 +109,129 @@ export default function POSPage() {
     // Total pending alerts count
     const totalAlerts = pendingRequests.length + pendingBillRequests.length;
 
-    // Fetch Menu Data
+    // ============================================
+    // Shift Validation on Mount
+    // ============================================
+    useEffect(() => {
+        async function checkShift() {
+            try {
+                const shift = await cashierApi.getCurrentShift();
+                if (shift && shift.shift_id) {
+                    setHasActiveShift(true);
+                    setShowShiftModal(false);
+                } else {
+                    setHasActiveShift(false);
+                    setShowShiftModal(true);
+                }
+            } catch (error: any) {
+                // No shift found or 404 - need to open one
+                console.log('[POS] No active shift found');
+                setHasActiveShift(false);
+                setShowShiftModal(true);
+            }
+        }
+        checkShift();
+    }, []);
+
+    // ============================================
+    // Network Status & Sync Queue Monitoring
+    // ============================================
+    useEffect(() => {
+        // Initial network state
+        setNetworkOnline(isOnline());
+
+        // Subscribe to network changes
+        const unsubscribeNetwork = onNetworkChange((online) => {
+            setNetworkOnline(online);
+
+            if (online) {
+                toast({
+                    title: "📶 Conexión Restaurada",
+                    description: "Sincronizando pedidos pendientes...",
+                    duration: 3000,
+                });
+                // Trigger sync when back online
+                triggerSync();
+            } else {
+                toast({
+                    title: "📵 Sin Conexión",
+                    description: "Los pedidos se guardarán localmente",
+                    variant: "destructive",
+                    duration: 4000,
+                });
+            }
+        });
+
+        // Subscribe to sync events
+        const unsubscribeSync = syncQueueManager.subscribe((event, data) => {
+            if (event === 'sync_started') {
+                setPendingSync(prev => ({ ...prev, isSyncing: true }));
+            }
+            if (event === 'sync_completed') {
+                setPendingSync({ count: 0, isSyncing: false });
+                // Clear pending tables visual state
+                setPendingTables(new Set());
+
+                if (data?.success > 0) {
+                    success(
+                        "✅ Sincronización Completa",
+                        `${data.success} pedido(s) sincronizado(s)`
+                    );
+                }
+            }
+            if (event === 'sync_failed') {
+                setPendingSync(prev => ({ ...prev, isSyncing: false }));
+            }
+            if (event === 'order_queued') {
+                updatePendingCount();
+            }
+        });
+
+        // Initial pending count
+        updatePendingCount();
+
+        return () => {
+            unsubscribeNetwork();
+            unsubscribeSync();
+        };
+    }, [toast, success]);
+
+    const updatePendingCount = async () => {
+        try {
+            const count = await syncQueueManager.getPendingCount();
+            setPendingSync(prev => ({ ...prev, count }));
+        } catch (error) {
+            console.error('[POS] Failed to get pending count:', error);
+        }
+    };
+
+    const triggerSync = async () => {
+        if (pendingSync.isSyncing) return;
+
+        try {
+            await syncQueueManager.processQueue();
+        } catch (error) {
+            console.error('[POS] Sync failed:', error);
+        }
+    };
+
+    // ============================================
+    // Shift Handling
+    // ============================================
+    const handleOpenShift = async (openingAmount: number) => {
+        await cashierApi.openShift(openingAmount);
+        setHasActiveShift(true);
+        setShowShiftModal(false);
+        success("✅ Turno Abierto", `Fondo inicial: $${openingAmount.toFixed(2)}`);
+    };
+
+    const handleGoToCashier = () => {
+        router.push('/cashier');
+    };
+
+    // ============================================
+    // Menu Loading
+    // ============================================
     useEffect(() => {
         async function loadMenu() {
             try {
@@ -136,33 +286,50 @@ export default function POSPage() {
         });
     };
 
+    // ============================================
+    // RESILIENT SEND ORDER (Offline-First)
+    // ============================================
     const handleSendOrder = async () => {
         if (!selectedTable) return;
         setIsSending(true);
 
-        try {
-            const items = cart.map(item => ({
+        const orderData: PendingOrderData = {
+            table_id: selectedTable.id,
+            items: cart.map(item => ({
                 menu_item_id: item.menu_item_id,
-                menu_item_name: item.menu_item_name,
                 quantity: item.quantity,
-                unit_price: item.price,
-                selected_modifiers: item.selected_modifiers,
-                status: 'pending' as const
-            }));
+                notes: undefined,
+                modifiers: item.selected_modifiers?.map(m => m.option) || [],
+            })),
+        };
 
-            await ordersApi.create({
+        try {
+            // Attempt online submission first
+            const result = await ordersApi.create({
                 table_id: selectedTable.id,
-                items: items.map(item => ({
-                    menu_item_id: item.menu_item_id,
-                    quantity: item.quantity,
-                    modifiers: item.selected_modifiers,
-                })),
+                items: orderData.items,
             });
 
-            success(
-                "¡Pedido Enviado!",
-                `Pedido para Mesa ${selectedTable?.number} confirmado`
-            );
+            // Check if it was an offline optimistic response
+            if ('is_offline' in result && result.is_offline) {
+                // Order was queued locally
+                setPendingTables(prev => new Set(prev).add(selectedTable.id));
+
+                toast({
+                    title: "📱 Orden Guardada Localmente",
+                    description: `Pedido para Mesa ${selectedTable?.number} guardado. Se enviará cuando haya conexión.`,
+                    duration: 4000,
+                });
+
+                // Update pending count
+                updatePendingCount();
+            } else {
+                // Success - online order created
+                success(
+                    "¡Pedido Enviado!",
+                    `Pedido para Mesa ${selectedTable?.number} confirmado`
+                );
+            }
 
             // Update table status to occupied
             updateTableStatus(selectedTable.id, 'occupied');
@@ -172,10 +339,37 @@ export default function POSPage() {
             setShowCart(false);
         } catch (error) {
             console.error("Failed to send order:", error);
-            toastError(
-                "Error",
-                "No se pudo enviar el pedido. Intente nuevamente."
-            );
+
+            // OFFLINE FALLBACK: Save to local queue
+            if (!isOnline()) {
+                try {
+                    await syncQueueManager.enqueue(orderData);
+                    setPendingTables(prev => new Set(prev).add(selectedTable.id));
+
+                    toast({
+                        title: "📱 Sin Conexión - Orden Guardada",
+                        description: `Pedido para Mesa ${selectedTable?.number} guardado en dispositivo. Se sincronizará automáticamente.`,
+                        duration: 5000,
+                    });
+
+                    updatePendingCount();
+                    updateTableStatus(selectedTable.id, 'occupied');
+                    clearCart();
+                    setSelectedTable(null);
+                    setShowCart(false);
+                } catch (queueError) {
+                    console.error("Failed to queue order:", queueError);
+                    toastError(
+                        "Error",
+                        "No se pudo guardar el pedido. Intente nuevamente."
+                    );
+                }
+            } else {
+                toastError(
+                    "Error",
+                    "No se pudo enviar el pedido. Intente nuevamente."
+                );
+            }
         } finally {
             setIsSending(false);
         }
@@ -189,7 +383,52 @@ export default function POSPage() {
         }
     };
 
+    // ============================================
+    // Pending Sync Status Badge Component
+    // ============================================
+    const PendingSyncBadge = () => {
+        if (pendingSync.count === 0 && networkOnline) return null;
+
+        return (
+            <div className={`
+                flex items-center gap-2 px-3 py-2 rounded-xl
+                ${networkOnline
+                    ? 'bg-amber-500/10 text-amber-400'
+                    : 'bg-red-500/10 text-red-400'
+                }
+            `}>
+                {pendingSync.isSyncing ? (
+                    <RefreshCw className="w-4 h-4 animate-spin" />
+                ) : (
+                    <CloudOff className="w-4 h-4" />
+                )}
+                <span className="font-medium text-sm">
+                    {pendingSync.isSyncing
+                        ? 'Sincronizando...'
+                        : `${pendingSync.count} pendiente(s)`
+                    }
+                </span>
+            </div>
+        );
+    };
+
+    // ============================================
+    // Show Loading While Checking Shift
+    // ============================================
+    if (hasActiveShift === null) {
+        return (
+            <div className="min-h-screen bg-mesh flex items-center justify-center">
+                <div className="text-center space-y-4">
+                    <div className="w-12 h-12 border-4 border-brand-500/30 border-t-brand-500 rounded-full animate-spin mx-auto" />
+                    <p className="text-gray-400">Verificando turno...</p>
+                </div>
+            </div>
+        );
+    }
+
+    // ============================================
     // Table Selection View
+    // ============================================
     if (!selectedTable) {
         return (
             <div className="min-h-screen bg-mesh relative overflow-hidden">
@@ -211,8 +450,11 @@ export default function POSPage() {
                         </div>
                     </div>
 
-                    {/* Connection & Alert Status */}
+                    {/* Connection, Sync & Alert Status */}
                     <div className="flex items-center gap-3">
+                        {/* Pending Sync Badge */}
+                        <PendingSyncBadge />
+
                         {/* Pending Alerts Badge */}
                         {totalAlerts > 0 && (
                             <div className="relative">
@@ -227,21 +469,28 @@ export default function POSPage() {
                         {/* Connection Status */}
                         <div className={`
                             p-2 rounded-xl transition-colors
-                            ${isConnected
+                            ${isConnected && networkOnline
                                 ? 'text-green-600 bg-green-500/10'
                                 : 'text-red-600 bg-red-500/10 animate-pulse'
                             }
                         `}>
-                            {isConnected ? <Wifi className="w-5 h-5" /> : <WifiOff className="w-5 h-5" />}
+                            {isConnected && networkOnline ? <Wifi className="w-5 h-5" /> : <WifiOff className="w-5 h-5" />}
                         </div>
                     </div>
                 </header>
 
-                <TableMap />
+                <TableMap pendingTables={pendingTables} />
 
                 {/* Service Request Popup - Shows bill & service requests */}
                 <ServiceRequestPopup
                     onTableSelect={handleTableSelectFromPopup}
+                />
+
+                {/* Shift Required Modal */}
+                <ShiftRequiredModal
+                    isOpen={showShiftModal}
+                    onOpenShift={handleOpenShift}
+                    onGoToCashier={handleGoToCashier}
                 />
 
                 <ToastContainer toasts={toasts} onClose={removeToast} />
@@ -249,7 +498,9 @@ export default function POSPage() {
         );
     }
 
+    // ============================================
     // Order View (Table Selected)
+    // ============================================
     return (
         <div className="min-h-screen bg-mesh relative flex flex-col overflow-hidden">
             {/* Background Orbs */}
@@ -268,7 +519,7 @@ export default function POSPage() {
                     <div>
                         <h1 className="text-xl font-bold flex items-center gap-2">
                             Mesa {selectedTable.number}
-                            <span className={`w-2 h-2 rounded-full animate-pulse ${isConnected ? 'bg-green-500' : 'bg-red-500'
+                            <span className={`w-2 h-2 rounded-full animate-pulse ${isConnected && networkOnline ? 'bg-green-500' : 'bg-red-500'
                                 }`} />
                         </h1>
                         <p className="text-sm text-gray-500">Nuevo pedido</p>
@@ -276,6 +527,14 @@ export default function POSPage() {
                 </div>
 
                 <div className="flex items-center gap-2">
+                    {/* Offline indicator */}
+                    {!networkOnline && (
+                        <div className="px-3 py-2 bg-amber-500/10 text-amber-400 rounded-xl flex items-center gap-2">
+                            <CloudOff className="w-4 h-4" />
+                            <span className="text-sm font-medium">Modo Offline</span>
+                        </div>
+                    )}
+
                     {/* Advanced Features with Feature Gating */}
 
                     {/* Divide Bill - Only Professional+ */}
@@ -357,6 +616,13 @@ export default function POSPage() {
             {/* Service Request Popup - Shows even when taking order */}
             <ServiceRequestPopup
                 onTableSelect={handleTableSelectFromPopup}
+            />
+
+            {/* Shift Required Modal */}
+            <ShiftRequiredModal
+                isOpen={showShiftModal}
+                onOpenShift={handleOpenShift}
+                onGoToCashier={handleGoToCashier}
             />
 
             <ToastContainer toasts={toasts} onClose={removeToast} />

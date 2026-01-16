@@ -26,6 +26,7 @@ interface ShiftSummary {
     opening_amount: number;
     cash_sales: number;
     total_drops: number;
+    total_tips: number;  // Total tips collected during shift
     expected_cash: number;
 }
 
@@ -38,6 +39,7 @@ interface CloseShiftResponse {
     total_sales: number;
     cash_sales: number;
     card_sales: number;
+    total_tips: number;  // Total tips collected during shift
     expected_cash: number;
     real_cash: number;
     difference: number;
@@ -289,6 +291,10 @@ export function CashClosureModal({ isOpen, onClose, shiftSummary, onCloseShift }
                                     <span className="text-emerald-400">+${shiftSummary.cash_sales.toLocaleString('es-MX')}</span>
                                 </div>
                                 <div className="flex justify-between py-2 border-b border-gray-700">
+                                    <span className="text-gray-400">Propinas</span>
+                                    <span className="text-amber-400">+${(shiftSummary.total_tips || 0).toLocaleString('es-MX')}</span>
+                                </div>
+                                <div className="flex justify-between py-2 border-b border-gray-700">
                                     <span className="text-gray-400">Retiros (Sangrías)</span>
                                     <span className="text-red-400">-${shiftSummary.total_drops.toLocaleString('es-MX')}</span>
                                 </div>
@@ -303,7 +309,7 @@ export function CashClosureModal({ isOpen, onClose, shiftSummary, onCloseShift }
                                 <div className="flex justify-between py-3 text-xl">
                                     <span className="font-bold text-white">Diferencia</span>
                                     <span className={`font-bold ${difference === 0 ? 'text-emerald-400' :
-                                            difference > 0 ? 'text-blue-400' : 'text-red-400'
+                                        difference > 0 ? 'text-blue-400' : 'text-red-400'
                                         }`}>
                                         {difference >= 0 ? '+' : ''}${difference.toLocaleString('es-MX', { minimumFractionDigits: 2 })}
                                         <span className="text-sm ml-2">
@@ -330,10 +336,10 @@ export function CashClosureModal({ isOpen, onClose, shiftSummary, onCloseShift }
                     {step === 4 && result && (
                         <div className="space-y-6 text-center">
                             <div className={`w-20 h-20 mx-auto rounded-full flex items-center justify-center ${result.status === 'exact' ? 'bg-emerald-500/20' :
-                                    result.status === 'over' ? 'bg-blue-500/20' : 'bg-red-500/20'
+                                result.status === 'over' ? 'bg-blue-500/20' : 'bg-red-500/20'
                                 }`}>
                                 <ClipboardCheck className={`w-10 h-10 ${result.status === 'exact' ? 'text-emerald-400' :
-                                        result.status === 'over' ? 'text-blue-400' : 'text-red-400'
+                                    result.status === 'over' ? 'text-blue-400' : 'text-red-400'
                                     }`} />
                             </div>
 
@@ -360,6 +366,10 @@ export function CashClosureModal({ isOpen, onClose, shiftSummary, onCloseShift }
                                 <div className="flex justify-between">
                                     <span className="text-gray-400">Tarjeta:</span>
                                     <span className="text-white">${result.card_sales.toLocaleString('es-MX')}</span>
+                                </div>
+                                <div className="flex justify-between">
+                                    <span className="text-gray-400">Propinas:</span>
+                                    <span className="text-amber-400">${(result.total_tips || 0).toLocaleString('es-MX')}</span>
                                 </div>
                             </div>
 
