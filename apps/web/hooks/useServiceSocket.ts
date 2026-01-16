@@ -2,6 +2,12 @@
  * Service Request WebSocket Hook
  * Connects to FastAPI WebSocket for real-time service request notifications
  * Used by POS/Waiter stations to receive call-waiter, bill requests, etc.
+ * 
+ * Events handled:
+ * - service_request:new - Customer calls waiter
+ * - table:bill_requested - Customer requests bill from QR
+ * - table:new_self_service_order - New order from tablet
+ * - table:status_changed - Table status updates
  */
 
 import { useEffect, useRef, useCallback, useState } from 'react';
@@ -15,7 +21,25 @@ export interface ServiceRequestNotification {
     table_id: string;
     request_type: 'waiter' | 'bill' | 'refill' | 'custom';
     message?: string;
+    order_total?: number;
+    order_id?: string;
     created_at: string;
+}
+
+export interface BillRequestNotification {
+    table_id: string;
+    table_number: number;
+    order_id: string;
+    total: number;
+    items_count: number;
+    created_at: string;
+}
+
+export interface TableStatusNotification {
+    table_id: string;
+    table_number: number;
+    status: 'free' | 'occupied' | 'bill_requested' | 'service_requested';
+    previous_status?: string;
 }
 
 export interface SelfServiceOrderNotification {
@@ -29,6 +53,8 @@ export interface SelfServiceOrderNotification {
 interface UseServiceSocketOptions {
     autoConnect?: boolean;
     onServiceRequest?: (request: ServiceRequestNotification) => void;
+    onBillRequest?: (request: BillRequestNotification) => void;
+    onTableStatusChange?: (status: TableStatusNotification) => void;
     onSelfServiceOrder?: (order: SelfServiceOrderNotification) => void;
     playSound?: boolean;
 }
@@ -39,13 +65,17 @@ interface UseServiceSocketReturn {
     connect: () => void;
     disconnect: () => void;
     pendingRequests: ServiceRequestNotification[];
+    pendingBillRequests: BillRequestNotification[];
     clearRequest: (requestId: string) => void;
+    clearBillRequest: (tableId: string) => void;
 }
 
 export function useServiceSocket(options: UseServiceSocketOptions = {}): UseServiceSocketReturn {
     const {
         autoConnect = true,
         onServiceRequest,
+        onBillRequest,
+        onTableStatusChange,
         onSelfServiceOrder,
         playSound = true
     } = options;
@@ -53,26 +83,33 @@ export function useServiceSocket(options: UseServiceSocketOptions = {}): UseServ
     const [isConnected, setIsConnected] = useState(false);
     const [connectionError, setConnectionError] = useState<string | null>(null);
     const [pendingRequests, setPendingRequests] = useState<ServiceRequestNotification[]>([]);
+    const [pendingBillRequests, setPendingBillRequests] = useState<BillRequestNotification[]>([]);
 
     const wsRef = useRef<WebSocket | null>(null);
     const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
     const pingIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
-    // Play notification sound
-    const playNotificationSound = useCallback((type: 'waiter' | 'bill' | 'order') => {
+    // Play notification sound with vibration
+    const playNotificationSound = useCallback((type: 'waiter' | 'bill' | 'order' | 'alert') => {
         if (!playSound) return;
-        
+
         try {
             // Different sounds for different request types
             const soundMap: Record<string, string> = {
                 'waiter': '/sounds/bell.mp3',
                 'bill': '/sounds/cash.mp3',
-                'order': '/sounds/new-order.mp3'
+                'order': '/sounds/new-order.mp3',
+                'alert': '/sounds/urgent.mp3'
             };
-            
+
             const audio = new Audio(soundMap[type] || '/sounds/notification.mp3');
-            audio.volume = 0.7;
+            audio.volume = type === 'bill' ? 0.9 : 0.7; // Bill requests are louder
             audio.play().catch(console.error);
+
+            // Trigger vibration on mobile for bill requests
+            if (type === 'bill' && 'vibrate' in navigator) {
+                navigator.vibrate([200, 100, 200]);
+            }
         } catch (error) {
             console.error('Error playing notification sound:', error);
         }
@@ -84,38 +121,77 @@ export function useServiceSocket(options: UseServiceSocketOptions = {}): UseServ
             if (event.data === 'pong') return;
 
             const data = JSON.parse(event.data);
-            
+
             switch (data.event) {
                 case 'service_request:new':
                     const request: ServiceRequestNotification = data.payload;
-                    
+
                     // Add to pending requests
                     setPendingRequests(prev => {
                         // Avoid duplicates
                         if (prev.some(r => r.id === request.id)) return prev;
                         return [...prev, request];
                     });
-                    
+
                     // Play appropriate sound
                     playNotificationSound(request.request_type === 'bill' ? 'bill' : 'waiter');
-                    
+
                     // Callback
                     onServiceRequest?.(request);
                     break;
 
                 case 'service_request:resolved':
                     // Remove from pending requests
-                    setPendingRequests(prev => 
+                    setPendingRequests(prev =>
                         prev.filter(r => r.id !== data.payload.id)
                     );
                     break;
 
+                case 'table:bill_requested':
+                    // Nuevo: Manejo de solicitud de cuenta desde QR
+                    const billRequest: BillRequestNotification = {
+                        table_id: data.payload.table_id,
+                        table_number: data.payload.table_number,
+                        order_id: data.payload.order_id,
+                        total: data.payload.total,
+                        items_count: data.payload.items_count || 0,
+                        created_at: data.payload.created_at || new Date().toISOString()
+                    };
+
+                    // Add to pending bill requests
+                    setPendingBillRequests(prev => {
+                        if (prev.some(r => r.table_id === billRequest.table_id)) return prev;
+                        return [...prev, billRequest];
+                    });
+
+                    // Play urgent bill sound
+                    playNotificationSound('bill');
+
+                    // Callback
+                    onBillRequest?.(billRequest);
+                    break;
+
+                case 'table:status_changed':
+                    // Mesa cambió de estado (sincronización en tiempo real)
+                    const statusChange: TableStatusNotification = data.payload;
+
+                    // If status is no longer bill_requested or service_requested, remove from pending
+                    if (statusChange.status === 'free' || statusChange.status === 'occupied') {
+                        setPendingBillRequests(prev =>
+                            prev.filter(r => r.table_id !== statusChange.table_id)
+                        );
+                    }
+
+                    // Callback
+                    onTableStatusChange?.(statusChange);
+                    break;
+
                 case 'table:new_self_service_order':
                     const order: SelfServiceOrderNotification = data.payload;
-                    
+
                     // Play order sound
                     playNotificationSound('order');
-                    
+
                     // Callback
                     onSelfServiceOrder?.(order);
                     break;
@@ -131,7 +207,7 @@ export function useServiceSocket(options: UseServiceSocketOptions = {}): UseServ
         } catch (error) {
             console.error('Error parsing service WebSocket message:', error);
         }
-    }, [onServiceRequest, onSelfServiceOrder, playNotificationSound]);
+    }, [onServiceRequest, onBillRequest, onTableStatusChange, onSelfServiceOrder, playNotificationSound]);
 
     // Connect to WebSocket
     const connect = useCallback(() => {
@@ -208,6 +284,11 @@ export function useServiceSocket(options: UseServiceSocketOptions = {}): UseServ
         setPendingRequests(prev => prev.filter(r => r.id !== requestId));
     }, []);
 
+    // Clear a bill request (mark as handled)
+    const clearBillRequest = useCallback((tableId: string) => {
+        setPendingBillRequests(prev => prev.filter(r => r.table_id !== tableId));
+    }, []);
+
     // Auto-connect on mount
     useEffect(() => {
         if (autoConnect) {
@@ -224,6 +305,8 @@ export function useServiceSocket(options: UseServiceSocketOptions = {}): UseServ
         connect,
         disconnect,
         pendingRequests,
-        clearRequest
+        pendingBillRequests,
+        clearRequest,
+        clearBillRequest
     };
 }

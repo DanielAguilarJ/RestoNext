@@ -196,7 +196,7 @@ export interface Recipe extends AppwriteDocument {
 // Tables
 // ============================================
 
-export type TableStatus = 'free' | 'occupied' | 'reserved' | 'bill_requested';
+export type TableStatus = 'free' | 'occupied' | 'reserved' | 'bill_requested' | 'service_requested';
 
 export interface Table extends AppwriteDocument {
   restaurant_id: string;
