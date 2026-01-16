@@ -65,6 +65,31 @@ async def generate_suggestions(
     return await recommender.generate_procurement_suggestions(forecast_days)
 
 
+@router.post(
+    "/generate-proposal",
+    response_model=List[PurchaseOrderResponse],
+    status_code=status.HTTP_201_CREATED,
+    summary="Generate and CREATE draft Purchase Orders using AI"
+)
+async def generate_proposal(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_manager_or_admin)
+):
+    """
+    Orchestrate the full AI procurement flow:
+    1. Forecast demand
+    2. Create draft Purchase Orders automatically
+    3. Return created orders
+    """
+    recommender = PurchaseRecommender(db, current_user.tenant_id)
+    created_orders = await recommender.generate_ai_purchase_proposal(user_id=current_user.id)
+    
+    # Reload to ensure relationships (like supplier) are loaded for response
+    # (The convert_suggestion_to_order method typically reloads, but let's be safe if we need to conform to _build_order_response)
+    
+    return [_build_order_response(o) for o in created_orders]
+
+
 # ============================================
 # Purchase Orders
 # ============================================

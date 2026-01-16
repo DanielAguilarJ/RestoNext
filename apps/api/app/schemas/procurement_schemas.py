@@ -200,3 +200,6 @@ class ProcurementSuggestionsResponse(BaseModel):
     suggestions_by_supplier: List[SupplierSuggestion]
     unassigned_ingredients: List[IngredientSuggestion] = []  # No preferred supplier
     total_estimated_cost: float
+    # AI Context
+    ai_analysis_summary: Optional[str] = None
+    ai_demand_multiplier: float = 1.0

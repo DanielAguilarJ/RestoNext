@@ -41,6 +41,9 @@ class Settings(BaseSettings):
     finkok_password: str = ""
     finkok_sandbox: bool = True
     
+    # AI Integration
+    perplexity_api_key: str = ""
+    
     class Config:
         env_file = ".env"
         env_file_encoding = "utf-8"

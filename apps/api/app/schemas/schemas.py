@@ -391,6 +391,7 @@ class TableResponse(BaseModel):
     status: str
     pos_x: int
     pos_y: int
+    adjacent_table_ids: List[str] = []
     
     class Config:
         from_attributes = True
@@ -438,6 +439,7 @@ class CustomerResponse(BaseModel):
     loyalty_points: float
     wallet_balance: float
     tier_level: str
+    annual_spend: float = 0.0
     addresses: List[dict]
     created_at: datetime
     
@@ -467,6 +469,7 @@ class ReservationCreate(BaseModel):
     table_id: Optional[UUID] = None
     reservation_time: datetime
     party_size: int = 2
+    deposit_amount: float = 0.0
     notes: Optional[str] = None
     tags: List[str] = []
 
@@ -478,6 +481,9 @@ class ReservationResponse(BaseModel):
     reservation_time: datetime
     party_size: int
     status: str
+    deposit_amount: float = 0.0
+    payment_status: str = "pending"
+    additional_table_ids: Optional[List[str]] = []
     notes: Optional[str]
     tags: List[str]
     

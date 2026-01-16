@@ -119,10 +119,22 @@ class ReservationStatus(str, enum.Enum):
     NO_SHOW = "no_show"
 
 
-class LoyaltyTransactionType(str, enum.Enum):
     EARN = "earn"       # Acumular
     REDEEM = "redeem"   # Redimir
     ADJUSTMENT = "adjustment"
+    EXPIRED = "expired" # Puntos expirados
+
+
+class LoyaltyTier(str, enum.Enum):
+    BASE = "Base"
+    GOLD = "Gold"
+    PLATINUM = "Platinum"
+
+
+class ReservationPaymentStatus(str, enum.Enum):
+    PENDING = "pending"
+    PAID = "paid"
+    REFUNDED = "refunded"
 
 
 
@@ -338,6 +350,9 @@ class Table(Base):
     # Position for visual table map (grid coordinates)
     pos_x: Mapped[int] = mapped_column(Integer, default=0)
     pos_y: Mapped[int] = mapped_column(Integer, default=0)
+
+    # For Table Merging in Reservations
+    adjacent_table_ids: Mapped[Optional[list]] = mapped_column(JSONB, default=list)  # List of UUIDs
     
     __table_args__ = (
         UniqueConstraint('tenant_id', 'number', name='uq_tenant_table_number'),
@@ -1130,7 +1145,8 @@ class Customer(Base):
     # Loyalty Status
     loyalty_points: Mapped[float] = mapped_column(Float, default=0.0)
     wallet_balance: Mapped[float] = mapped_column(Float, default=0.0) # Monedero electrónico
-    tier_level: Mapped[str] = mapped_column(String(32), default="Bronze")
+    tier_level: Mapped[LoyaltyTier] = mapped_column(SQLEnum(LoyaltyTier), default=LoyaltyTier.BASE)
+    annual_spend: Mapped[float] = mapped_column(Float, default=0.0) # Gasto anual acumulado
     
     notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
@@ -1163,6 +1179,10 @@ class LoyaltyTransaction(Base):
     type: Mapped[LoyaltyTransactionType] = mapped_column(SQLEnum(LoyaltyTransactionType))
     points_delta: Mapped[float] = mapped_column(Float, default=0.0)
     amount_delta: Mapped[float] = mapped_column(Float, default=0.0)
+
+    # Expiration logic
+    expires_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    processed_for_expiry: Mapped[bool] = mapped_column(Boolean, default=False)
     
     description: Mapped[str] = mapped_column(String(255))
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
@@ -1216,11 +1236,19 @@ class Reservation(Base):
     table_id: Mapped[Optional[uuid.UUID]] = mapped_column(
         UUID(as_uuid=True), ForeignKey("tables.id"), nullable=True
     )
+    # For merged tables (e.g. Table 1 + Table 2)
+    additional_table_ids: Mapped[Optional[list]] = mapped_column(JSONB, default=list)
     
     reservation_time: Mapped[datetime] = mapped_column(DateTime, nullable=False)
     party_size: Mapped[int] = mapped_column(Integer, default=2)
     status: Mapped[ReservationStatus] = mapped_column(
         SQLEnum(ReservationStatus), default=ReservationStatus.PENDING
+    )
+
+    # Deposits & Payments
+    deposit_amount: Mapped[float] = mapped_column(Float, default=0.0)
+    payment_status: Mapped[ReservationPaymentStatus] = mapped_column(
+        SQLEnum(ReservationPaymentStatus), default=ReservationPaymentStatus.PENDING
     )
     
     notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)

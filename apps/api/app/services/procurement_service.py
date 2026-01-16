@@ -22,8 +22,9 @@ from sqlalchemy.orm import selectinload
 from app.models.models import (
     Ingredient, Supplier, SupplierIngredient,
     PurchaseOrder, PurchaseOrderItem, PurchaseOrderStatus,
-    InventoryTransaction, TransactionType
+    InventoryTransaction, TransactionType, Tenant
 )
+from app.services.ai_service import AIService
 from app.schemas.procurement_schemas import (
     IngredientSuggestion, SupplierSuggestion, ProcurementSuggestionsResponse,
     PurchaseOrderCreate, PurchaseOrderItemCreate
@@ -90,12 +91,36 @@ class PurchaseRecommender:
         )
         ingredients = list(ingredients_result.scalars().all())
         
+        # AI Context Analysis
+        ai_service = AIService()
+        ai_multiplier = 1.0
+        ai_summary = "AI Analysis Skipped (Default)"
+        
+        try:
+            # 1.1 Fetch Location
+            tenant_res = await self.db.execute(select(Tenant).where(Tenant.id == self.tenant_id))
+            tenant = tenant_res.scalar_one_or_none()
+            location = "Mexico, CDMX"
+            if tenant and tenant.fiscal_address and isinstance(tenant.fiscal_address, dict):
+                location = f"{tenant.fiscal_address.get('city', '')}, {tenant.fiscal_address.get('state', '')}"
+            
+            # 1.2 Call Perplexity
+            start_date = datetime.utcnow().date()
+            end_date = start_date + timedelta(days=forecast_days)
+            ai_analysis = await ai_service.analyze_demand_context(location, start_date, end_date)
+            
+            ai_multiplier = ai_analysis.demand_multiplier
+            ai_summary = ai_analysis.analysis_summary
+            
+        except Exception as e:
+            logger.error(f"AI Service Failed: {e}")
+
         # Build suggestions
         suggestions_by_supplier: Dict[UUID, SupplierSuggestion] = {}
         unassigned_ingredients: List[IngredientSuggestion] = []
         
         for ingredient in ingredients:
-            suggestion = await self._analyze_ingredient(ingredient, forecast_days)
+            suggestion = await self._analyze_ingredient(ingredient, forecast_days, ai_multiplier)
             
             if suggestion is None:
                 continue  # No shortage predicted
@@ -123,13 +148,16 @@ class PurchaseRecommender:
             forecast_days=forecast_days,
             suggestions_by_supplier=list(suggestions_by_supplier.values()),
             unassigned_ingredients=unassigned_ingredients,
-            total_estimated_cost=total_cost
+            total_estimated_cost=total_cost,
+            ai_analysis_summary=ai_summary,
+            ai_demand_multiplier=ai_multiplier
         )
     
     async def _analyze_ingredient(
         self,
         ingredient: Ingredient,
-        forecast_days: int
+        forecast_days: int,
+        demand_multiplier: float = 1.0
     ) -> Optional[IngredientSuggestion]:
         """
         Analyze a single ingredient and return suggestion if needed.
@@ -152,6 +180,9 @@ class PurchaseRecommender:
                 p.get("predicted_demand", 0) 
                 for p in forecast["predictions"]
             )
+        
+        # Apply AI Multiplier
+        predicted_demand = predicted_demand * demand_multiplier
         
         # Calculate projected stock
         projected_stock = ingredient.stock_quantity - predicted_demand
@@ -303,7 +334,43 @@ class PurchaseRecommender:
             .where(PurchaseOrder.id == purchase_order.id)
         )
         
-        return result.scalar_one()
+    async def generate_ai_purchase_proposal(self, user_id: Optional[UUID] = None) -> List[PurchaseOrder]:
+        """
+        AI ORCHESTRATOR:
+        1. Forecasts demand (Prophet).
+        2. Identifies shortages.
+        3. Generates Purchase Orders (Draft) automatically.
+        """
+        # 1. Get Suggestions
+        response = await self.generate_procurement_suggestions(forecast_days=7)
+        
+        created_orders = []
+        
+        # 2. Process Supplier Batches
+        for supplier_batch in response.suggestions_by_supplier:
+            items_to_create = []
+            
+            for sug in supplier_batch.items:
+                # Convert IngredientSuggestion to PurchaseOrderItemCreate
+                items_to_create.append(PurchaseOrderItemCreate(
+                    ingredient_id=sug.ingredient_id,
+                    quantity_ordered=sug.suggested_quantity,
+                    unit_cost=sug.unit_cost,
+                    notes="AI Generated based on demand forecast"
+                ))
+            
+            if items_to_create:
+                # 3. Create Draft PO
+                po = await self.convert_suggestion_to_order(
+                    supplier_id=supplier_batch.supplier_id,
+                    items=items_to_create,
+                    user_id=user_id,
+                    expected_delivery=datetime.utcnow() + timedelta(days=1), # Default 1 day lead time
+                    notes="Auto-generated by Smart Procurement AI"
+                )
+                created_orders.append(po)
+                
+        return created_orders
 
 
 async def receive_purchase_order(
