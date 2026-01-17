@@ -369,6 +369,14 @@
   animation: ripple 0.6s ease-out forwards;
 }
 
+.animate-shimmer-slide {
+  animation: shimmer-slide 1.5s ease-in-out infinite;
+}
+
+.animate-pulse-subtle {
+  animation: pulse-subtle 2s ease-in-out infinite;
+}
+
 @keyframes pulse-soft {
 
   0%,
