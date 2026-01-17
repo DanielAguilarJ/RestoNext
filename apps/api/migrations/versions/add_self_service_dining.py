@@ -52,6 +52,17 @@ def table_exists(table_name: str) -> bool:
     return result.fetchone() is not None
 
 
+def index_exists(table_name: str, index_name: str) -> bool:
+    """Check if an index exists"""
+    conn = op.get_bind()
+    result = conn.execute(sa.text(f"""
+        SELECT 1 FROM pg_indexes 
+        WHERE tablename = '{table_name}' 
+        AND indexname = '{index_name}'
+    """))
+    return result.fetchone() is not None
+
+
 def upgrade() -> None:
     # ============================================
     # Update Tables table with QR token fields
@@ -176,24 +187,39 @@ def upgrade() -> None:
 
 def downgrade() -> None:
     # Drop service_requests table
-    op.drop_index('ix_service_requests_tenant_created')
-    op.drop_index('ix_service_requests_table_status')
-    op.drop_table('service_requests')
+    if table_exists('service_requests'):
+        if index_exists('service_requests', 'ix_service_requests_tenant_created'):
+            op.drop_index('ix_service_requests_tenant_created', table_name='service_requests')
+        if index_exists('service_requests', 'ix_service_requests_table_status'):
+            op.drop_index('ix_service_requests_table_status', table_name='service_requests')
+        op.drop_table('service_requests')
     
     # Drop enum types
-    op.execute('DROP TYPE servicerequeststatus')
-    op.execute('DROP TYPE servicerequesttype')
+    if enum_exists('servicerequeststatus'):
+        op.execute('DROP TYPE IF EXISTS servicerequeststatus')
+    if enum_exists('servicerequesttype'):
+        op.execute('DROP TYPE IF EXISTS servicerequesttype')
     
     # Remove order columns
-    op.drop_column('orders', 'guest_session_id')
-    op.drop_column('orders', 'order_source')
-    op.execute('DROP TYPE ordersource')
+    if column_exists('orders', 'guest_session_id'):
+        op.drop_column('orders', 'guest_session_id')
+    if column_exists('orders', 'order_source'):
+        op.drop_column('orders', 'order_source')
+    
+    if enum_exists('ordersource'):
+        op.execute('DROP TYPE IF EXISTS ordersource')
     
     # Remove tenant columns
-    op.drop_column('tenants', 'features_config')
-    op.drop_column('tenants', 'active_addons')
+    if column_exists('tenants', 'features_config'):
+        op.drop_column('tenants', 'features_config')
+    if column_exists('tenants', 'active_addons'):
+        op.drop_column('tenants', 'active_addons')
     
     # Remove table columns
-    op.drop_column('tables', 'self_service_enabled')
-    op.drop_column('tables', 'qr_token_generated_at')
-    op.drop_column('tables', 'qr_secret_token')
+    if column_exists('tables', 'self_service_enabled'):
+        op.drop_column('tables', 'self_service_enabled')
+    if column_exists('tables', 'qr_token_generated_at'):
+        op.drop_column('tables', 'qr_token_generated_at')
+    if column_exists('tables', 'qr_secret_token'):
+        op.drop_column('tables', 'qr_secret_token')
+
