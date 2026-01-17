@@ -206,13 +206,15 @@ let dbPromise: Promise<RxRestoDatabase> | null = null;
 export const createDatabase = async (): Promise<RxRestoDatabase> => {
     console.log('Database creation started...');
     let storage: any = getRxStorageDexie();
-    if (process.env.NODE_ENV === 'development') {
-        storage = wrappedValidateAjvStorage({ storage });
-    }
+    // Use validation only if we are sure AJV is available, disabling for now to fix init hang
+    // if (process.env.NODE_ENV === 'development') {
+    //     storage = wrappedValidateAjvStorage({ storage });
+    // }
 
     const db = await createRxDatabase<RxRestoCollections>({
         name: 'restonext_db',
-        storage
+        storage,
+        ignoreDuplicate: true
     });
     console.log('Database created');
 
