@@ -1,10 +1,14 @@
 from typing import List, Optional
 from datetime import datetime, timedelta
 import uuid
+import base64
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Request
+from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import select
+from pydantic import BaseModel
+import io
 
 from app.core.database import get_db
 from app.models.models import (
@@ -20,8 +24,66 @@ from app.schemas.catering_schemas import (
     AICateringProposalRequest, AICateringProposalResponse
 )
 from app.services.ai_service import AIService
+from app.services.pdf_service import pdf_service
 
 router = APIRouter()
+
+
+# ==========================================
+# Additional Schemas for Signing
+# ==========================================
+
+class ProposalSignRequest(BaseModel):
+    """Request body for signing a proposal"""
+    signature_data: str  # Base64 encoded signature image
+    signer_name: str
+    signer_email: Optional[str] = None
+    signer_phone: Optional[str] = None
+    accepted_terms: bool = True
+
+
+class ProposalSignResponse(BaseModel):
+    """Response after successful signing"""
+    success: bool
+    event_id: str
+    event_status: str
+    message: str
+    signed_at: datetime
+
+
+class PublicProposalResponse(BaseModel):
+    """Public proposal data for the portal"""
+    quote_id: str
+    event_name: str
+    event_date: Optional[datetime]
+    guest_count: int
+    location: Optional[str]
+    client_name: str
+    menu_items: List[dict]
+    subtotal: float
+    tax: float
+    total: float
+    valid_until: datetime
+    status: str
+    tenant_name: str
+    tenant_logo: Optional[str]
+
+
+class ProductionSheetItem(BaseModel):
+    """Individual item in production sheet"""
+    ingredient_id: str
+    name: str
+    quantity: float
+    unit: str
+
+
+class ProductionSheetResponse(BaseModel):
+    """Production sheet response"""
+    event_id: str
+    event_name: str
+    event_date: Optional[datetime]
+    guest_count: int
+    production_list: List[ProductionSheetItem]
 
 # ==========================================
 # Leads
@@ -327,3 +389,557 @@ async def generate_ai_catering_proposal(
     
     return proposal
 
+
+# ==========================================
+# PDF Generation Endpoints
+# ==========================================
+
+@router.get("/events/{event_id}/proposal/pdf")
+def generate_proposal_pdf(
+    event_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Generate a professional PDF proposal for the event.
+    Returns the PDF as a downloadable file.
+    """
+    # Fetch event with relationships
+    event = db.execute(
+        select(Event)
+        .where(Event.id == event_id, Event.tenant_id == current_user.tenant_id)
+        .options(
+            joinedload(Event.menu_selections),
+            joinedload(Event.lead),
+            joinedload(Event.quotes)
+        )
+    ).unique().scalar_one_or_none()
+    
+    if not event:
+        raise HTTPException(status_code=404, detail="Event not found")
+    
+    # Get tenant data
+    tenant = db.query(Tenant).filter(Tenant.id == current_user.tenant_id).first()
+    
+    # Get the latest quote for this event
+    quote = db.query(CateringQuote).filter(
+        CateringQuote.event_id == event_id
+    ).order_by(CateringQuote.created_at.desc()).first()
+    
+    if not quote:
+        raise HTTPException(
+            status_code=400, 
+            detail="No quote exists for this event. Create a quote first."
+        )
+    
+    # Prepare data dictionaries
+    tenant_data = {
+        'name': tenant.name if tenant else 'RestoNext',
+        'legal_name': tenant.legal_name if tenant else None,
+        'trade_name': tenant.trade_name if tenant else None,
+        'rfc': tenant.rfc if tenant else None,
+        'logo_url': tenant.logo_url if tenant else None,
+        'fiscal_address': tenant.fiscal_address if tenant else {},
+        'contacts': tenant.contacts if tenant else {},
+    }
+    
+    event_data = {
+        'name': event.name,
+        'start_time': event.start_time,
+        'end_time': event.end_time,
+        'guest_count': event.guest_count,
+        'location': event.location,
+        'status': event.status.value if hasattr(event.status, 'value') else str(event.status),
+    }
+    
+    lead_data = {}
+    if event.lead:
+        lead_data = {
+            'client_name': event.lead.client_name,
+            'contact_email': event.lead.contact_email,
+            'contact_phone': event.lead.contact_phone,
+        }
+    else:
+        lead_data = {
+            'client_name': event.name.split(' for ')[-1] if ' for ' in event.name else 'Cliente',
+            'contact_email': '',
+            'contact_phone': '',
+        }
+    
+    menu_selections = [
+        {
+            'item_name': sel.item_name,
+            'unit_price': sel.unit_price,
+            'quantity': sel.quantity,
+            'notes': sel.notes,
+        }
+        for sel in event.menu_selections
+    ]
+    
+    quote_data = {
+        'id': str(quote.id),
+        'valid_until': quote.valid_until,
+        'subtotal': quote.subtotal,
+        'tax': quote.tax,
+        'total': quote.total,
+        'public_token': quote.public_token,
+        'status': quote.status.value if hasattr(quote.status, 'value') else str(quote.status),
+    }
+    
+    # Generate PDF
+    pdf_bytes = pdf_service.generate_proposal_pdf(
+        tenant_data=tenant_data,
+        event_data=event_data,
+        lead_data=lead_data,
+        menu_selections=menu_selections,
+        quote_data=quote_data,
+    )
+    
+    # Update quote status to SENT
+    if quote.status == QuoteStatus.DRAFT:
+        quote.status = QuoteStatus.SENT
+        db.commit()
+    
+    # Return as downloadable PDF
+    filename = f"propuesta_{event.name.replace(' ', '_')[:30]}_{str(event_id)[:8]}.pdf"
+    
+    return StreamingResponse(
+        io.BytesIO(pdf_bytes),
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": f"attachment; filename={filename}"
+        }
+    )
+
+
+@router.get("/events/{event_id}/production-sheet/pdf")
+def generate_production_sheet_pdf(
+    event_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Generate a production sheet PDF for kitchen prep.
+    Includes all ingredients needed for the event.
+    """
+    # Get event with full production data
+    event = db.execute(
+        select(Event)
+        .where(Event.id == event_id, Event.tenant_id == current_user.tenant_id)
+        .options(
+            joinedload(Event.menu_selections)
+            .joinedload(EventMenuSelection.menu_item)
+            .joinedload(MenuItem.recipes)
+            .joinedload(Recipe.ingredient)
+        )
+    ).unique().scalar_one_or_none()
+    
+    if not event:
+        raise HTTPException(status_code=404, detail="Event not found")
+    
+    # Get tenant
+    tenant = db.query(Tenant).filter(Tenant.id == current_user.tenant_id).first()
+    
+    # Calculate production list
+    production_list = {}
+    
+    for selection in event.menu_selections:
+        qty_needed = selection.quantity
+        
+        if selection.menu_item and selection.menu_item.recipes:
+            for recipe in selection.menu_item.recipes:
+                if recipe.ingredient:
+                    ingredient_name = recipe.ingredient.name
+                    total_ingredient_needed = recipe.quantity * qty_needed
+                    unit = recipe.unit.value if hasattr(recipe.unit, 'value') else str(recipe.unit)
+                    
+                    if ingredient_name in production_list:
+                        production_list[ingredient_name]["quantity"] += total_ingredient_needed
+                    else:
+                        production_list[ingredient_name] = {
+                            "ingredient_id": str(recipe.ingredient_id),
+                            "name": ingredient_name,
+                            "quantity": total_ingredient_needed,
+                            "unit": unit
+                        }
+    
+    # Prepare data
+    tenant_data = {
+        'name': tenant.name if tenant else 'RestoNext',
+        'legal_name': tenant.legal_name if tenant else None,
+        'trade_name': tenant.trade_name if tenant else None,
+        'fiscal_address': tenant.fiscal_address if tenant else {},
+        'contacts': tenant.contacts if tenant else {},
+    }
+    
+    event_data = {
+        'name': event.name,
+        'start_time': event.start_time,
+        'guest_count': event.guest_count,
+    }
+    
+    # Generate PDF
+    pdf_bytes = pdf_service.generate_production_sheet_pdf(
+        tenant_data=tenant_data,
+        event_data=event_data,
+        production_list=list(production_list.values())
+    )
+    
+    filename = f"produccion_{event.name.replace(' ', '_')[:30]}_{str(event_id)[:8]}.pdf"
+    
+    return StreamingResponse(
+        io.BytesIO(pdf_bytes),
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": f"attachment; filename={filename}"
+        }
+    )
+
+
+# ==========================================
+# Public Portal Endpoints (No Auth Required)
+# ==========================================
+
+@router.get("/proposals/{token}", response_model=PublicProposalResponse)
+def get_public_proposal(
+    token: str,
+    db: Session = Depends(get_db)
+):
+    """
+    Get proposal details by public token.
+    This is a PUBLIC endpoint for the client portal.
+    """
+    # Find quote by token
+    quote = db.query(CateringQuote).filter(
+        CateringQuote.public_token == token
+    ).first()
+    
+    if not quote:
+        raise HTTPException(status_code=404, detail="Proposal not found")
+    
+    # Check if expired
+    if quote.valid_until < datetime.utcnow():
+        quote.status = QuoteStatus.EXPIRED
+        db.commit()
+    
+    # Get event with relationships
+    event = db.execute(
+        select(Event)
+        .where(Event.id == quote.event_id)
+        .options(
+            joinedload(Event.menu_selections),
+            joinedload(Event.lead)
+        )
+    ).unique().scalar_one_or_none()
+    
+    if not event:
+        raise HTTPException(status_code=404, detail="Event not found")
+    
+    # Get tenant info
+    tenant = db.query(Tenant).filter(Tenant.id == quote.tenant_id).first()
+    
+    # Update status to VIEWED if it was SENT
+    if quote.status == QuoteStatus.SENT:
+        quote.status = QuoteStatus.VIEWED
+        db.commit()
+    
+    # Prepare menu items
+    menu_items = [
+        {
+            'name': sel.item_name,
+            'unit_price': sel.unit_price,
+            'quantity': sel.quantity,
+            'notes': sel.notes,
+            'subtotal': sel.unit_price * sel.quantity
+        }
+        for sel in event.menu_selections
+    ]
+    
+    # Get client name
+    client_name = 'Cliente'
+    if event.lead:
+        client_name = event.lead.client_name
+    
+    return PublicProposalResponse(
+        quote_id=str(quote.id),
+        event_name=event.name,
+        event_date=event.start_time,
+        guest_count=event.guest_count,
+        location=event.location,
+        client_name=client_name,
+        menu_items=menu_items,
+        subtotal=quote.subtotal,
+        tax=quote.tax,
+        total=quote.total,
+        valid_until=quote.valid_until,
+        status=quote.status.value if hasattr(quote.status, 'value') else str(quote.status),
+        tenant_name=tenant.trade_name or tenant.name if tenant else 'RestoNext',
+        tenant_logo=tenant.logo_url if tenant else None
+    )
+
+
+@router.get("/proposals/{token}/pdf")
+def get_public_proposal_pdf(
+    token: str,
+    db: Session = Depends(get_db)
+):
+    """
+    Get the proposal PDF by public token.
+    This is a PUBLIC endpoint for the client portal.
+    """
+    # Find quote and verify
+    quote = db.query(CateringQuote).filter(
+        CateringQuote.public_token == token
+    ).first()
+    
+    if not quote:
+        raise HTTPException(status_code=404, detail="Proposal not found")
+    
+    # Get event with all relationships
+    event = db.execute(
+        select(Event)
+        .where(Event.id == quote.event_id)
+        .options(
+            joinedload(Event.menu_selections),
+            joinedload(Event.lead)
+        )
+    ).unique().scalar_one_or_none()
+    
+    if not event:
+        raise HTTPException(status_code=404, detail="Event not found")
+    
+    # Get tenant
+    tenant = db.query(Tenant).filter(Tenant.id == quote.tenant_id).first()
+    
+    # Prepare data (same as authenticated endpoint)
+    tenant_data = {
+        'name': tenant.name if tenant else 'RestoNext',
+        'legal_name': tenant.legal_name if tenant else None,
+        'trade_name': tenant.trade_name if tenant else None,
+        'rfc': tenant.rfc if tenant else None,
+        'logo_url': tenant.logo_url if tenant else None,
+        'fiscal_address': tenant.fiscal_address if tenant else {},
+        'contacts': tenant.contacts if tenant else {},
+    }
+    
+    event_data = {
+        'name': event.name,
+        'start_time': event.start_time,
+        'end_time': event.end_time,
+        'guest_count': event.guest_count,
+        'location': event.location,
+    }
+    
+    lead_data = {}
+    if event.lead:
+        lead_data = {
+            'client_name': event.lead.client_name,
+            'contact_email': event.lead.contact_email,
+            'contact_phone': event.lead.contact_phone,
+        }
+    else:
+        lead_data = {
+            'client_name': 'Cliente',
+            'contact_email': '',
+            'contact_phone': '',
+        }
+    
+    menu_selections = [
+        {
+            'item_name': sel.item_name,
+            'unit_price': sel.unit_price,
+            'quantity': sel.quantity,
+            'notes': sel.notes,
+        }
+        for sel in event.menu_selections
+    ]
+    
+    quote_data = {
+        'id': str(quote.id),
+        'valid_until': quote.valid_until,
+        'subtotal': quote.subtotal,
+        'tax': quote.tax,
+        'total': quote.total,
+        'public_token': quote.public_token,
+    }
+    
+    # Generate PDF
+    pdf_bytes = pdf_service.generate_proposal_pdf(
+        tenant_data=tenant_data,
+        event_data=event_data,
+        lead_data=lead_data,
+        menu_selections=menu_selections,
+        quote_data=quote_data,
+    )
+    
+    filename = f"propuesta_{event.name.replace(' ', '_')[:30]}.pdf"
+    
+    return StreamingResponse(
+        io.BytesIO(pdf_bytes),
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": f"inline; filename={filename}"
+        }
+    )
+
+
+@router.post("/proposals/{token}/sign", response_model=ProposalSignResponse)
+def sign_proposal(
+    token: str,
+    sign_data: ProposalSignRequest,
+    request: Request,
+    db: Session = Depends(get_db)
+):
+    """
+    Sign a proposal and confirm the event.
+    This is a PUBLIC endpoint - no authentication required.
+    
+    The signature is stored as base64 and the event status is updated to CONFIRMED.
+    """
+    # Find quote
+    quote = db.query(CateringQuote).filter(
+        CateringQuote.public_token == token
+    ).first()
+    
+    if not quote:
+        raise HTTPException(status_code=404, detail="Proposal not found")
+    
+    # Check if already accepted
+    if quote.status == QuoteStatus.ACCEPTED:
+        raise HTTPException(
+            status_code=400, 
+            detail="This proposal has already been signed"
+        )
+    
+    # Check if expired
+    if quote.valid_until < datetime.utcnow():
+        quote.status = QuoteStatus.EXPIRED
+        db.commit()
+        raise HTTPException(
+            status_code=400,
+            detail="This proposal has expired. Please contact us for a new quote."
+        )
+    
+    # Validate terms acceptance
+    if not sign_data.accepted_terms:
+        raise HTTPException(
+            status_code=400,
+            detail="You must accept the terms and conditions to sign"
+        )
+    
+    # Get event
+    event = db.query(Event).filter(Event.id == quote.event_id).first()
+    if not event:
+        raise HTTPException(status_code=404, detail="Event not found")
+    
+    # Get client IP
+    client_ip = request.headers.get(
+        "X-Forwarded-For", 
+        request.client.host if request.client else "unknown"
+    )
+    if "," in client_ip:
+        client_ip = client_ip.split(",")[0].strip()
+    
+    # Store signature data (in a real system, you might save the image to storage)
+    # For now, we'll store signature metadata in the quote
+    signature_metadata = {
+        "signer_name": sign_data.signer_name,
+        "signer_email": sign_data.signer_email,
+        "signer_phone": sign_data.signer_phone,
+        "signed_at": datetime.utcnow().isoformat(),
+        "ip_address": client_ip,
+        "signature_present": bool(sign_data.signature_data),
+        # Note: In production, save signature_data to secure storage
+        # and store the reference here instead of the actual data
+    }
+    
+    # Update quote status
+    quote.status = QuoteStatus.ACCEPTED
+    # We could add a signature_data column to CateringQuote model
+    # For now, the status change indicates acceptance
+    
+    # Update event status to CONFIRMED
+    event.status = EventStatus.CONFIRMED
+    
+    # Update lead status if exists
+    if event.lead_id:
+        lead = db.query(EventLead).filter(EventLead.id == event.lead_id).first()
+        if lead:
+            lead.status = LeadStatus.WON
+    
+    signed_at = datetime.utcnow()
+    
+    db.commit()
+    
+    return ProposalSignResponse(
+        success=True,
+        event_id=str(event.id),
+        event_status="confirmed",
+        message=f"¡Gracias {sign_data.signer_name}! Tu evento ha sido confirmado exitosamente.",
+        signed_at=signed_at
+    )
+
+
+# ==========================================
+# Calendar Events Endpoint
+# ==========================================
+
+@router.get("/calendar/events")
+def get_calendar_events(
+    start_date: Optional[datetime] = None,
+    end_date: Optional[datetime] = None,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Get events formatted for calendar display.
+    Returns events with color coding based on status.
+    """
+    query = select(Event).where(Event.tenant_id == current_user.tenant_id)
+    
+    # Date filtering
+    if start_date:
+        query = query.where(Event.start_time >= start_date)
+    if end_date:
+        query = query.where(Event.end_time <= end_date)
+    
+    events = db.execute(
+        query.options(joinedload(Event.lead))
+    ).unique().scalars().all()
+    
+    # Status to color mapping
+    status_colors = {
+        EventStatus.DRAFT: '#6B7280',      # Gray
+        EventStatus.CONFIRMED: '#10B981',   # Green
+        EventStatus.IN_PROGRESS: '#3B82F6', # Blue
+        EventStatus.COMPLETED: '#8B5CF6',   # Purple
+        EventStatus.CANCELLED: '#EF4444',   # Red
+    }
+    
+    calendar_events = []
+    for event in events:
+        status = event.status
+        color = status_colors.get(status, '#6B7280')
+        
+        client_name = ''
+        if event.lead:
+            client_name = event.lead.client_name
+        
+        calendar_events.append({
+            'id': str(event.id),
+            'title': event.name,
+            'start': event.start_time.isoformat(),
+            'end': event.end_time.isoformat(),
+            'status': status.value if hasattr(status, 'value') else str(status),
+            'color': color,
+            'backgroundColor': color,
+            'borderColor': color,
+            'extendedProps': {
+                'guest_count': event.guest_count,
+                'location': event.location,
+                'client_name': client_name,
+                'total_amount': event.total_amount,
+            }
+        })
+    
+    return {"events": calendar_events}

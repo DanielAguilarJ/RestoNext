@@ -1268,3 +1268,251 @@ export const onboardingApi = {
     },
 };
 
+// ============================================
+// Catering API
+// ============================================
+
+export interface EventLead {
+    id: string;
+    tenant_id: string;
+    client_name: string;
+    contact_email?: string;
+    contact_phone?: string;
+    event_date?: string;
+    guest_count?: number;
+    event_type?: string;
+    status: string;
+    notes?: string;
+    source?: string;
+    created_at: string;
+    updated_at: string;
+}
+
+export interface CateringEvent {
+    id: string;
+    tenant_id: string;
+    lead_id?: string;
+    name: string;
+    start_time: string;
+    end_time: string;
+    guest_count: number;
+    location?: string;
+    status: string;
+    total_amount: number;
+    created_at: string;
+    updated_at: string;
+    menu_selections: EventMenuItem[];
+}
+
+export interface EventMenuItem {
+    id: string;
+    event_id: string;
+    menu_item_id: string;
+    item_name: string;
+    unit_price: number;
+    quantity: number;
+    notes?: string;
+}
+
+export interface CateringQuote {
+    id: string;
+    event_id: string;
+    valid_until: string;
+    status: string;
+    public_token: string;
+    subtotal: number;
+    tax: number;
+    total: number;
+    created_at: string;
+}
+
+export interface CalendarEvent {
+    id: string;
+    title: string;
+    start: string;
+    end: string;
+    status: string;
+    color: string;
+    backgroundColor: string;
+    borderColor: string;
+    extendedProps: {
+        guest_count: number;
+        location: string | null;
+        client_name: string;
+        total_amount: number;
+    };
+}
+
+export interface ProductionItem {
+    ingredient_id: string;
+    name: string;
+    quantity: number;
+    unit: string;
+}
+
+export interface ProductionSheet {
+    event_id: string;
+    event_name: string;
+    event_date?: string;
+    guest_count: number;
+    production_list: ProductionItem[];
+}
+
+export const cateringApi = {
+    // ==========================================
+    // Leads
+    // ==========================================
+
+    /**
+     * Get all leads
+     */
+    getLeads: async (status?: string): Promise<EventLead[]> => {
+        const query = status ? `?status=${status}` : '';
+        return apiRequest<EventLead[]>(`/catering/leads${query}`);
+    },
+
+    /**
+     * Create a new lead
+     */
+    createLead: async (data: Partial<EventLead>): Promise<EventLead> => {
+        return apiRequest<EventLead>('/catering/leads', {
+            method: 'POST',
+            body: JSON.stringify(data),
+        });
+    },
+
+    /**
+     * Convert lead to event
+     */
+    convertLead: async (leadId: string): Promise<CateringEvent> => {
+        return apiRequest<CateringEvent>(`/catering/leads/${leadId}/convert`, {
+            method: 'POST',
+        });
+    },
+
+    // ==========================================
+    // Events
+    // ==========================================
+
+    /**
+     * Get all events
+     */
+    getEvents: async (): Promise<CateringEvent[]> => {
+        return apiRequest<CateringEvent[]>('/catering/events');
+    },
+
+    /**
+     * Get event by ID
+     */
+    getEvent: async (eventId: string): Promise<CateringEvent> => {
+        return apiRequest<CateringEvent>(`/catering/events/${eventId}`);
+    },
+
+    /**
+     * Create a new event
+     */
+    createEvent: async (data: {
+        lead_id?: string;
+        name: string;
+        start_time: string;
+        end_time: string;
+        guest_count: number;
+        location?: string;
+    }): Promise<CateringEvent> => {
+        return apiRequest<CateringEvent>('/catering/events', {
+            method: 'POST',
+            body: JSON.stringify(data),
+        });
+    },
+
+    /**
+     * Add menu item to event
+     */
+    addMenuItem: async (eventId: string, data: {
+        menu_item_id: string;
+        quantity: number;
+        notes?: string;
+    }): Promise<CateringEvent> => {
+        return apiRequest<CateringEvent>(`/catering/events/${eventId}/items`, {
+            method: 'POST',
+            body: JSON.stringify(data),
+        });
+    },
+
+    /**
+     * Get production list for event
+     */
+    getProductionList: async (eventId: string): Promise<ProductionSheet> => {
+        return apiRequest<ProductionSheet>(`/catering/events/${eventId}/production-list`);
+    },
+
+    // ==========================================
+    // Quotes
+    // ==========================================
+
+    /**
+     * Generate a quote for an event
+     */
+    createQuote: async (eventId: string, validUntil: string): Promise<CateringQuote> => {
+        return apiRequest<CateringQuote>(`/catering/events/${eventId}/quote`, {
+            method: 'POST',
+            body: JSON.stringify({ valid_until: validUntil }),
+        });
+    },
+
+    // ==========================================
+    // Calendar
+    // ==========================================
+
+    /**
+     * Get events for calendar display
+     */
+    getCalendarEvents: async (startDate?: Date, endDate?: Date): Promise<{ events: CalendarEvent[] }> => {
+        const params = new URLSearchParams();
+        if (startDate) params.append('start_date', startDate.toISOString());
+        if (endDate) params.append('end_date', endDate.toISOString());
+
+        const query = params.toString();
+        const endpoint = query ? `/catering/calendar/events?${query}` : '/catering/calendar/events';
+
+        return apiRequest<{ events: CalendarEvent[] }>(endpoint);
+    },
+
+    // ==========================================
+    // PDF Generation
+    // ==========================================
+
+    /**
+     * Get proposal PDF URL for an event
+     */
+    getProposalPdfUrl: (eventId: string): string => {
+        return `${API_BASE_URL}/catering/events/${eventId}/proposal/pdf`;
+    },
+
+    /**
+     * Get production sheet PDF URL for an event
+     */
+    getProductionSheetPdfUrl: (eventId: string): string => {
+        return `${API_BASE_URL}/catering/events/${eventId}/production-sheet/pdf`;
+    },
+
+    // ==========================================
+    // AI Proposal
+    // ==========================================
+
+    /**
+     * Generate AI-powered catering proposal
+     */
+    generateAiProposal: async (data: {
+        event_type: string;
+        guest_count: number;
+        budget_per_person: number;
+        theme: string;
+    }): Promise<{ suggested_menu: Array<Record<string, unknown>>; sales_pitch: string }> => {
+        return apiRequest('/catering/events/ai-proposal', {
+            method: 'POST',
+            body: JSON.stringify(data),
+        });
+    },
+};
+
