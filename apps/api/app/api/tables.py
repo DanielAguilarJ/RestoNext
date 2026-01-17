@@ -14,7 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.database import get_db
 from app.core.security import get_current_user, require_waiter
 from app.models.models import User, Table, Order, OrderStatus, TableStatus
-from app.core.websocket import manager as ws_manager
+from app.core.websocket_manager import ws_manager
 
 router = APIRouter(prefix="/pos/tables", tags=["POS - Tables"])
 
