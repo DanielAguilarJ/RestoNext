@@ -104,9 +104,9 @@ def get_custom_styles():
         fontName='Helvetica-Bold'
     ))
     
-    # Body text
+    # Body text (named CustomBodyText to avoid conflict with built-in BodyText)
     styles.add(ParagraphStyle(
-        name='BodyText',
+        name='CustomBodyText',
         parent=styles['Normal'],
         fontSize=10,
         textColor=PDFColors.TEXT_DARK,
@@ -262,28 +262,28 @@ class PDFService:
         
         info_data = [
             [
-                Paragraph("<b>Cliente:</b>", self.styles['BodyText']),
-                Paragraph(client_name, self.styles['BodyText']),
-                Paragraph("<b>Evento:</b>", self.styles['BodyText']),
-                Paragraph(event_name, self.styles['BodyText']),
+                Paragraph("<b>Cliente:</b>", self.styles['CustomBodyText']),
+                Paragraph(client_name, self.styles['CustomBodyText']),
+                Paragraph("<b>Evento:</b>", self.styles['CustomBodyText']),
+                Paragraph(event_name, self.styles['CustomBodyText']),
             ],
             [
-                Paragraph("<b>Teléfono:</b>", self.styles['BodyText']),
-                Paragraph(client_phone, self.styles['BodyText']),
-                Paragraph("<b>Fecha:</b>", self.styles['BodyText']),
-                Paragraph(event_date_str, self.styles['BodyText']),
+                Paragraph("<b>Teléfono:</b>", self.styles['CustomBodyText']),
+                Paragraph(client_phone, self.styles['CustomBodyText']),
+                Paragraph("<b>Fecha:</b>", self.styles['CustomBodyText']),
+                Paragraph(event_date_str, self.styles['CustomBodyText']),
             ],
             [
-                Paragraph("<b>Email:</b>", self.styles['BodyText']),
-                Paragraph(client_email, self.styles['BodyText']),
-                Paragraph("<b>Hora:</b>", self.styles['BodyText']),
-                Paragraph(event_time_str, self.styles['BodyText']),
+                Paragraph("<b>Email:</b>", self.styles['CustomBodyText']),
+                Paragraph(client_email, self.styles['CustomBodyText']),
+                Paragraph("<b>Hora:</b>", self.styles['CustomBodyText']),
+                Paragraph(event_time_str, self.styles['CustomBodyText']),
             ],
             [
-                Paragraph("<b>Invitados:</b>", self.styles['BodyText']),
-                Paragraph(f"{guest_count} personas", self.styles['BodyText']),
-                Paragraph("<b>Lugar:</b>", self.styles['BodyText']),
-                Paragraph(location or 'Por confirmar', self.styles['BodyText']),
+                Paragraph("<b>Invitados:</b>", self.styles['CustomBodyText']),
+                Paragraph(f"{guest_count} personas", self.styles['CustomBodyText']),
+                Paragraph("<b>Lugar:</b>", self.styles['CustomBodyText']),
+                Paragraph(location or 'Por confirmar', self.styles['CustomBodyText']),
             ],
         ]
         
@@ -328,7 +328,7 @@ class PDFService:
             subtotal += line_total
             
             menu_data.append([
-                Paragraph(item_name, self.styles['BodyText']),
+                Paragraph(item_name, self.styles['CustomBodyText']),
                 f"${unit_price:,.2f}",
                 f"{quantity}",
                 f"{per_person:.1f} pza",
@@ -457,14 +457,14 @@ class PDFService:
         
         elements.append(Paragraph(
             f"Esta propuesta es válida hasta el <b>{valid_until_str}</b>.",
-            self.styles['BodyText']
+            self.styles['CustomBodyText']
         ))
         elements.append(Spacer(1, 10))
         
         elements.append(Paragraph(
             "Al firmar este documento, acepto los términos y condiciones establecidos "
             "y confirmo la reserva del servicio de catering para el evento descrito.",
-            self.styles['BodyText']
+            self.styles['CustomBodyText']
         ))
         elements.append(Spacer(1, 30))
         
@@ -620,7 +620,7 @@ class PDFService:
         <b>Fecha:</b> {event_date_str}<br/>
         <b>Personas:</b> {guest_count}<br/>
         """
-        elements.append(Paragraph(info_text, self.styles['BodyText']))
+        elements.append(Paragraph(info_text, self.styles['CustomBodyText']))
         elements.append(Spacer(1, 20))
         
         # Production list table
@@ -668,7 +668,7 @@ class PDFService:
             "________________________________________________<br/>"
             "________________________________________________<br/>"
             "________________________________________________",
-            self.styles['BodyText']
+            self.styles['CustomBodyText']
         ))
         elements.append(Spacer(1, 20))
         
