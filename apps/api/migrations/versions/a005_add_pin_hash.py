@@ -11,7 +11,7 @@ import sqlalchemy as sa
 
 # revision identifiers, used by Alembic.
 revision = 'a005_add_pin_hash'
-down_revision = None  # Update this to point to your previous migration
+down_revision = 'a004_preflight_optimization'
 branch_labels = None
 depends_on = None
 
