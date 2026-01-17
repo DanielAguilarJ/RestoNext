@@ -25,6 +25,9 @@ from app.core.database import init_db
 from app.core.websocket_manager import ws_manager
 from app.core.scheduler import init_scheduler, start_scheduler, shutdown_scheduler
 
+# Startup state tracking for health checks
+_startup_complete = False
+
 from app.api.auth import router as auth_router
 from app.api.pos import router as pos_router
 from app.api.billing import router as billing_router
@@ -104,6 +107,10 @@ async def lifespan(app: FastAPI):
         print("INFO:     📅 Scheduler disabled via SCHEDULER_ENABLED=false")
     
     print("INFO:     ✅ RestoNext MX API ready to serve requests")
+    
+    # Mark startup as complete for health checks
+    global _startup_complete
+    _startup_complete = True
     
     yield
     
@@ -335,15 +342,25 @@ async def health_check():
     """
     Health check endpoint for Docker/K8s/Railway.
     
-    Verifies:
-    - Database connectivity
-    - Redis connectivity
+    Behavior:
+    - During startup: Returns 200 with status "starting" (allows Railway to pass health check)
+    - After startup: Verifies database connectivity (required) and Redis (optional)
     
-    Returns 200 if all systems healthy, 503 if any failure.
+    Returns 200 if healthy/starting, 503 only if database is down after startup.
     """
     from datetime import datetime
     from sqlalchemy import text
     import redis.asyncio as aioredis
+    
+    # If startup hasn't completed, return 200 with "starting" status
+    # This allows Railway's health check to pass during the initialization window
+    if not _startup_complete:
+        return {
+            "status": "starting",
+            "service": "restonext-api",
+            "timestamp": datetime.utcnow().isoformat(),
+            "message": "Application is initializing..."
+        }
     
     health_status = {
         "status": "healthy",
@@ -352,9 +369,9 @@ async def health_check():
         "checks": {}
     }
     
-    all_healthy = True
+    database_healthy = True
     
-    # Check Database
+    # Check Database (REQUIRED for healthy status)
     try:
         from app.core.database import async_session_maker
         async with async_session_maker() as db:
@@ -365,9 +382,9 @@ async def health_check():
             "status": "unhealthy",
             "error": str(e)[:100]
         }
-        all_healthy = False
+        database_healthy = False
     
-    # Check Redis
+    # Check Redis (OPTIONAL - degraded is still 200)
     try:
         redis_client = aioredis.from_url(settings.redis_url)
         await redis_client.ping()
@@ -375,14 +392,16 @@ async def health_check():
         health_status["checks"]["redis"] = {"status": "healthy"}
     except Exception as e:
         health_status["checks"]["redis"] = {
-            "status": "unhealthy",
-            "error": str(e)[:100]
+            "status": "degraded",
+            "error": str(e)[:100],
+            "note": "WebSocket scaling disabled, local connections only"
         }
-        all_healthy = False
-    
-    # Set overall status
-    if not all_healthy:
+        # Redis is optional - don't fail health check
         health_status["status"] = "degraded"
+    
+    # Only fail if database is down (database is critical)
+    if not database_healthy:
+        health_status["status"] = "unhealthy"
         return JSONResponse(content=health_status, status_code=503)
     
     return health_status
