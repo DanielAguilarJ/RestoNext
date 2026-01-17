@@ -70,6 +70,7 @@ RUN groupadd --gid 1001 restonext && \
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libpq5 \
     curl \
+    postgresql-client \
     && rm -rf /var/lib/apt/lists/* \
     && apt-get clean
 
