@@ -159,6 +159,10 @@ app = FastAPI(
     description="Cloud-Native Restaurant Management SaaS for Mexico",
     version="1.0.0",
     lifespan=lifespan,
+    # Configure docs to be accessible via the /api prefix (DigitalOcean routing)
+    docs_url="/api/docs",
+    redoc_url="/api/redoc",
+    openapi_url="/api/openapi.json",
 )
 
 
@@ -361,10 +365,10 @@ async def customer_websocket(websocket: WebSocket, table_number: int):
 @app.get("/health")
 async def health_check():
     """
-    Health check endpoint for Docker/K8s/Railway.
+    Health check endpoint for Docker/K8s/Railway/DigitalOcean.
     
     Behavior:
-    - During startup: Returns 200 with status "starting" (allows Railway to pass health check)
+    - During startup: Returns 200 with status "starting" (allows checks to pass during init)
     - After startup: Verifies database connectivity (required) and Redis (optional)
     
     Returns 200 if healthy/starting, 503 only if database is down after startup.
@@ -374,7 +378,6 @@ async def health_check():
     import redis.asyncio as aioredis
     
     # If startup hasn't completed, return 200 with "starting" status
-    # This allows Railway's health check to pass during the initialization window
     if not _startup_complete:
         return {
             "status": "starting",
@@ -457,27 +460,34 @@ async def system_info():
     }
 
 
+# =========================================================
+# Root Endpoints (Dual support: / and /api/ prefixes)
+# Needed because DigitalOcean preserves the /api prefix
+# =========================================================
+
 @app.get("/")
+@app.get("/api")
 async def root():
     """API root"""
     return {
         "name": settings.app_name,
         "version": "1.0.0",
-        "docs": "/docs",
+        "docs": "/api/docs",  # Updated for DO
     }
 
 
 @app.get("/ping")
+@app.get("/api/ping")
 async def ping():
     """
     Ultra-simple ping endpoint. 
     No dependencies, no auth, just returns "pong".
-    Use this to verify the server is actually running.
     """
     return {"ping": "pong", "ok": True}
 
 
 @app.get("/debug")
+@app.get("/api/debug")
 async def debug_info():
     """
     Debug endpoint for production diagnostics.
