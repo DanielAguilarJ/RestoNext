@@ -2,14 +2,16 @@
 FROM node:20-alpine AS deps
 RUN apk add --no-cache libc6-compat
 WORKDIR /app
-COPY package*.json ./
+# Copy from apps/web since build context is root
+COPY apps/web/package*.json ./
 RUN npm install
 
 # Stage 2: Build the application
 FROM node:20-alpine AS builder
 WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
-COPY . .
+# Copy apps/web source code
+COPY apps/web/ .
 ENV NEXT_TELEMETRY_DISABLED 1
 RUN npm run build
 
