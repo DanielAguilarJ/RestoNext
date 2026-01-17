@@ -1,0 +1,304 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>¡Propuesta Firmada! - {{ event_name }}</title>
+    <style>
+        /* Reset and base styles */
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #0a0a0a;
+            color: #ffffff;
+            line-height: 1.6;
+        }
+
+        .email-container {
+            max-width: 600px;
+            margin: 0 auto;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+            border-radius: 16px;
+            overflow: hidden;
+            box-shadow: 0 20px 60px rgba(0, 255, 136, 0.15);
+        }
+
+        /* Header with celebration */
+        .header {
+            background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+            padding: 40px 30px;
+            text-align: center;
+        }
+
+        .header-icon {
+            font-size: 56px;
+            margin-bottom: 15px;
+        }
+
+        .header-title {
+            font-size: 24px;
+            font-weight: 700;
+            color: #ffffff;
+            margin-bottom: 5px;
+        }
+
+        .header-subtitle {
+            font-size: 14px;
+            color: rgba(255, 255, 255, 0.8);
+            text-transform: uppercase;
+            letter-spacing: 2px;
+        }
+
+        /* Content */
+        .content {
+            padding: 40px 30px;
+        }
+
+        .greeting {
+            font-size: 22px;
+            font-weight: 600;
+            color: #10b981;
+            margin-bottom: 20px;
+        }
+
+        .confirmation-text {
+            font-size: 16px;
+            color: #b8b8b8;
+            margin-bottom: 30px;
+        }
+
+        /* Event details card */
+        .event-card {
+            background: #0d1117;
+            border-radius: 12px;
+            padding: 25px;
+            margin-bottom: 30px;
+            border-left: 4px solid #10b981;
+        }
+
+        .event-title {
+            font-size: 20px;
+            font-weight: 600;
+            color: #ffffff;
+            margin-bottom: 20px;
+        }
+
+        .event-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 10px 0;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .event-row:last-child {
+            border-bottom: none;
+        }
+
+        .event-label {
+            color: #888;
+            font-size: 14px;
+        }
+
+        .event-value {
+            color: #ffffff;
+            font-weight: 500;
+            font-size: 14px;
+        }
+
+        /* Payment info box */
+        .payment-box {
+            background: linear-gradient(135deg, rgba(16, 185, 129, 0.1) 0%, rgba(5, 150, 105, 0.1) 100%);
+            border: 1px solid rgba(16, 185, 129, 0.3);
+            border-radius: 12px;
+            padding: 25px;
+            margin-bottom: 30px;
+            text-align: center;
+        }
+
+        .payment-title {
+            font-size: 16px;
+            color: #10b981;
+            margin-bottom: 10px;
+        }
+
+        .payment-amount {
+            font-size: 32px;
+            font-weight: 700;
+            color: #ffffff;
+            margin-bottom: 5px;
+        }
+
+        .payment-note {
+            font-size: 13px;
+            color: #888;
+        }
+
+        /* CTA Button */
+        .cta-container {
+            text-align: center;
+            margin: 30px 0;
+        }
+
+        .cta-button {
+            display: inline-block;
+            background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+            color: #ffffff;
+            padding: 16px 40px;
+            border-radius: 50px;
+            text-decoration: none;
+            font-weight: 700;
+            font-size: 16px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        /* Next steps */
+        .steps {
+            background: rgba(255, 255, 255, 0.03);
+            border-radius: 12px;
+            padding: 25px;
+            margin-top: 25px;
+        }
+
+        .steps-title {
+            font-size: 16px;
+            font-weight: 600;
+            color: #ffffff;
+            margin-bottom: 15px;
+        }
+
+        .step {
+            display: flex;
+            align-items: flex-start;
+            gap: 15px;
+            margin-bottom: 12px;
+        }
+
+        .step-icon {
+            font-size: 18px;
+        }
+
+        .step-text {
+            color: #b8b8b8;
+            font-size: 14px;
+        }
+
+        /* Footer */
+        .footer {
+            background: #0d1117;
+            padding: 30px;
+            text-align: center;
+            border-top: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .footer-text {
+            color: #666;
+            font-size: 12px;
+            margin-bottom: 10px;
+        }
+
+        .footer-brand {
+            color: #10b981;
+            font-size: 14px;
+            font-weight: 600;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="email-container">
+        <!-- Header -->
+        <div class="header">
+            <div class="header-icon">✅</div>
+            <div class="header-title">¡Contrato Firmado Exitosamente!</div>
+            <div class="header-subtitle">{{ tenant_name }}</div>
+        </div>
+
+        <!-- Content -->
+        <div class="content">
+            <h1 class="greeting">Hola, {{ client_name }}</h1>
+
+            <p class="confirmation-text">
+                ¡Excelente noticia! Tu propuesta de catering ha sido firmada correctamente.
+                Estamos muy emocionados de ser parte de tu evento especial.
+            </p>
+
+            <!-- Event Details -->
+            <div class="event-card">
+                <div class="event-title">📋 {{ event_name }}</div>
+
+                <div class="event-row">
+                    <span class="event-label">Fecha del Evento</span>
+                    <span class="event-value">{{ event_date }}</span>
+                </div>
+
+                <div class="event-row">
+                    <span class="event-label">Número de Invitados</span>
+                    <span class="event-value">{{ guest_count }} personas</span>
+                </div>
+
+                <div class="event-row">
+                    <span class="event-label">Total del Evento</span>
+                    <span class="event-value" style="color: #10b981; font-size: 16px;">{{ total_amount }}</span>
+                </div>
+            </div>
+
+            <!-- Payment Info -->
+            <div class="payment-box">
+                <div class="payment-title">💳 Anticipo Pendiente ({{ deposit_percentage }}%)</div>
+                <div class="payment-amount">{{ deposit_amount }}</div>
+                <div class="payment-note">Paga tu anticipo para asegurar tu fecha</div>
+            </div>
+
+            <!-- CTA -->
+            <div class="cta-container">
+                <a href="{{ portal_url }}" class="cta-button">
+                    💳 Pagar Anticipo Ahora
+                </a>
+            </div>
+
+            <!-- Next Steps -->
+            <div class="steps">
+                <div class="steps-title">📝 Próximos Pasos</div>
+
+                <div class="step">
+                    <span class="step-icon">1️⃣</span>
+                    <span class="step-text">Realiza el pago del anticipo para reservar tu fecha</span>
+                </div>
+
+                <div class="step">
+                    <span class="step-icon">2️⃣</span>
+                    <span class="step-text">Nuestro equipo te contactará para afinar detalles</span>
+                </div>
+
+                <div class="step">
+                    <span class="step-icon">3️⃣</span>
+                    <span class="step-text">Recibirás la orden de banquete (BEO) una semana antes</span>
+                </div>
+
+                <div class="step">
+                    <span class="step-icon">4️⃣</span>
+                    <span class="step-text">¡Disfruta tu evento impecable!</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Footer -->
+        <div class="footer">
+            <p class="footer-text">
+                Gracias por confiar en nosotros para tu evento especial.
+            </p>
+            <p class="footer-brand">
+                🍽️ {{ tenant_name }} — Powered by RestoNext © {{ year }}
+            </p>
+        </div>
+    </div>
+</body>
+
+</html>

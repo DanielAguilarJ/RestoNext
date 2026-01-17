@@ -2,8 +2,9 @@ from typing import List, Optional
 from datetime import datetime, timedelta
 import uuid
 import base64
+import os
 
-from fastapi import APIRouter, Depends, HTTPException, status, Request
+from fastapi import APIRouter, Depends, HTTPException, status, Request, BackgroundTasks
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import select
@@ -13,7 +14,7 @@ import io
 from app.core.database import get_db
 from app.models.models import (
     User, Tenant, EventLead, Event, EventMenuSelection, MenuItem, 
-    Recipe, BEO, CateringQuote, LeadStatus, EventStatus, QuoteStatus
+    Recipe, BEO, CateringQuote, CateringPackage, LeadStatus, EventStatus, QuoteStatus
 )
 from app.core.security import get_current_user
 from app.schemas.catering_schemas import (
@@ -25,6 +26,21 @@ from app.schemas.catering_schemas import (
 )
 from app.services.ai_service import AIService
 from app.services.pdf_service import pdf_service
+from app.services.email_service import get_email_service
+
+# Stripe SDK (graceful import)
+try:
+    import stripe
+    STRIPE_SECRET_KEY = os.getenv("STRIPE_SECRET_KEY", "")
+    if STRIPE_SECRET_KEY:
+        stripe.api_key = STRIPE_SECRET_KEY
+        STRIPE_ENABLED = True
+    else:
+        STRIPE_ENABLED = False
+except ImportError:
+    stripe = None
+    STRIPE_ENABLED = False
+
 
 router = APIRouter()
 
@@ -827,10 +843,18 @@ def sign_proposal(
             detail="You must accept the terms and conditions to sign"
         )
     
-    # Get event
-    event = db.query(Event).filter(Event.id == quote.event_id).first()
+    # Get event with lead
+    event = db.execute(
+        select(Event)
+        .where(Event.id == quote.event_id)
+        .options(joinedload(Event.lead))
+    ).unique().scalar_one_or_none()
+    
     if not event:
         raise HTTPException(status_code=404, detail="Event not found")
+    
+    # Get tenant for email
+    tenant = db.query(Tenant).filter(Tenant.id == quote.tenant_id).first()
     
     # Get client IP
     client_ip = request.headers.get(
@@ -840,23 +864,26 @@ def sign_proposal(
     if "," in client_ip:
         client_ip = client_ip.split(",")[0].strip()
     
-    # Store signature data (in a real system, you might save the image to storage)
-    # For now, we'll store signature metadata in the quote
+    signed_at = datetime.utcnow()
+    
+    # Build signature metadata and save to model
     signature_metadata = {
         "signer_name": sign_data.signer_name,
         "signer_email": sign_data.signer_email,
         "signer_phone": sign_data.signer_phone,
-        "signed_at": datetime.utcnow().isoformat(),
+        "signed_at": signed_at.isoformat(),
         "ip_address": client_ip,
         "signature_present": bool(sign_data.signature_data),
-        # Note: In production, save signature_data to secure storage
-        # and store the reference here instead of the actual data
+        "user_agent": request.headers.get("User-Agent", "unknown")[:500],
     }
     
-    # Update quote status
+    # Update quote with signature data
     quote.status = QuoteStatus.ACCEPTED
-    # We could add a signature_data column to CateringQuote model
-    # For now, the status change indicates acceptance
+    quote.signature_data = signature_metadata
+    quote.signed_at = signed_at
+    
+    # Calculate deposit amount
+    quote.deposit_amount = quote.total * (quote.deposit_percentage / 100)
     
     # Update event status to CONFIRMED
     event.status = EventStatus.CONFIRMED
@@ -867,9 +894,65 @@ def sign_proposal(
         if lead:
             lead.status = LeadStatus.WON
     
-    signed_at = datetime.utcnow()
-    
     db.commit()
+    
+    # ==== AUTOMATED EMAIL NOTIFICATIONS ====
+    # Send emails in background to not block response
+    try:
+        email_service = get_email_service()
+        
+        # Prepare email data
+        client_email = sign_data.signer_email or (event.lead.contact_email if event.lead else None)
+        client_name = sign_data.signer_name
+        tenant_name = tenant.trade_name or tenant.name if tenant else "RestoNext"
+        manager_email = tenant.contacts.get("email") if tenant and tenant.contacts else None
+        
+        # Email to Client: "Here's your signed contract"
+        if client_email and email_service.enabled:
+            import asyncio
+            asyncio.create_task(email_service.send_email(
+                to=[client_email],
+                subject=f"✅ Contrato Firmado - {event.name}",
+                template_name="proposal_signed_client.html",
+                template_data={
+                    "client_name": client_name,
+                    "event_name": event.name,
+                    "event_date": event.start_time.strftime("%d/%m/%Y") if event.start_time else "Por confirmar",
+                    "guest_count": event.guest_count,
+                    "total_amount": f"${quote.total:,.2f}",
+                    "deposit_amount": f"${quote.deposit_amount:,.2f}",
+                    "deposit_percentage": int(quote.deposit_percentage),
+                    "tenant_name": tenant_name,
+                    "portal_url": f"{os.getenv('FRONTEND_URL', 'http://localhost:3000')}/portal/proposal/{quote.public_token}",
+                    "year": "2026"
+                }
+            ))
+        
+        # Email to Manager: "New event confirmed!"
+        if manager_email and email_service.enabled:
+            import asyncio
+            asyncio.create_task(email_service.send_email(
+                to=[manager_email],
+                subject=f"🎉 ¡Nuevo Evento Confirmado! {event.name}",
+                template_name="event_confirmed_manager.html",
+                template_data={
+                    "manager_name": "Equipo",
+                    "client_name": client_name,
+                    "event_name": event.name,
+                    "event_date": event.start_time.strftime("%d/%m/%Y %H:%M") if event.start_time else "Por confirmar",
+                    "guest_count": event.guest_count,
+                    "location": event.location or "Por confirmar",
+                    "total_amount": f"${quote.total:,.2f}",
+                    "deposit_amount": f"${quote.deposit_amount:,.2f}",
+                    "signed_by": client_name,
+                    "signed_at": signed_at.strftime("%d/%m/%Y %H:%M"),
+                    "year": "2026"
+                }
+            ))
+    except Exception as e:
+        # Don't fail the signing just because email failed
+        import logging
+        logging.getLogger("catering").warning(f"Email notification failed: {e}")
     
     return ProposalSignResponse(
         success=True,
@@ -911,6 +994,7 @@ def get_calendar_events(
     status_colors = {
         EventStatus.DRAFT: '#6B7280',      # Gray
         EventStatus.CONFIRMED: '#10B981',   # Green
+        EventStatus.BOOKED: '#F59E0B',       # Gold/Amber - Deposit paid
         EventStatus.IN_PROGRESS: '#3B82F6', # Blue
         EventStatus.COMPLETED: '#8B5CF6',   # Purple
         EventStatus.CANCELLED: '#EF4444',   # Red
@@ -943,3 +1027,406 @@ def get_calendar_events(
         })
     
     return {"events": calendar_events}
+
+
+# ==========================================
+# Stripe Payment Integration
+# ==========================================
+
+class DepositPaymentRequest(BaseModel):
+    """Request for creating a payment intent for deposit"""
+    pass  # Token in path, no body needed
+
+
+class DepositPaymentResponse(BaseModel):
+    """Response with Stripe client secret"""
+    client_secret: str
+    amount: float
+    currency: str
+    deposit_percentage: float
+    payment_intent_id: str
+
+
+class ConfirmPaymentRequest(BaseModel):
+    """Request to confirm payment completion"""
+    payment_intent_id: str
+
+
+class ConfirmPaymentResponse(BaseModel):
+    """Response after payment confirmation"""
+    success: bool
+    event_id: str
+    event_status: str
+    message: str
+
+
+@router.post("/proposals/{token}/pay-deposit", response_model=DepositPaymentResponse)
+def create_deposit_payment_intent(
+    token: str,
+    db: Session = Depends(get_db)
+):
+    """
+    Create a Stripe PaymentIntent for the deposit amount.
+    PUBLIC endpoint - called after signing.
+    
+    Returns client_secret for Stripe Elements to complete payment.
+    """
+    if not STRIPE_ENABLED:
+        raise HTTPException(
+            status_code=503,
+            detail="Payment processing is not configured. Please contact support."
+        )
+    
+    # Find quote
+    quote = db.query(CateringQuote).filter(
+        CateringQuote.public_token == token
+    ).first()
+    
+    if not quote:
+        raise HTTPException(status_code=404, detail="Proposal not found")
+    
+    # Must be accepted (signed) before paying
+    if quote.status != QuoteStatus.ACCEPTED:
+        raise HTTPException(
+            status_code=400,
+            detail="This proposal must be signed before payment"
+        )
+    
+    # Already paid?
+    if quote.deposit_paid:
+        raise HTTPException(
+            status_code=400,
+            detail="Deposit has already been paid"
+        )
+    
+    # Calculate deposit amount (in centavos for Stripe)
+    deposit_amount = quote.total * (quote.deposit_percentage / 100)
+    amount_centavos = int(deposit_amount * 100)
+    
+    # Get event name for description
+    event = db.query(Event).filter(Event.id == quote.event_id).first()
+    event_name = event.name if event else "Catering Event"
+    
+    # Get tenant for Stripe account (if using Connect)
+    tenant = db.query(Tenant).filter(Tenant.id == quote.tenant_id).first()
+    
+    try:
+        # Create PaymentIntent
+        payment_intent = stripe.PaymentIntent.create(
+            amount=amount_centavos,
+            currency="mxn",
+            description=f"Anticipo {int(quote.deposit_percentage)}% - {event_name}",
+            metadata={
+                "quote_id": str(quote.id),
+                "event_id": str(quote.event_id),
+                "tenant_id": str(quote.tenant_id),
+                "deposit_percentage": str(quote.deposit_percentage),
+            },
+            automatic_payment_methods={"enabled": True},
+        )
+        
+        # Store payment intent ID
+        quote.stripe_payment_intent_id = payment_intent.id
+        db.commit()
+        
+        return DepositPaymentResponse(
+            client_secret=payment_intent.client_secret,
+            amount=deposit_amount,
+            currency="MXN",
+            deposit_percentage=quote.deposit_percentage,
+            payment_intent_id=payment_intent.id
+        )
+        
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Payment processing error: {str(e)}"
+        )
+
+
+@router.post("/proposals/{token}/confirm-payment", response_model=ConfirmPaymentResponse)
+def confirm_deposit_payment(
+    token: str,
+    payment_data: ConfirmPaymentRequest,
+    db: Session = Depends(get_db)
+):
+    """
+    Confirm that payment was successful and update event status to BOOKED.
+    Called by frontend after Stripe Elements confirms payment.
+    """
+    if not STRIPE_ENABLED:
+        raise HTTPException(status_code=503, detail="Payment not configured")
+    
+    quote = db.query(CateringQuote).filter(
+        CateringQuote.public_token == token
+    ).first()
+    
+    if not quote:
+        raise HTTPException(status_code=404, detail="Proposal not found")
+    
+    # Verify payment intent matches
+    if quote.stripe_payment_intent_id != payment_data.payment_intent_id:
+        raise HTTPException(status_code=400, detail="Payment intent mismatch")
+    
+    try:
+        # Verify payment status with Stripe
+        payment_intent = stripe.PaymentIntent.retrieve(payment_data.payment_intent_id)
+        
+        if payment_intent.status != "succeeded":
+            raise HTTPException(
+                status_code=400,
+                detail=f"Payment not completed. Status: {payment_intent.status}"
+            )
+        
+        # Update quote as paid
+        quote.deposit_paid = True
+        quote.paid_at = datetime.utcnow()
+        
+        # Update event status to BOOKED
+        event = db.query(Event).filter(Event.id == quote.event_id).first()
+        if event:
+            event.status = EventStatus.BOOKED
+        
+        db.commit()
+        
+        return ConfirmPaymentResponse(
+            success=True,
+            event_id=str(event.id) if event else "",
+            event_status="booked",
+            message="¡Pago confirmado! Tu fecha ha sido reservada."
+        )
+        
+    except stripe.error.StripeError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+# ==========================================
+# Catering Packages (Bundles)
+# ==========================================
+
+class CateringPackageCreate(BaseModel):
+    """Create a new catering package"""
+    name: str
+    description: Optional[str] = None
+    items: List[dict]  # [{menu_item_id, name, quantity, unit_price}]
+    base_price_per_person: float
+    min_guests: int = 20
+    max_guests: Optional[int] = None
+    category: Optional[str] = None
+
+
+class CateringPackageResponse(BaseModel):
+    """Package response"""
+    id: str
+    name: str
+    description: Optional[str]
+    items: List[dict]
+    base_price_per_person: float
+    min_guests: int
+    max_guests: Optional[int]
+    category: Optional[str]
+    is_active: bool
+
+
+class ApplyPackageRequest(BaseModel):
+    """Apply a package to an event"""
+    package_id: str
+
+
+@router.get("/packages", response_model=List[CateringPackageResponse])
+def list_packages(
+    category: Optional[str] = None,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """List all active catering packages for this tenant."""
+    query = select(CateringPackage).where(
+        CateringPackage.tenant_id == current_user.tenant_id,
+        CateringPackage.is_active == True
+    )
+    
+    if category:
+        query = query.where(CateringPackage.category == category)
+    
+    packages = db.execute(query).scalars().all()
+    
+    return [
+        CateringPackageResponse(
+            id=str(p.id),
+            name=p.name,
+            description=p.description,
+            items=p.items or [],
+            base_price_per_person=p.base_price_per_person,
+            min_guests=p.min_guests,
+            max_guests=p.max_guests,
+            category=p.category,
+            is_active=p.is_active
+        )
+        for p in packages
+    ]
+
+
+@router.post("/packages", response_model=CateringPackageResponse)
+def create_package(
+    package_in: CateringPackageCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Create a new catering package."""
+    package = CateringPackage(
+        tenant_id=current_user.tenant_id,
+        name=package_in.name,
+        description=package_in.description,
+        items=package_in.items,
+        base_price_per_person=package_in.base_price_per_person,
+        min_guests=package_in.min_guests,
+        max_guests=package_in.max_guests,
+        category=package_in.category
+    )
+    
+    db.add(package)
+    db.commit()
+    db.refresh(package)
+    
+    return CateringPackageResponse(
+        id=str(package.id),
+        name=package.name,
+        description=package.description,
+        items=package.items or [],
+        base_price_per_person=package.base_price_per_person,
+        min_guests=package.min_guests,
+        max_guests=package.max_guests,
+        category=package.category,
+        is_active=package.is_active
+    )
+
+
+@router.post("/events/{event_id}/apply-package", response_model=EventResponse)
+def apply_package_to_event(
+    event_id: uuid.UUID,
+    package_request: ApplyPackageRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Apply a catering package to an event.
+    This adds all package items to the event's menu selections at once.
+    """
+    event = db.query(Event).filter(
+        Event.id == event_id,
+        Event.tenant_id == current_user.tenant_id
+    ).first()
+    
+    if not event:
+        raise HTTPException(status_code=404, detail="Event not found")
+    
+    package = db.query(CateringPackage).filter(
+        CateringPackage.id == package_request.package_id,
+        CateringPackage.tenant_id == current_user.tenant_id
+    ).first()
+    
+    if not package:
+        raise HTTPException(status_code=404, detail="Package not found")
+    
+    # Check guest count fits package limits
+    if event.guest_count < package.min_guests:
+        raise HTTPException(
+            status_code=400,
+            detail=f"This package requires at least {package.min_guests} guests"
+        )
+    
+    if package.max_guests and event.guest_count > package.max_guests:
+        raise HTTPException(
+            status_code=400,
+            detail=f"This package allows maximum {package.max_guests} guests"
+        )
+    
+    # Add package items to event
+    total_added = 0
+    for item_data in package.items:
+        # Calculate quantity based on guest count
+        quantity = item_data.get("quantity", 1) * event.guest_count
+        unit_price = item_data.get("unit_price", 0)
+        
+        selection = EventMenuSelection(
+            event_id=event.id,
+            menu_item_id=uuid.UUID(item_data["menu_item_id"]),
+            item_name=item_data.get("name", "Package Item"),
+            unit_price=unit_price,
+            quantity=quantity,
+            notes=f"Del paquete: {package.name}"
+        )
+        
+        event.total_amount += (unit_price * quantity)
+        total_added += 1
+        db.add(selection)
+    
+    db.commit()
+    db.refresh(event)
+    
+    return get_event(event_id, db, current_user)
+
+
+# ==========================================
+# Lead Status Update (for Kanban)
+# ==========================================
+
+class LeadStatusUpdate(BaseModel):
+    """Update lead status"""
+    status: str  # new, contacted, proposal_sent, negotiation, quoting, won, lost
+
+
+@router.patch("/leads/{lead_id}/status", response_model=EventLeadResponse)
+def update_lead_status(
+    lead_id: uuid.UUID,
+    status_update: LeadStatusUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Update a lead's status.
+    Used by Kanban drag-and-drop to move leads between columns.
+    """
+    lead = db.query(EventLead).filter(
+        EventLead.id == lead_id,
+        EventLead.tenant_id == current_user.tenant_id
+    ).first()
+    
+    if not lead:
+        raise HTTPException(status_code=404, detail="Lead not found")
+    
+    # Validate status
+    try:
+        new_status = LeadStatus(status_update.status)
+    except ValueError:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid status. Must be one of: {[s.value for s in LeadStatus]}"
+        )
+    
+    lead.status = new_status
+    lead.updated_at = datetime.utcnow()
+    
+    db.commit()
+    db.refresh(lead)
+    
+    return lead
+
+
+@router.get("/leads/{lead_id}", response_model=EventLeadResponse)
+def get_lead(
+    lead_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Get a single lead by ID."""
+    lead = db.query(EventLead).filter(
+        EventLead.id == lead_id,
+        EventLead.tenant_id == current_user.tenant_id
+    ).first()
+    
+    if not lead:
+        raise HTTPException(status_code=404, detail="Lead not found")
+    
+    return lead
+

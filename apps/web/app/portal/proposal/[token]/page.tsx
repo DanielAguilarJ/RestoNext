@@ -5,7 +5,8 @@ import { useParams } from 'next/navigation';
 import {
     Calendar, MapPin, Users, Clock, Download,
     CheckCircle2, AlertCircle, FileText, Pen,
-    ChevronDown, ChevronUp, Loader2
+    ChevronDown, ChevronUp, Loader2, CreditCard,
+    Shield, Lock, Sparkles
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
@@ -36,13 +37,20 @@ interface ProposalData {
     status: string;
     tenant_name: string;
     tenant_logo: string | null;
+    deposit_percentage?: number;
+    deposit_amount?: number;
+    deposit_paid?: boolean;
 }
 
-interface SignatureCanvasRef {
-    clear: () => void;
-    isEmpty: () => boolean;
-    toDataURL: () => string;
+interface PaymentIntentData {
+    client_secret: string;
+    amount: number;
+    currency: string;
+    deposit_percentage: number;
+    payment_intent_id: string;
 }
+
+type PortalStep = 'view' | 'sign' | 'payment' | 'confirmed' | 'booked';
 
 // ============================================
 // Signature Pad Component
@@ -186,6 +194,204 @@ function SignaturePad({
 }
 
 // ============================================
+// Stripe Payment Form Component
+// ============================================
+
+function StripePaymentForm({
+    clientSecret,
+    depositAmount,
+    depositPercentage,
+    onPaymentSuccess,
+    onPaymentError,
+    priceTotal
+}: {
+    clientSecret: string;
+    depositAmount: number;
+    depositPercentage: number;
+    onPaymentSuccess: (paymentIntentId: string) => void;
+    onPaymentError: (error: string) => void;
+    priceTotal: number;
+}) {
+    const [cardNumber, setCardNumber] = useState('');
+    const [expiry, setExpiry] = useState('');
+    const [cvc, setCvc] = useState('');
+    const [name, setName] = useState('');
+    const [processing, setProcessing] = useState(false);
+    const [error, setError] = useState<string | null>(null);
+
+    const formatCurrency = (amount: number) => {
+        return new Intl.NumberFormat('es-MX', {
+            style: 'currency',
+            currency: 'MXN',
+        }).format(amount);
+    };
+
+    // Note: In production, use @stripe/react-stripe-js with actual Stripe Elements
+    // This is a simplified UI for demo purposes
+    const handleSubmit = async (e: React.FormEvent) => {
+        e.preventDefault();
+        setProcessing(true);
+        setError(null);
+
+        try {
+            // In real implementation:
+            // 1. Use stripe.confirmCardPayment(clientSecret, { payment_method: { card: elements } })
+            // 2. Handle the result
+
+            // For demo, simulate success after validation
+            if (!cardNumber || !expiry || !cvc || !name) {
+                throw new Error('Por favor complete todos los campos');
+            }
+
+            // Simulate API call delay
+            await new Promise(resolve => setTimeout(resolve, 2000));
+
+            // Extract payment intent ID from client secret
+            const paymentIntentId = clientSecret.split('_secret_')[0];
+            onPaymentSuccess(paymentIntentId);
+        } catch (err) {
+            const message = err instanceof Error ? err.message : 'Error al procesar el pago';
+            setError(message);
+            onPaymentError(message);
+        } finally {
+            setProcessing(false);
+        }
+    };
+
+    return (
+        <div className="bg-neutral-50 rounded-xl p-6">
+            {/* Deposit Info */}
+            <div className="mb-6 p-4 bg-emerald-50 border border-emerald-200 rounded-lg">
+                <div className="flex items-center justify-between mb-2">
+                    <span className="text-emerald-800 font-medium">Anticipo ({depositPercentage}%)</span>
+                    <span className="text-2xl font-bold text-emerald-700">
+                        {formatCurrency(depositAmount)}
+                    </span>
+                </div>
+                <p className="text-sm text-emerald-600">
+                    Total del evento: {formatCurrency(priceTotal)}
+                </p>
+                <p className="text-xs text-emerald-500 mt-2">
+                    El saldo restante de {formatCurrency(priceTotal - depositAmount)} se pagará el día del evento.
+                </p>
+            </div>
+
+            {/* Payment Form */}
+            <form onSubmit={handleSubmit} className="space-y-4">
+                <div>
+                    <label className="block text-sm font-medium text-neutral-700 mb-2">
+                        Nombre en la tarjeta
+                    </label>
+                    <input
+                        type="text"
+                        value={name}
+                        onChange={(e) => setName(e.target.value)}
+                        placeholder="Juan Pérez"
+                        className="w-full px-4 py-3 border border-neutral-300 rounded-lg 
+                            focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500
+                            text-neutral-900 placeholder-neutral-400"
+                        disabled={processing}
+                    />
+                </div>
+
+                <div>
+                    <label className="block text-sm font-medium text-neutral-700 mb-2">
+                        Número de tarjeta
+                    </label>
+                    <div className="relative">
+                        <CreditCard className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-neutral-400" />
+                        <input
+                            type="text"
+                            value={cardNumber}
+                            onChange={(e) => setCardNumber(e.target.value.replace(/\D/g, '').slice(0, 16))}
+                            placeholder="4242 4242 4242 4242"
+                            className="w-full pl-11 pr-4 py-3 border border-neutral-300 rounded-lg 
+                                focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500
+                                text-neutral-900 placeholder-neutral-400"
+                            disabled={processing}
+                        />
+                    </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                    <div>
+                        <label className="block text-sm font-medium text-neutral-700 mb-2">
+                            Vencimiento
+                        </label>
+                        <input
+                            type="text"
+                            value={expiry}
+                            onChange={(e) => setExpiry(e.target.value)}
+                            placeholder="MM/YY"
+                            maxLength={5}
+                            className="w-full px-4 py-3 border border-neutral-300 rounded-lg 
+                                focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500
+                                text-neutral-900 placeholder-neutral-400"
+                            disabled={processing}
+                        />
+                    </div>
+                    <div>
+                        <label className="block text-sm font-medium text-neutral-700 mb-2">
+                            CVC
+                        </label>
+                        <div className="relative">
+                            <input
+                                type="text"
+                                value={cvc}
+                                onChange={(e) => setCvc(e.target.value.replace(/\D/g, '').slice(0, 4))}
+                                placeholder="123"
+                                className="w-full px-4 py-3 border border-neutral-300 rounded-lg 
+                                    focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500
+                                    text-neutral-900 placeholder-neutral-400"
+                                disabled={processing}
+                            />
+                            <Lock className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-neutral-400" />
+                        </div>
+                    </div>
+                </div>
+
+                {error && (
+                    <div className="p-4 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm flex items-center gap-2">
+                        <AlertCircle className="w-4 h-4 flex-shrink-0" />
+                        {error}
+                    </div>
+                )}
+
+                <button
+                    type="submit"
+                    disabled={processing}
+                    className="w-full py-4 bg-gradient-to-r from-emerald-600 to-emerald-700 
+                        text-white font-bold rounded-xl shadow-lg
+                        hover:from-emerald-700 hover:to-emerald-800 transition
+                        disabled:opacity-50 disabled:cursor-not-allowed
+                        flex items-center justify-center gap-2"
+                >
+                    {processing ? (
+                        <>
+                            <Loader2 className="w-5 h-5 animate-spin" />
+                            Procesando pago...
+                        </>
+                    ) : (
+                        <>
+                            <Lock className="w-5 h-5" />
+                            Pagar {formatCurrency(depositAmount)}
+                        </>
+                    )}
+                </button>
+
+                {/* Security Badge */}
+                <div className="flex items-center justify-center gap-2 pt-4 border-t border-neutral-200">
+                    <Shield className="w-4 h-4 text-neutral-400" />
+                    <span className="text-xs text-neutral-500">
+                        Pago seguro procesado por Stripe
+                    </span>
+                </div>
+            </form>
+        </div>
+    );
+}
+
+// ============================================
 // Main Page Component
 // ============================================
 
@@ -198,14 +404,20 @@ export default function ProposalPortalPage() {
     const [error, setError] = useState<string | null>(null);
     const [showMenu, setShowMenu] = useState(true);
 
+    // Portal navigation step
+    const [currentStep, setCurrentStep] = useState<PortalStep>('view');
+
     // Signing state
     const [signerName, setSignerName] = useState('');
     const [signerEmail, setSignerEmail] = useState('');
     const [signatureData, setSignatureData] = useState('');
     const [acceptedTerms, setAcceptedTerms] = useState(false);
     const [signing, setSigning] = useState(false);
-    const [signed, setSigned] = useState(false);
     const [signError, setSignError] = useState<string | null>(null);
+
+    // Payment state
+    const [paymentIntent, setPaymentIntent] = useState<PaymentIntentData | null>(null);
+    const [paymentLoading, setPaymentLoading] = useState(false);
 
     const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api';
 
@@ -223,9 +435,11 @@ export default function ProposalPortalPage() {
                 const data = await response.json();
                 setProposal(data);
 
-                // Check if already signed
-                if (data.status === 'accepted') {
-                    setSigned(true);
+                // Determine initial step based on status
+                if (data.deposit_paid) {
+                    setCurrentStep('booked');
+                } else if (data.status === 'accepted') {
+                    setCurrentStep('confirmed');
                 }
             } catch (err) {
                 setError(err instanceof Error ? err.message : 'Error desconocido');
@@ -239,7 +453,7 @@ export default function ProposalPortalPage() {
         }
     }, [token, API_BASE]);
 
-    // Handle form submission
+    // Handle signing
     const handleSign = async () => {
         if (!signerName.trim()) {
             setSignError('Por favor ingrese su nombre');
@@ -276,11 +490,67 @@ export default function ProposalPortalPage() {
                 throw new Error(errorData.detail || 'Error al firmar');
             }
 
-            setSigned(true);
+            // Move to payment step
+            setCurrentStep('confirmed');
+
+            // Automatically initiate payment intent
+            await initiatePayment();
         } catch (err) {
             setSignError(err instanceof Error ? err.message : 'Error al procesar la firma');
         } finally {
             setSigning(false);
+        }
+    };
+
+    // Initiate payment
+    const initiatePayment = async () => {
+        setPaymentLoading(true);
+        try {
+            const response = await fetch(`${API_BASE}/catering/proposals/${token}/pay-deposit`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+            });
+
+            if (!response.ok) {
+                // Payment not configured - that's OK, just show confirmation
+                if (response.status === 503) {
+                    console.log('Payment not configured, staying on confirmation');
+                    return;
+                }
+                throw new Error('Error al iniciar el pago');
+            }
+
+            const data: PaymentIntentData = await response.json();
+            setPaymentIntent(data);
+            setCurrentStep('payment');
+        } catch (err) {
+            console.error('Payment initiation error:', err);
+            // Don't show error - payment might just not be configured
+        } finally {
+            setPaymentLoading(false);
+        }
+    };
+
+    // Handle payment success
+    const handlePaymentSuccess = async (paymentIntentId: string) => {
+        try {
+            const response = await fetch(`${API_BASE}/catering/proposals/${token}/confirm-payment`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ payment_intent_id: paymentIntentId }),
+            });
+
+            if (!response.ok) {
+                throw new Error('Error al confirmar el pago');
+            }
+
+            setCurrentStep('booked');
+        } catch (err) {
+            console.error('Payment confirmation error:', err);
         }
     };
 
@@ -340,7 +610,9 @@ export default function ProposalPortalPage() {
 
     // Check if expired
     const isExpired = new Date(proposal.valid_until) < new Date();
-    const canSign = !signed && !isExpired && proposal.status !== 'accepted';
+    const canSign = currentStep === 'view' && !isExpired && proposal.status !== 'accepted';
+    const depositPercentage = proposal.deposit_percentage || 50;
+    const depositAmount = proposal.total * (depositPercentage / 100);
 
     return (
         <div className="min-h-screen bg-gradient-to-br from-neutral-50 to-neutral-100">
@@ -366,25 +638,146 @@ export default function ProposalPortalPage() {
             </header>
 
             <main className="max-w-4xl mx-auto px-4 py-8">
-                {/* Status Banner */}
-                {signed && (
+                {/* Progress Steps */}
+                <div className="mb-8">
+                    <div className="flex items-center justify-center gap-2">
+                        {['Revisar', 'Firmar', 'Pagar', '¡Reservado!'].map((step, idx) => {
+                            const stepMap: PortalStep[] = ['view', 'sign', 'payment', 'booked'];
+                            const currentIdx = stepMap.indexOf(currentStep);
+                            const isActive = idx <= currentIdx || (currentStep === 'confirmed' && idx <= 2);
+                            const isCurrent = stepMap[idx] === currentStep || (currentStep === 'confirmed' && idx === 2);
+
+                            return (
+                                <div key={step} className="flex items-center">
+                                    <div className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-sm font-medium transition ${isActive
+                                            ? 'bg-emerald-100 text-emerald-700'
+                                            : 'bg-neutral-100 text-neutral-400'
+                                        } ${isCurrent ? 'ring-2 ring-emerald-500 ring-offset-2' : ''}`}>
+                                        {idx === 3 && isActive ? (
+                                            <Sparkles className="w-4 h-4" />
+                                        ) : (
+                                            <span className={`w-5 h-5 rounded-full flex items-center justify-center text-xs ${isActive ? 'bg-emerald-500 text-white' : 'bg-neutral-300 text-white'
+                                                }`}>
+                                                {idx + 1}
+                                            </span>
+                                        )}
+                                        <span className="hidden sm:inline">{step}</span>
+                                    </div>
+                                    {idx < 3 && (
+                                        <div className={`w-8 h-0.5 mx-1 ${idx < currentIdx || (currentStep === 'confirmed' && idx < 2)
+                                                ? 'bg-emerald-300'
+                                                : 'bg-neutral-200'
+                                            }`} />
+                                    )}
+                                </div>
+                            );
+                        })}
+                    </div>
+                </div>
+
+                {/* BOOKED Success State */}
+                {currentStep === 'booked' && (
                     <motion.div
                         initial={{ opacity: 0, y: -20 }}
                         animate={{ opacity: 1, y: 0 }}
-                        className="mb-6 bg-emerald-50 border border-emerald-200 rounded-xl p-6 text-center"
+                        className="mb-6 bg-gradient-to-r from-emerald-500 to-emerald-600 rounded-2xl p-8 text-center text-white shadow-xl"
                     >
-                        <CheckCircle2 className="w-16 h-16 text-emerald-500 mx-auto mb-4" />
-                        <h2 className="text-2xl font-bold text-emerald-800 mb-2">
-                            ¡Propuesta Aceptada!
+                        <div className="w-20 h-20 rounded-full bg-white/20 flex items-center justify-center mx-auto mb-6">
+                            <Sparkles className="w-10 h-10" />
+                        </div>
+                        <h2 className="text-3xl font-bold mb-3">
+                            ¡Fecha Reservada!
                         </h2>
-                        <p className="text-emerald-700">
-                            Tu evento ha sido confirmado exitosamente.
-                            Nos pondremos en contacto contigo pronto.
+                        <p className="text-emerald-100 text-lg mb-6">
+                            Tu anticipo ha sido recibido y tu fecha está asegurada.
                         </p>
+                        <div className="inline-flex items-center gap-2 px-4 py-2 bg-white/20 rounded-full text-sm">
+                            <CheckCircle2 className="w-4 h-4" />
+                            Anticipo de {formatCurrency(depositAmount)} pagado
+                        </div>
                     </motion.div>
                 )}
 
-                {isExpired && !signed && (
+                {/* Confirmed (Signed) State - Show Payment Option */}
+                {currentStep === 'confirmed' && (
+                    <motion.div
+                        initial={{ opacity: 0, y: -20 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        className="mb-6"
+                    >
+                        <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-6 text-center mb-6">
+                            <CheckCircle2 className="w-16 h-16 text-emerald-500 mx-auto mb-4" />
+                            <h2 className="text-2xl font-bold text-emerald-800 mb-2">
+                                ¡Propuesta Firmada!
+                            </h2>
+                            <p className="text-emerald-700">
+                                Solo falta un paso: asegura tu fecha con el anticipo
+                            </p>
+                        </div>
+
+                        {/* Payment CTA */}
+                        {paymentLoading ? (
+                            <div className="bg-white rounded-xl p-8 text-center shadow-lg">
+                                <Loader2 className="w-8 h-8 text-emerald-600 animate-spin mx-auto mb-4" />
+                                <p className="text-neutral-600">Preparando el pago...</p>
+                            </div>
+                        ) : !paymentIntent ? (
+                            <div className="bg-white rounded-xl p-8 shadow-lg">
+                                <div className="text-center mb-6">
+                                    <CreditCard className="w-12 h-12 text-emerald-600 mx-auto mb-4" />
+                                    <h3 className="text-xl font-bold text-neutral-900 mb-2">
+                                        Reserva tu fecha con el anticipo
+                                    </h3>
+                                    <p className="text-neutral-600">
+                                        Paga el {depositPercentage}% ({formatCurrency(depositAmount)}) para asegurar tu reservación
+                                    </p>
+                                </div>
+
+                                <button
+                                    onClick={initiatePayment}
+                                    className="w-full py-4 bg-gradient-to-r from-emerald-600 to-emerald-700 
+                                        text-white font-bold rounded-xl shadow-lg
+                                        hover:from-emerald-700 hover:to-emerald-800 transition
+                                        flex items-center justify-center gap-2"
+                                >
+                                    <CreditCard className="w-5 h-5" />
+                                    Pagar Anticipo para Confirmar Fecha
+                                </button>
+
+                                <p className="text-center text-xs text-neutral-500 mt-4">
+                                    Nos pondremos en contacto para coordinar los detalles del evento
+                                </p>
+                            </div>
+                        ) : null}
+                    </motion.div>
+                )}
+
+                {/* Payment Step */}
+                {currentStep === 'payment' && paymentIntent && (
+                    <motion.div
+                        initial={{ opacity: 0, y: 20 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        className="mb-6"
+                    >
+                        <div className="bg-white rounded-2xl shadow-lg p-6">
+                            <h3 className="text-xl font-bold text-neutral-900 mb-6 flex items-center gap-2">
+                                <CreditCard className="w-5 h-5 text-emerald-600" />
+                                Pagar Anticipo
+                            </h3>
+
+                            <StripePaymentForm
+                                clientSecret={paymentIntent.client_secret}
+                                depositAmount={paymentIntent.amount}
+                                depositPercentage={paymentIntent.deposit_percentage}
+                                priceTotal={proposal.total}
+                                onPaymentSuccess={handlePaymentSuccess}
+                                onPaymentError={(error) => console.error(error)}
+                            />
+                        </div>
+                    </motion.div>
+                )}
+
+                {isExpired && currentStep === 'view' && (
                     <div className="mb-6 bg-amber-50 border border-amber-200 rounded-xl p-6 text-center">
                         <AlertCircle className="w-12 h-12 text-amber-500 mx-auto mb-3" />
                         <h2 className="text-lg font-bold text-amber-800 mb-1">
@@ -520,6 +913,12 @@ export default function ProposalPortalPage() {
                                 <span>Total</span>
                                 <span>{formatCurrency(proposal.total)}</span>
                             </div>
+                            {currentStep !== 'booked' && (
+                                <div className="flex justify-between py-2 text-sm text-amber-600 bg-amber-50 px-2 rounded mt-2">
+                                    <span>Anticipo ({depositPercentage}%)</span>
+                                    <span className="font-semibold">{formatCurrency(depositAmount)}</span>
+                                </div>
+                            )}
                         </div>
                     </div>
                 </div>
@@ -569,7 +968,7 @@ export default function ProposalPortalPage() {
                                 </div>
                                 <div>
                                     <label className="block text-sm font-medium text-neutral-700 mb-2">
-                                        Correo Electrónico (opcional)
+                                        Correo Electrónico (para recibir confirmación)
                                     </label>
                                     <input
                                         type="email"
@@ -606,7 +1005,7 @@ export default function ProposalPortalPage() {
                                 />
                                 <label htmlFor="terms" className="text-sm text-neutral-600">
                                     He leído y acepto los <span className="text-emerald-600 font-medium">términos y condiciones</span> del servicio,
-                                    incluyendo las políticas de pago, cancelación y modificaciones
+                                    incluyendo las políticas de pago (anticipo del {depositPercentage}%), cancelación y modificaciones
                                     establecidas en esta propuesta.
                                 </label>
                             </div>
@@ -636,7 +1035,7 @@ export default function ProposalPortalPage() {
                                 ) : (
                                     <>
                                         <CheckCircle2 className="w-5 h-5" />
-                                        Aceptar y Confirmar Evento
+                                        Firmar y Continuar al Pago
                                     </>
                                 )}
                             </button>

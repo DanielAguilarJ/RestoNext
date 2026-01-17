@@ -1,96 +1,409 @@
 "use client";
 
-import { useState } from "react";
-import { Search, Filter, Plus, Phone, Mail, MoreHorizontal } from "lucide-react";
+import { useState, useEffect, useCallback } from "react";
+import { Search, Filter, Plus, RefreshCcw, LayoutGrid, List, Loader2 } from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
+import { LeadsKanban, Lead, LeadStatusType } from "@/components/catering/LeadsKanban";
 
-// Mock Data
-const initialLeads = [
-    { id: 1, name: "Maria Gonzalez", company: "Tech Startups Inc.", event: "Annual Party", date: "Dec 15", guests: 120, status: "New", email: "maria@example.com", phone: "555-0101" },
-    { id: 2, name: "John Smith", company: null, event: "Wedding Reception", date: "Jan 10, 2025", guests: 200, status: "Contacted", email: "john@example.com", phone: "555-0102" },
-    { id: 3, name: "Corporate Lunch", company: "Bank of Mexico", event: "Executive Lunch", date: "Oct 30", guests: 25, status: "Quoting", email: "contact@bank.com", phone: "555-0103" },
-];
+// ============================================
+// API Functions
+// ============================================
 
-const statuses = ["New", "Contacted", "Quoting", "Won", "Lost"];
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api';
+
+async function fetchLeads(): Promise<Lead[]> {
+    const token = localStorage.getItem('token');
+    const response = await fetch(`${API_BASE}/catering/leads`, {
+        headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+        }
+    });
+
+    if (!response.ok) {
+        throw new Error('Failed to fetch leads');
+    }
+
+    const data = await response.json();
+
+    // Transform API response to Lead interface
+    return data.map((lead: any) => ({
+        id: lead.id,
+        client_name: lead.client_name,
+        contact_email: lead.contact_email,
+        contact_phone: lead.contact_phone,
+        event_date: lead.event_date,
+        guest_count: lead.guest_count,
+        event_type: lead.event_type,
+        status: lead.status as LeadStatusType,
+        notes: lead.notes,
+        source: lead.source,
+        created_at: lead.created_at,
+        updated_at: lead.updated_at,
+        // Estimate value based on guest count (rough heuristic)
+        estimated_value: lead.guest_count ? lead.guest_count * 350 : undefined
+    }));
+}
+
+async function updateLeadStatus(leadId: string, newStatus: LeadStatusType): Promise<void> {
+    const token = localStorage.getItem('token');
+    const response = await fetch(`${API_BASE}/catering/leads/${leadId}/status`, {
+        method: 'PATCH',
+        headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ status: newStatus })
+    });
+
+    if (!response.ok) {
+        throw new Error('Failed to update lead status');
+    }
+}
+
+// ============================================
+// Main Page Component
+// ============================================
 
 export default function LeadsPage() {
-    const [leads, setLeads] = useState(initialLeads);
+    const [leads, setLeads] = useState<Lead[]>([]);
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState<string | null>(null);
+    const [searchQuery, setSearchQuery] = useState("");
+    const [viewMode, setViewMode] = useState<'kanban' | 'list'>('kanban');
+    const [refreshing, setRefreshing] = useState(false);
+
+    // Load leads
+    const loadLeads = useCallback(async () => {
+        try {
+            setLoading(true);
+            setError(null);
+            const data = await fetchLeads();
+            setLeads(data);
+        } catch (err) {
+            console.error('Error loading leads:', err);
+            setError('Error al cargar los leads');
+            // Use mock data for demo
+            setLeads([
+                {
+                    id: "1",
+                    client_name: "María González",
+                    contact_email: "maria@techstartup.com",
+                    contact_phone: "555-0101",
+                    event_date: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
+                    guest_count: 120,
+                    event_type: "Corporativo",
+                    status: "new",
+                    source: "Web",
+                    created_at: new Date().toISOString(),
+                    updated_at: new Date().toISOString(),
+                    estimated_value: 42000
+                },
+                {
+                    id: "2",
+                    client_name: "Juan y Ana Rodríguez",
+                    contact_email: "ana@gmail.com",
+                    contact_phone: "555-0102",
+                    event_date: new Date(Date.now() + 45 * 24 * 60 * 60 * 1000).toISOString(),
+                    guest_count: 200,
+                    event_type: "Boda",
+                    status: "contacted",
+                    source: "Referido",
+                    created_at: new Date().toISOString(),
+                    updated_at: new Date().toISOString(),
+                    estimated_value: 180000
+                },
+                {
+                    id: "3",
+                    client_name: "Banco Nacional",
+                    contact_email: "eventos@banco.com",
+                    contact_phone: "555-0103",
+                    event_date: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString(),
+                    guest_count: 50,
+                    event_type: "Ejecutivo",
+                    status: "proposal_sent",
+                    source: "LinkedIn",
+                    created_at: new Date().toISOString(),
+                    updated_at: new Date().toISOString(),
+                    estimated_value: 35000
+                },
+                {
+                    id: "4",
+                    client_name: "Tech Conference MX",
+                    contact_email: "org@techconf.mx",
+                    contact_phone: "555-0104",
+                    event_date: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
+                    guest_count: 300,
+                    event_type: "Conferencia",
+                    status: "negotiation",
+                    source: "Web",
+                    created_at: new Date().toISOString(),
+                    updated_at: new Date().toISOString(),
+                    estimated_value: 250000
+                },
+                {
+                    id: "5",
+                    client_name: "Familia Hernández",
+                    contact_email: "hernandez@gmail.com",
+                    contact_phone: "555-0105",
+                    event_date: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000).toISOString(),
+                    guest_count: 80,
+                    event_type: "XV Años",
+                    status: "won",
+                    source: "Instagram",
+                    created_at: new Date().toISOString(),
+                    updated_at: new Date().toISOString(),
+                    estimated_value: 65000
+                }
+            ]);
+        } finally {
+            setLoading(false);
+        }
+    }, []);
+
+    useEffect(() => {
+        loadLeads();
+    }, [loadLeads]);
+
+    // Handle refresh
+    const handleRefresh = async () => {
+        setRefreshing(true);
+        await loadLeads();
+        setRefreshing(false);
+    };
+
+    // Handle status change from Kanban
+    const handleLeadStatusChange = async (leadId: string, newStatus: LeadStatusType) => {
+        try {
+            await updateLeadStatus(leadId, newStatus);
+            // Optimistically already updated in Kanban component
+            // Just update local state for consistency
+            setLeads(prev =>
+                prev.map(lead =>
+                    lead.id === leadId
+                        ? { ...lead, status: newStatus }
+                        : lead
+                )
+            );
+        } catch (err) {
+            console.error('Error updating lead status:', err);
+            // Kanban component handles revert
+            throw err;
+        }
+    };
+
+    // Handle lead click
+    const handleLeadClick = (lead: Lead) => {
+        // TODO: Open lead details modal or navigate to lead page
+        console.log('Lead clicked:', lead);
+    };
+
+    // Filter leads by search query
+    const filteredLeads = searchQuery
+        ? leads.filter(lead =>
+            lead.client_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+            lead.event_type?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+            lead.contact_email?.toLowerCase().includes(searchQuery.toLowerCase())
+        )
+        : leads;
 
     return (
         <div className="space-y-6">
-            <div className="flex items-center justify-between">
+            {/* Header */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                 <div>
                     <h1 className="text-2xl font-bold text-white">Leads & CRM</h1>
-                    <p className="text-neutral-400">Manage potential clients and upcoming opportunities</p>
+                    <p className="text-neutral-400">
+                        Gestiona clientes potenciales y oportunidades de negocio
+                    </p>
                 </div>
-                <button className="flex items-center gap-2 rounded-lg bg-emerald-600 px-4 py-2 font-medium text-white transition hover:bg-emerald-500">
+                <button className="flex items-center gap-2 rounded-lg bg-emerald-600 px-4 py-2.5 font-medium text-white transition hover:bg-emerald-500">
                     <Plus className="h-4 w-4" />
-                    Add Lead
+                    Nuevo Lead
                 </button>
             </div>
 
-            {/* Filters */}
-            <div className="flex items-center gap-4 rounded-xl border border-neutral-800 bg-neutral-900 p-2">
-                <div className="flex flex-1 items-center gap-2 rounded-lg bg-neutral-950 px-3 py-2">
-                    <Search className="h-4 w-4 text-neutral-500" />
+            {/* Filters Bar */}
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-4 rounded-xl border border-neutral-800 bg-neutral-900 p-3">
+                {/* Search */}
+                <div className="flex flex-1 items-center gap-2 rounded-lg bg-neutral-950 px-3 py-2.5">
+                    <Search className="h-4 w-4 text-neutral-500 flex-shrink-0" />
                     <input
                         type="text"
-                        placeholder="Search leads..."
-                        className="w-full bg-transparent text-sm text-white focus:outline-none"
+                        placeholder="Buscar por nombre, tipo de evento..."
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                        className="w-full bg-transparent text-sm text-white placeholder-neutral-500 focus:outline-none"
                     />
                 </div>
-                <button className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-neutral-400 hover:text-white">
-                    <Filter className="h-4 w-4" />
-                    Filter
-                </button>
-            </div>
 
-            {/* Kanban Board */}
-            <div className="flex gap-6 overflow-x-auto pb-6">
-                {statuses.map((status) => (
-                    <div key={status} className="w-80 flex-shrink-0">
-                        <div className="mb-4 flex items-center justify-between px-1">
-                            <span className="font-semibold text-neutral-300">{status}</span>
-                            <span className="rounded bg-neutral-800 px-2 py-0.5 text-xs text-neutral-500">
-                                {leads.filter((l) => l.status === status).length}
-                            </span>
-                        </div>
+                {/* Action Buttons */}
+                <div className="flex items-center gap-2">
+                    {/* Refresh */}
+                    <button
+                        onClick={handleRefresh}
+                        disabled={refreshing}
+                        className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-neutral-400 hover:text-white hover:bg-neutral-800 transition disabled:opacity-50"
+                    >
+                        <RefreshCcw className={`h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} />
+                        <span className="hidden sm:inline">Actualizar</span>
+                    </button>
 
-                        <div className="space-y-3">
-                            {leads
-                                .filter((lead) => lead.status === status)
-                                .map((lead) => (
-                                    <div key={lead.id} className="cursor-pointer rounded-lg border border-neutral-800 bg-neutral-900 p-4 transition hover:border-neutral-700 hover:bg-neutral-800">
-                                        <div className="mb-3 flex justify-between">
-                                            <h3 className="font-medium text-white">{lead.name}</h3>
-                                            <button className="text-neutral-500 hover:text-white"><MoreHorizontal className="h-4 w-4" /></button>
-                                        </div>
-                                        {lead.company && <p className="mb-2 text-xs font-medium uppercase text-emerald-500">{lead.company}</p>}
-                                        <p className="mb-1 text-sm text-neutral-300">{lead.event}</p>
-                                        <div className="flex items-center gap-2 text-xs text-neutral-500">
-                                            <span>{lead.date}</span>
-                                            <span>•</span>
-                                            <span>{lead.guests} guests</span>
-                                        </div>
+                    {/* Filter */}
+                    <button className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-neutral-400 hover:text-white hover:bg-neutral-800 transition">
+                        <Filter className="h-4 w-4" />
+                        <span className="hidden sm:inline">Filtrar</span>
+                    </button>
 
-                                        <div className="mt-4 flex gap-2 border-t border-neutral-800 pt-3">
-                                            <button className="flex h-8 w-8 items-center justify-center rounded bg-neutral-800 text-neutral-400 hover:bg-neutral-700 hover:text-white">
-                                                <Phone className="h-3.5 w-3.5" />
-                                            </button>
-                                            <button className="flex h-8 w-8 items-center justify-center rounded bg-neutral-800 text-neutral-400 hover:bg-neutral-700 hover:text-white">
-                                                <Mail className="h-3.5 w-3.5" />
-                                            </button>
-                                        </div>
-                                    </div>
-                                ))}
-
-                            <button className="flex w-full items-center justify-center rounded-lg border border-dashed border-neutral-800 py-2 text-sm text-neutral-500 hover:bg-neutral-900">
-                                <Plus className="mr-2 h-3.5 w-3.5" />
-                                New
-                            </button>
-                        </div>
+                    {/* View Toggle */}
+                    <div className="flex rounded-lg bg-neutral-800 p-1">
+                        <button
+                            onClick={() => setViewMode('kanban')}
+                            className={`p-2 rounded-md transition ${viewMode === 'kanban'
+                                    ? 'bg-emerald-600 text-white'
+                                    : 'text-neutral-400 hover:text-white'
+                                }`}
+                            title="Vista Kanban"
+                        >
+                            <LayoutGrid className="h-4 w-4" />
+                        </button>
+                        <button
+                            onClick={() => setViewMode('list')}
+                            className={`p-2 rounded-md transition ${viewMode === 'list'
+                                    ? 'bg-emerald-600 text-white'
+                                    : 'text-neutral-400 hover:text-white'
+                                }`}
+                            title="Vista Lista"
+                        >
+                            <List className="h-4 w-4" />
+                        </button>
                     </div>
-                ))}
+                </div>
             </div>
+
+            {/* Error State */}
+            {error && !loading && (
+                <div className="rounded-xl border border-amber-800/50 bg-amber-900/20 p-4 text-sm text-amber-300">
+                    {error} — Mostrando datos de demostración.
+                </div>
+            )}
+
+            {/* Content */}
+            <AnimatePresence mode="wait">
+                {loading ? (
+                    <motion.div
+                        key="loading"
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        className="flex items-center justify-center py-20"
+                    >
+                        <Loader2 className="h-8 w-8 animate-spin text-emerald-500" />
+                    </motion.div>
+                ) : viewMode === 'kanban' ? (
+                    <motion.div
+                        key="kanban"
+                        initial={{ opacity: 0, y: 20 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, y: -20 }}
+                    >
+                        <LeadsKanban
+                            leads={filteredLeads}
+                            onLeadStatusChange={handleLeadStatusChange}
+                            onLeadClick={handleLeadClick}
+                        />
+                    </motion.div>
+                ) : (
+                    <motion.div
+                        key="list"
+                        initial={{ opacity: 0, y: 20 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, y: -20 }}
+                        className="rounded-xl border border-neutral-800 bg-neutral-900 overflow-hidden"
+                    >
+                        {/* List View Table */}
+                        <table className="w-full">
+                            <thead>
+                                <tr className="border-b border-neutral-800 text-left text-sm text-neutral-500">
+                                    <th className="px-4 py-3 font-medium">Cliente</th>
+                                    <th className="px-4 py-3 font-medium">Evento</th>
+                                    <th className="px-4 py-3 font-medium">Fecha</th>
+                                    <th className="px-4 py-3 font-medium">Invitados</th>
+                                    <th className="px-4 py-3 font-medium">Valor Est.</th>
+                                    <th className="px-4 py-3 font-medium">Estado</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {filteredLeads.map((lead) => (
+                                    <tr
+                                        key={lead.id}
+                                        onClick={() => handleLeadClick(lead)}
+                                        className="border-b border-neutral-800/50 hover:bg-neutral-800/50 cursor-pointer transition"
+                                    >
+                                        <td className="px-4 py-3">
+                                            <div>
+                                                <p className="font-medium text-white">{lead.client_name}</p>
+                                                {lead.contact_email && (
+                                                    <p className="text-xs text-neutral-500">{lead.contact_email}</p>
+                                                )}
+                                            </div>
+                                        </td>
+                                        <td className="px-4 py-3 text-sm text-neutral-300">
+                                            {lead.event_type || '—'}
+                                        </td>
+                                        <td className="px-4 py-3 text-sm text-neutral-400">
+                                            {lead.event_date
+                                                ? new Date(lead.event_date).toLocaleDateString('es-MX', {
+                                                    day: 'numeric',
+                                                    month: 'short'
+                                                })
+                                                : '—'
+                                            }
+                                        </td>
+                                        <td className="px-4 py-3 text-sm text-neutral-400">
+                                            {lead.guest_count || '—'}
+                                        </td>
+                                        <td className="px-4 py-3 text-sm font-medium text-emerald-400">
+                                            {lead.estimated_value
+                                                ? new Intl.NumberFormat('es-MX', {
+                                                    style: 'currency',
+                                                    currency: 'MXN',
+                                                    maximumFractionDigits: 0
+                                                }).format(lead.estimated_value)
+                                                : '—'
+                                            }
+                                        </td>
+                                        <td className="px-4 py-3">
+                                            <span className={`inline-flex px-2 py-1 text-xs font-medium rounded-full ${lead.status === 'new' ? 'bg-blue-500/20 text-blue-400' :
+                                                    lead.status === 'contacted' ? 'bg-cyan-500/20 text-cyan-400' :
+                                                        lead.status === 'proposal_sent' ? 'bg-violet-500/20 text-violet-400' :
+                                                            lead.status === 'negotiation' ? 'bg-amber-500/20 text-amber-400' :
+                                                                lead.status === 'won' ? 'bg-emerald-500/20 text-emerald-400' :
+                                                                    lead.status === 'lost' ? 'bg-red-500/20 text-red-400' :
+                                                                        'bg-neutral-500/20 text-neutral-400'
+                                                }`}>
+                                                {lead.status === 'new' ? 'Nuevo' :
+                                                    lead.status === 'contacted' ? 'Contactado' :
+                                                        lead.status === 'proposal_sent' ? 'Propuesta' :
+                                                            lead.status === 'negotiation' ? 'Negociación' :
+                                                                lead.status === 'won' ? 'Ganado' :
+                                                                    lead.status === 'lost' ? 'Perdido' :
+                                                                        lead.status}
+                                            </span>
+                                        </td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+
+                        {filteredLeads.length === 0 && (
+                            <div className="py-12 text-center text-neutral-500">
+                                No se encontraron leads
+                            </div>
+                        )}
+                    </motion.div>
+                )}
+            </AnimatePresence>
         </div>
     );
 }

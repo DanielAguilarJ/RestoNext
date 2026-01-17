@@ -1020,15 +1020,20 @@ class PurchaseOrderItem(Base):
 # ============================================
 
 class LeadStatus(str, enum.Enum):
+    """Extended lead status for full Kanban CRM workflow"""
     NEW = "new"
     CONTACTED = "contacted"
-    QUOTING = "quoting"
+    PROPOSAL_SENT = "proposal_sent"   # Propuesta enviada
+    NEGOTIATION = "negotiation"       # En negociación
+    QUOTING = "quoting"               # Legacy - kept for compatibility
     WON = "won"
     LOST = "lost"
 
 class EventStatus(str, enum.Enum):
+    """Event lifecycle status including deposit payment"""
     DRAFT = "draft"
-    CONFIRMED = "confirmed"
+    CONFIRMED = "confirmed"           # Propuesta firmada
+    BOOKED = "booked"                 # Anticipo pagado - fecha reservada
     IN_PROGRESS = "in_progress"
     COMPLETED = "completed"
     CANCELLED = "cancelled"
@@ -1223,11 +1228,62 @@ class CateringQuote(Base):
     tax: Mapped[float] = mapped_column(Float, default=0.0)
     total: Mapped[float] = mapped_column(Float, default=0.0)
     
+    # Deposit/Payment Configuration (NEW for Stripe integration)
+    deposit_percentage: Mapped[float] = mapped_column(Float, default=50.0)  # 50% default
+    deposit_amount: Mapped[float] = mapped_column(Float, default=0.0)
+    deposit_paid: Mapped[bool] = mapped_column(Boolean, default=False)
+    stripe_payment_intent_id: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    paid_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    
+    # Signature metadata (NEW)
+    signature_data: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)
+    signed_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
     # Relationships
-    # Relationships
     event: Mapped["Event"] = relationship(back_populates="quotes")
+
+
+class CateringPackage(Base):
+    """
+    Pre-configured menu packages for quick quote creation.
+    Examples: "Paquete Boda Gold", "Paquete Corporativo Básico"
+    
+    items JSONB structure:
+    [
+        {"menu_item_id": "uuid", "name": "Entrada Mixta", "quantity": 1, "unit_price": 150},
+        {"menu_item_id": "uuid", "name": "Filete Mignon", "quantity": 1, "unit_price": 450}
+    ]
+    """
+    __tablename__ = "catering_packages"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    tenant_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("tenants.id"), nullable=False
+    )
+    
+    name: Mapped[str] = mapped_column(String(128), nullable=False)
+    description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    
+    # Bundled items configuration
+    items: Mapped[list] = mapped_column(JSONB, nullable=False, default=list)
+    
+    # Package pricing (can be less than sum of items = discount)
+    base_price_per_person: Mapped[float] = mapped_column(Float, default=0.0)
+    min_guests: Mapped[int] = mapped_column(Integer, default=20)
+    max_guests: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    
+    # Package type/category
+    category: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)  # "wedding", "corporate", "social"
+    
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    
+    # Relationships
+    tenant: Mapped["Tenant"] = relationship()
 
 
 # ============================================

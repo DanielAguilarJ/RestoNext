@@ -1514,5 +1514,91 @@ export const cateringApi = {
             body: JSON.stringify(data),
         });
     },
+
+    // ==========================================
+    // Leads Status (Kanban)
+    // ==========================================
+
+    /**
+     * Update lead status (for Kanban drag & drop)
+     */
+    updateLeadStatus: async (leadId: string, status: string): Promise<EventLead> => {
+        return apiRequest<EventLead>(`/catering/leads/${leadId}/status`, {
+            method: 'PATCH',
+            body: JSON.stringify({ status }),
+        });
+    },
+
+    /**
+     * Get single lead by ID
+     */
+    getLead: async (leadId: string): Promise<EventLead> => {
+        return apiRequest<EventLead>(`/catering/leads/${leadId}`);
+    },
+
+    // ==========================================
+    // Catering Packages (Bundles)
+    // ==========================================
+
+    /**
+     * List all catering packages
+     */
+    getPackages: async (category?: string): Promise<CateringPackage[]> => {
+        const params = category ? `?category=${encodeURIComponent(category)}` : '';
+        return apiRequest<CateringPackage[]>(`/catering/packages${params}`);
+    },
+
+    /**
+     * Create a new catering package
+     */
+    createPackage: async (data: {
+        name: string;
+        description?: string;
+        items: Array<{
+            menu_item_id: string;
+            name: string;
+            quantity: number;
+            unit_price: number;
+        }>;
+        base_price_per_person: number;
+        min_guests?: number;
+        max_guests?: number;
+        category?: string;
+    }): Promise<CateringPackage> => {
+        return apiRequest<CateringPackage>('/catering/packages', {
+            method: 'POST',
+            body: JSON.stringify(data),
+        });
+    },
+
+    /**
+     * Apply a package to an event
+     */
+    applyPackageToEvent: async (eventId: string, packageId: string): Promise<CateringEvent> => {
+        return apiRequest<CateringEvent>(`/catering/events/${eventId}/apply-package`, {
+            method: 'POST',
+            body: JSON.stringify({ package_id: packageId }),
+        });
+    },
 };
 
+// ============================================
+// Catering Package Type
+// ============================================
+
+export interface CateringPackage {
+    id: string;
+    name: string;
+    description?: string;
+    items: Array<{
+        menu_item_id: string;
+        name: string;
+        quantity: number;
+        unit_price: number;
+    }>;
+    base_price_per_person: number;
+    min_guests: number;
+    max_guests?: number;
+    category?: string;
+    is_active: boolean;
+}
