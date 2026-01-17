@@ -4,7 +4,7 @@ RestoNext MX - Database Performance & Legal Compliance Migration
 Alembic revision: a004_preflight_optimization
 
 Revision ID: a004_preflight_optimization
-Revises: add_self_service_dining
+Revises: a003_add_procurement
 Create Date: 2026-01-16
 
 This migration adds:
@@ -25,7 +25,7 @@ from sqlalchemy.dialects import postgresql
 
 # revision identifiers, used by Alembic.
 revision = 'a004_preflight_optimization'
-down_revision = 'add_self_service_dining'
+down_revision = 'a003_add_procurement'
 branch_labels = None
 depends_on = None
 
