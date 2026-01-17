@@ -214,35 +214,79 @@ interface DashboardErrorStateProps {
 }
 
 export function DashboardErrorState({ error, onRetry }: DashboardErrorStateProps) {
+    // Detect if this is a network/API connectivity issue
+    const isNetworkError = error?.message?.includes('Failed to fetch') ||
+        error?.message?.includes('NetworkError') ||
+        error?.message?.includes('fetch');
+
+    const errorTitle = isNetworkError
+        ? "No se puede conectar al servidor"
+        : "Error al cargar datos";
+
+    const errorDescription = isNetworkError
+        ? "El backend no está disponible. Esto puede deberse a que el servidor está iniciando o la configuración de la URL del API es incorrecta."
+        : error?.message || "Hubo un problema al cargar la información del dashboard.";
+
     return (
         <motion.div
             initial={{ opacity: 0, scale: 0.95 }}
             animate={{ opacity: 1, scale: 1 }}
             className="flex flex-col items-center justify-center py-16 px-6"
         >
-            <div className="w-16 h-16 rounded-2xl bg-red-100 dark:bg-red-900/30 flex items-center justify-center mb-4">
-                <svg
-                    className="w-8 h-8 text-red-500"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    stroke="currentColor"
-                >
-                    <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={2}
-                        d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
-                    />
-                </svg>
+            <div className={`w-16 h-16 rounded-2xl flex items-center justify-center mb-4 ${isNetworkError
+                    ? 'bg-amber-100 dark:bg-amber-900/30'
+                    : 'bg-red-100 dark:bg-red-900/30'
+                }`}>
+                {isNetworkError ? (
+                    <svg
+                        className="w-8 h-8 text-amber-500"
+                        fill="none"
+                        viewBox="0 0 24 24"
+                        stroke="currentColor"
+                    >
+                        <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth={2}
+                            d="M8.111 16.404a5.5 5.5 0 017.778 0M12 20h.01m-7.08-7.071c3.904-3.905 10.236-3.905 14.141 0M1.394 9.393c5.857-5.857 15.355-5.857 21.213 0"
+                        />
+                    </svg>
+                ) : (
+                    <svg
+                        className="w-8 h-8 text-red-500"
+                        fill="none"
+                        viewBox="0 0 24 24"
+                        stroke="currentColor"
+                    >
+                        <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth={2}
+                            d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
+                        />
+                    </svg>
+                )}
             </div>
 
             <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">
-                Error al cargar datos
+                {errorTitle}
             </h3>
 
-            <p className="text-gray-500 dark:text-gray-400 text-center max-w-sm mb-6">
-                {error?.message || "Hubo un problema al cargar la información del dashboard."}
+            <p className="text-gray-500 dark:text-gray-400 text-center max-w-sm mb-4">
+                {errorDescription}
             </p>
+
+            {/* Troubleshooting tips for network errors */}
+            {isNetworkError && (
+                <div className="text-xs text-gray-400 dark:text-gray-500 bg-gray-50 dark:bg-gray-800/50 rounded-lg p-3 mb-6 max-w-md">
+                    <p className="font-medium mb-2">Posibles soluciones:</p>
+                    <ul className="list-disc list-inside space-y-1">
+                        <li>Verifica que el backend esté desplegado y corriendo</li>
+                        <li>Revisa que <code className="bg-gray-200 dark:bg-gray-700 px-1 rounded">NEXT_PUBLIC_API_URL</code> esté configurado</li>
+                        <li>Si acabas de desplegar, espera unos segundos</li>
+                    </ul>
+                </div>
+            )}
 
             {onRetry && (
                 <button
