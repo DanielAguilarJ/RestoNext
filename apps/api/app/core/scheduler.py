@@ -67,8 +67,21 @@ def create_scheduler() -> AsyncIOScheduler:
     Create and configure the APScheduler instance.
     Uses AsyncIOScheduler for compatibility with FastAPI's event loop.
     """
+    # Try to use Mexico City timezone, fallback to UTC if not available
+    try:
+        import pytz
+        tz = "America/Mexico_City"
+    except ImportError:
+        try:
+            from zoneinfo import ZoneInfo
+            ZoneInfo("America/Mexico_City")  # Test if it exists
+            tz = "America/Mexico_City"
+        except Exception:
+            logger.warning("⚠️ Mexico City timezone not available, using UTC")
+            tz = "UTC"
+    
     return AsyncIOScheduler(
-        timezone="America/Mexico_City",
+        timezone=tz,
         job_defaults={
             "coalesce": True,  # Combine missed runs into one
             "max_instances": 1,  # Only one instance of each job at a time

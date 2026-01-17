@@ -57,6 +57,7 @@ reportlab>=4.0.0
 # Scheduler (Business Automation)
 # ============================================
 apscheduler>=3.10.0
+pytz  # Timezone support for APScheduler
 
 # ============================================
 # CLI Tool

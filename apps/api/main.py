@@ -80,21 +80,39 @@ async def lifespan(app: FastAPI):
     - Startup: Initialize DB, Redis, and Scheduler
     - Shutdown: Gracefully close all connections
     """
+    # Mark startup as complete early for Railway health checks
+    # This allows the /health endpoint to return 200 during initialization
+    global _startup_complete
+    
     # ============================================
     # Startup
     # ============================================
     print("INFO:     🚀 Starting RestoNext MX API...")
+    print(f"INFO:     Environment: {settings.sentry_environment}")
+    print(f"INFO:     Debug mode: {settings.debug}")
     
-    # Initialize database
-    await init_db()
+    # Initialize database (CRITICAL - must succeed)
+    try:
+        await init_db()
+        print("INFO:     ✅ Database initialized successfully")
+    except Exception as e:
+        print(f"CRITICAL: ❌ Database initialization failed: {e}")
+        raise  # Database is critical, fail fast
     
-    # Connect to Redis for WebSocket pub/sub
-    await ws_manager.connect_redis()
+    # Connect to Redis for WebSocket pub/sub (OPTIONAL)
+    try:
+        await ws_manager.connect_redis()
+    except Exception as e:
+        print(f"WARNING:  ⚠️ Redis connection failed: {e}. Real-time sync disabled.")
     
-    # Start Redis listener in background
-    asyncio.create_task(ws_manager.listen_redis())
+    # Start Redis listener in background (only if connected, OPTIONAL)
+    if ws_manager.redis_client is not None:
+        asyncio.create_task(ws_manager.listen_redis())
+        print("INFO:     📡 Redis pub/sub listener started")
+    else:
+        print("INFO:     📡 Redis pub/sub skipped (no connection)")
     
-    # Initialize and start the scheduler (if enabled)
+    # Initialize and start the scheduler (OPTIONAL)
     scheduler_enabled = os.getenv("SCHEDULER_ENABLED", "true").lower() == "true"
     if scheduler_enabled:
         try:
@@ -106,11 +124,9 @@ async def lifespan(app: FastAPI):
     else:
         print("INFO:     📅 Scheduler disabled via SCHEDULER_ENABLED=false")
     
-    print("INFO:     ✅ RestoNext MX API ready to serve requests")
-    
     # Mark startup as complete for health checks
-    global _startup_complete
     _startup_complete = True
+    print("INFO:     ✅ RestoNext MX API ready to serve requests")
     
     yield
     
@@ -444,3 +460,53 @@ async def root():
         "version": "1.0.0",
         "docs": "/docs",
     }
+
+
+@app.get("/ping")
+async def ping():
+    """
+    Ultra-simple ping endpoint. 
+    No dependencies, no auth, just returns "pong".
+    Use this to verify the server is actually running.
+    """
+    return {"ping": "pong", "ok": True}
+
+
+@app.get("/debug")
+async def debug_info():
+    """
+    Debug endpoint for production diagnostics.
+    Returns system information to help identify deployment issues.
+    """
+    import sys
+    import platform
+    from datetime import datetime
+    
+    info = {
+        "timestamp": datetime.utcnow().isoformat(),
+        "startup_complete": _startup_complete,
+        "python_version": sys.version,
+        "platform": platform.platform(),
+        "environment": settings.sentry_environment,
+        "debug_mode": settings.debug,
+        "database_url_configured": bool(settings.database_url),
+        "redis_url_configured": bool(settings.redis_url),
+        "sentry_configured": bool(settings.sentry_dsn),
+        "cors_origins": settings.allowed_origins,
+    }
+    
+    # Check if Redis is connected
+    info["redis_connected"] = ws_manager.redis_client is not None
+    
+    # Check database connection
+    try:
+        from app.core.database import async_session_maker
+        from sqlalchemy import text
+        async with async_session_maker() as db:
+            await db.execute(text("SELECT 1"))
+        info["database_connected"] = True
+    except Exception as e:
+        info["database_connected"] = False
+        info["database_error"] = str(e)[:200]
+    
+    return info

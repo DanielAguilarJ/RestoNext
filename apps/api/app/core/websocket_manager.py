@@ -39,10 +39,34 @@ class ConnectionManager:
         self.pubsub: Optional[redis.client.PubSub] = None
     
     async def connect_redis(self):
-        """Initialize Redis connection for pub/sub"""
+        """Initialize Redis connection for pub/sub with timeout"""
+        import asyncio
+        
         if self.redis_client is None:
+            # Skip Redis entirely if URL is localhost and we're in production
+            # This prevents long timeouts in Railway when Redis is not configured
+            if "localhost" in settings.redis_url and not settings.debug:
+                print("INFO:     Redis skipped (localhost URL in production mode)")
+                return
+            
             try:
-                self.redis_client = redis.from_url(settings.redis_url)
+                # Create connection with timeout to avoid blocking startup
+                self.redis_client = redis.from_url(
+                    settings.redis_url,
+                    socket_connect_timeout=5,  # 5 second connection timeout
+                    socket_timeout=5,
+                )
+                
+                # Test connection with timeout
+                try:
+                    await asyncio.wait_for(self.redis_client.ping(), timeout=5.0)
+                except asyncio.TimeoutError:
+                    print("WARNING:  Redis connection timed out after 5 seconds. Continuing without Redis.")
+                    await self.redis_client.close()
+                    self.redis_client = None
+                    self.pubsub = None
+                    return
+                
                 self.pubsub = self.redis_client.pubsub()
                 await self.pubsub.subscribe("kitchen:new_order", "kitchen:order_update", "table:call_waiter")
                 print(f"INFO:     Connected to Redis at {settings.redis_url}")
