@@ -97,6 +97,6 @@ EXPOSE 8000
 
 # Production command - using shell form to expand $PORT variable
 # Railway sets $PORT dynamically, so we need shell expansion
-# NOTE: Using 1 worker to prevent scheduler conflicts and race conditions
-# For horizontal scaling, use multiple Railway replicas instead of workers
-CMD uvicorn main:app --host 0.0.0.0 --port ${PORT:-8000} --workers 1 --loop uvloop --http httptools
+# NOTE: Using 1 worker and default event loop for maximum stability
+# uvloop/httptools removed to avoid potential compatibility issues
+CMD uvicorn main:app --host 0.0.0.0 --port ${PORT:-8000} --workers 1
