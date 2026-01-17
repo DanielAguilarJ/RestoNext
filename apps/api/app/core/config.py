@@ -31,7 +31,7 @@ class Settings(BaseSettings):
     
     # App Info
     app_name: str = "RestoNext MX"
-    debug: bool = True
+    debug: bool = False  # Default False for production, set DEBUG=true in dev
     
     # CORS Configuration
     # Can be set via BACKEND_CORS_ORIGINS env var as JSON array
