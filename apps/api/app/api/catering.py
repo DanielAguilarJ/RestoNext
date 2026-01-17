@@ -11,7 +11,7 @@ from app.models.models import (
     User, Tenant, EventLead, Event, EventMenuSelection, MenuItem, 
     Recipe, BEO, CateringQuote, LeadStatus, EventStatus, QuoteStatus
 )
-from app.api.auth import get_current_user
+from app.core.security import get_current_user
 from app.schemas.catering_schemas import (
     EventLeadCreate, EventLeadUpdate, EventLeadResponse,
     EventCreate, EventUpdate, EventResponse,

@@ -22,7 +22,7 @@ from sqlalchemy import select, desc
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
-from app.core.auth import get_current_user
+from app.core.security import get_current_user
 from app.models.models import User, LegalDocument, LegalAcceptance
 
 router = APIRouter(prefix="/legal", tags=["Legal"])
