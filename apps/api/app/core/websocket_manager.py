@@ -39,41 +39,64 @@ class ConnectionManager:
         self.pubsub: Optional[redis.client.PubSub] = None
     
     async def connect_redis(self):
-        """Initialize Redis connection for pub/sub with timeout"""
+        """
+        Initialize Redis connection for pub/sub.
+        CRITICAL: This must NEVER block startup, even if Redis is unavailable.
+        """
         import asyncio
         
-        if self.redis_client is None:
-            # Skip Redis entirely if URL is localhost and we're in production
-            # This prevents long timeouts in Railway when Redis is not configured
-            if "localhost" in settings.redis_url and not settings.debug:
-                print("INFO:     Redis skipped (localhost URL in production mode)")
-                return
+        if self.redis_client is not None:
+            return  # Already connected
+        
+        # Skip Redis entirely if URL is localhost and we're NOT in debug mode
+        # This prevents blocking in Railway when Redis is not configured
+        redis_url = settings.redis_url or ""
+        if "localhost" in redis_url and not settings.debug:
+            print("INFO:     Redis skipped (localhost URL in production mode)")
+            return
+        
+        if not redis_url or redis_url == "redis://localhost:6379":
+            print("INFO:     Redis skipped (default/empty URL)")
+            return
+        
+        async def _try_connect():
+            """Inner function to attempt Redis connection"""
+            client = redis.from_url(
+                redis_url,
+                socket_connect_timeout=3,
+                socket_timeout=3,
+                retry_on_timeout=False,
+            )
+            await client.ping()  # Test connection
+            return client
+        
+        try:
+            # Wrap entire connection attempt in a 5-second timeout
+            print(f"INFO:     Attempting Redis connection to {redis_url}...")
+            self.redis_client = await asyncio.wait_for(_try_connect(), timeout=5.0)
             
-            try:
-                # Create connection with timeout to avoid blocking startup
-                self.redis_client = redis.from_url(
-                    settings.redis_url,
-                    socket_connect_timeout=5,  # 5 second connection timeout
-                    socket_timeout=5,
-                )
-                
-                # Test connection with timeout
-                try:
-                    await asyncio.wait_for(self.redis_client.ping(), timeout=5.0)
-                except asyncio.TimeoutError:
-                    print("WARNING:  Redis connection timed out after 5 seconds. Continuing without Redis.")
-                    await self.redis_client.close()
-                    self.redis_client = None
-                    self.pubsub = None
-                    return
-                
-                self.pubsub = self.redis_client.pubsub()
-                await self.pubsub.subscribe("kitchen:new_order", "kitchen:order_update", "table:call_waiter")
-                print(f"INFO:     Connected to Redis at {settings.redis_url}")
-            except Exception as e:
-                print(f"WARNING:  Could not connect to Redis: {e}. Real-time sync across instances disabled.")
-                self.redis_client = None
-                self.pubsub = None
+            # Only set up pub/sub if connection succeeded
+            self.pubsub = self.redis_client.pubsub()
+            await asyncio.wait_for(
+                self.pubsub.subscribe("kitchen:new_order", "kitchen:order_update", "table:call_waiter"),
+                timeout=3.0
+            )
+            print(f"INFO:     ✅ Connected to Redis successfully")
+            
+        except asyncio.TimeoutError:
+            print("WARNING:  ⚠️ Redis connection timed out. Continuing without Redis.")
+            self._cleanup_redis()
+        except asyncio.CancelledError:
+            print("WARNING:  ⚠️ Redis connection cancelled. Continuing without Redis.")
+            self._cleanup_redis()
+        except Exception as e:
+            print(f"WARNING:  ⚠️ Redis connection failed: {type(e).__name__}: {e}")
+            self._cleanup_redis()
+    
+    def _cleanup_redis(self):
+        """Clean up Redis resources on failure"""
+        self.redis_client = None
+        self.pubsub = None
     
     async def disconnect_redis(self):
         """Close Redis connection"""

@@ -99,11 +99,16 @@ async def lifespan(app: FastAPI):
         print(f"CRITICAL: ❌ Database initialization failed: {e}")
         raise  # Database is critical, fail fast
     
-    # Connect to Redis for WebSocket pub/sub (OPTIONAL)
+    # Connect to Redis for WebSocket pub/sub (OPTIONAL - must never block)
     try:
-        await ws_manager.connect_redis()
+        # Extra safety: wrap in timeout at lifespan level too
+        await asyncio.wait_for(ws_manager.connect_redis(), timeout=10.0)
+    except asyncio.TimeoutError:
+        print("WARNING:  ⚠️ Redis connection timed out at lifespan level. Continuing without Redis.")
+    except asyncio.CancelledError:
+        print("WARNING:  ⚠️ Redis connection was cancelled. Continuing without Redis.")
     except Exception as e:
-        print(f"WARNING:  ⚠️ Redis connection failed: {e}. Real-time sync disabled.")
+        print(f"WARNING:  ⚠️ Redis connection failed: {type(e).__name__}: {e}")
     
     # Start Redis listener in background (only if connected, OPTIONAL)
     if ws_manager.redis_client is not None:
