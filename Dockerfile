@@ -10,8 +10,9 @@ RUN npm install
 FROM node:20-alpine AS builder
 WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
-# Copy apps/web source code
+# Copy apps/web source code and shared packages for monorepo imports
 COPY apps/web/ .
+COPY packages/ ./packages/
 ENV NEXT_TELEMETRY_DISABLED 1
 RUN npm run build
 
