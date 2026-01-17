@@ -81,8 +81,8 @@ ENV PATH="/opt/venv/bin:$PATH"
 # Copy application code
 COPY --chown=restonext:restonext . .
 
-# Create logs directory
-RUN mkdir -p /app/logs && chown restonext:restonext /app/logs
+# Create logs directory and make start script executable
+RUN mkdir -p /app/logs && chown restonext:restonext /app/logs && chmod +x /app/start.sh
 
 # Switch to non-root user
 USER restonext
@@ -96,8 +96,6 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
 
 EXPOSE 8000
 
-# Production command - using shell form to expand $PORT variable
-# Railway sets $PORT dynamically, so we need shell expansion
-# NOTE: Using 1 worker and default event loop for maximum stability
-# uvloop/httptools removed to avoid potential compatibility issues
-CMD uvicorn main:app --host 0.0.0.0 --port ${PORT:-8000} --workers 1
+# Production command - smart startup script
+# Handles: DB stamp if needed, missing columns, then starts uvicorn
+CMD ["/app/start.sh"]
