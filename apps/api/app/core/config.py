@@ -14,11 +14,28 @@ class Settings(BaseSettings):
     
     @model_validator(mode='after')
     def fix_database_url(self) -> 'Settings':
-        """Substitute postgres:// with postgresql+asyncpg:// for Railway/Heroku compatibility"""
-        if self.database_url and self.database_url.startswith("postgres://"):
-            self.database_url = self.database_url.replace("postgres://", "postgresql+asyncpg://", 1)
-        elif self.database_url and self.database_url.startswith("postgresql://") and "+asyncpg" not in self.database_url:
-            self.database_url = self.database_url.replace("postgresql://", "postgresql+asyncpg://", 1)
+        """
+        Fix database URL for compatibility:
+        - postgres:// -> postgresql+asyncpg:// (Railway/Heroku)
+        - sslmode=require -> ssl=require (DigitalOcean + asyncpg)
+        """
+        if self.database_url:
+            # Fix protocol for asyncpg
+            if self.database_url.startswith("postgres://"):
+                self.database_url = self.database_url.replace("postgres://", "postgresql+asyncpg://", 1)
+            elif self.database_url.startswith("postgresql://") and "+asyncpg" not in self.database_url:
+                self.database_url = self.database_url.replace("postgresql://", "postgresql+asyncpg://", 1)
+            
+            # Fix SSL mode for asyncpg (DigitalOcean uses sslmode, asyncpg expects ssl)
+            # asyncpg doesn't understand 'sslmode', it needs 'ssl'
+            if "sslmode=require" in self.database_url:
+                self.database_url = self.database_url.replace("sslmode=require", "ssl=require")
+            elif "sslmode=" in self.database_url:
+                # Remove any sslmode parameter as asyncpg doesn't support it
+                import re
+                self.database_url = re.sub(r'[?&]sslmode=[^&]*', '', self.database_url)
+                # Clean up any double & or trailing ?
+                self.database_url = self.database_url.replace("&&", "&").rstrip("?&")
         return self
     
     # Redis
