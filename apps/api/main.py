@@ -159,10 +159,10 @@ app = FastAPI(
     description="Cloud-Native Restaurant Management SaaS for Mexico",
     version="1.0.0",
     lifespan=lifespan,
-    # Configure docs to be accessible via the /api prefix (DigitalOcean routing)
-    docs_url="/api/docs",
-    redoc_url="/api/redoc",
-    openapi_url="/api/openapi.json",
+    # Configure docs to be accessible via root (DO strips /api)
+    docs_url="/docs",
+    redoc_url="/redoc",
+    openapi_url="/openapi.json",
 )
 
 
@@ -222,35 +222,35 @@ app.add_middleware(
 )
 
 # Register API routers
-app.include_router(auth_router, prefix="/api")
-app.include_router(pos_router, prefix="/api")
-app.include_router(billing_router, prefix="/api")
-app.include_router(analytics_router, prefix="/api")
-app.include_router(onboarding_router, prefix="/api")
-app.include_router(cashier_router, prefix="/api")
-app.include_router(printer_router, prefix="/api")
-app.include_router(procurement_router, prefix="/api")
-app.include_router(inventory_router, prefix="/api")
-app.include_router(catering_router, prefix="/api/catering", tags=["Catering"])
-app.include_router(customers_router, prefix="/api/customers", tags=["Customers"])
-app.include_router(loyalty_router, prefix="/api/loyalty", tags=["Loyalty"])
-app.include_router(reservations_router, prefix="/api/reservations", tags=["Reservations"])
-app.include_router(promotions_router, prefix="/api/promotions", tags=["Promotions"])
-app.include_router(menu_router, prefix="/api", tags=["Menu"])
+app.include_router(auth_router)
+app.include_router(pos_router)
+app.include_router(billing_router)
+app.include_router(analytics_router)
+app.include_router(onboarding_router)
+app.include_router(cashier_router)
+app.include_router(printer_router)
+app.include_router(procurement_router)
+app.include_router(inventory_router)
+app.include_router(catering_router, prefix="/catering", tags=["Catering"])
+app.include_router(customers_router, prefix="/customers", tags=["Customers"])
+app.include_router(loyalty_router, prefix="/loyalty", tags=["Loyalty"])
+app.include_router(reservations_router, prefix="/reservations", tags=["Reservations"])
+app.include_router(promotions_router, prefix="/promotions", tags=["Promotions"])
+app.include_router(menu_router, tags=["Menu"])
 # Public dining endpoints (no /api prefix - consumer facing)
-app.include_router(dining_router, prefix="/api", tags=["Self-Service Dining"])
+app.include_router(dining_router, tags=["Self-Service Dining"])
 # Admin endpoints for table management
-app.include_router(admin_tables_router, prefix="/api", tags=["Admin - Tables"])
+app.include_router(admin_tables_router, tags=["Admin - Tables"])
 # Admin endpoints for system management (backups, jobs)
-app.include_router(admin_router, prefix="/api", tags=["Admin - System"])
+app.include_router(admin_router, tags=["Admin - System"])
 # Subscription management (Stripe billing)
-app.include_router(subscription_router, prefix="/api", tags=["Subscription"])
+app.include_router(subscription_router, tags=["Subscription"])
 # Stripe webhooks (public, no auth - signature verified internally)
-app.include_router(stripe_webhook_router, prefix="/api", tags=["Webhooks"])
+app.include_router(stripe_webhook_router, tags=["Webhooks"])
 # Legal compliance (terms, privacy - required for Stripe)
-app.include_router(legal_router, prefix="/api", tags=["Legal"])
+app.include_router(legal_router, tags=["Legal"])
 # Table operations (transfer, etc.)
-app.include_router(tables_router, prefix="/api", tags=["POS - Tables"])
+app.include_router(tables_router, tags=["POS - Tables"])
 
 
 # ============================================
@@ -431,7 +431,7 @@ async def health_check():
     return health_status
 
 
-@app.get("/api/system/scheduler")
+@app.get("/system/scheduler")
 async def scheduler_status():
     """
     Get scheduler status for admin dashboard.
@@ -441,7 +441,7 @@ async def scheduler_status():
     return get_scheduler_status()
 
 
-@app.get("/api/system/info")
+@app.get("/system/info")
 async def system_info():
     """System information for admin dashboard"""
     from app.core.scheduler import get_scheduler_status
@@ -466,18 +466,16 @@ async def system_info():
 # =========================================================
 
 @app.get("/")
-@app.get("/api")
 async def root():
     """API root"""
     return {
         "name": settings.app_name,
         "version": "1.0.0",
-        "docs": "/api/docs",  # Updated for DO
+        "docs": "/docs",  # Updated for DO
     }
 
 
 @app.get("/ping")
-@app.get("/api/ping")
 async def ping():
     """
     Ultra-simple ping endpoint. 
@@ -487,7 +485,6 @@ async def ping():
 
 
 @app.get("/debug")
-@app.get("/api/debug")
 async def debug_info():
     """
     Debug endpoint for production diagnostics.
