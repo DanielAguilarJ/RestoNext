@@ -1,18 +1,19 @@
 # Stage 1: Install dependencies
 FROM node:20-alpine AS deps
 RUN apk add --no-cache libc6-compat
-WORKDIR /app
-# Copy from apps/web since build context is root
+# Preserve monorepo structure for proper path resolution
+WORKDIR /app/apps/web
 COPY apps/web/package*.json ./
 RUN npm install
 
 # Stage 2: Build the application
 FROM node:20-alpine AS builder
 WORKDIR /app
-COPY --from=deps /app/node_modules ./node_modules
-# Copy apps/web source code and shared packages for monorepo imports
-COPY apps/web/ .
+# Copy entire monorepo structure so relative imports work
+COPY apps/web/ ./apps/web/
 COPY packages/ ./packages/
+COPY --from=deps /app/apps/web/node_modules ./apps/web/node_modules
+WORKDIR /app/apps/web
 ENV NEXT_TELEMETRY_DISABLED 1
 RUN npm run build
 
@@ -26,9 +27,9 @@ ENV NEXT_TELEMETRY_DISABLED 1
 RUN addgroup --system --gid 1001 nodejs
 RUN adduser --system --uid 1001 nextjs
 
-COPY --from=builder /app/public ./public
-COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
-COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
+COPY --from=builder /app/apps/web/public ./public
+COPY --from=builder --chown=nextjs:nodejs /app/apps/web/.next/standalone ./
+COPY --from=builder --chown=nextjs:nodejs /app/apps/web/.next/static ./.next/static
 
 USER nextjs
 
