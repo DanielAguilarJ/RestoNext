@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
 import { RxDBProvider } from "../lib/db-provider";
@@ -11,13 +11,14 @@ export const metadata: Metadata = {
     title: "RestoNext MX",
     description: "Cloud-Native Restaurant Management SaaS for Mexico",
     manifest: "/manifest.json",
+};
+
+export const viewport: Viewport = {
     themeColor: "#d92d20",
-    viewport: {
-        width: "device-width",
-        initialScale: 1,
-        maximumScale: 1,
-        userScalable: false,
-    },
+    width: "device-width",
+    initialScale: 1,
+    maximumScale: 1,
+    userScalable: false,
 };
 
 export default function RootLayout({

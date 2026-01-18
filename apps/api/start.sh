@@ -130,8 +130,17 @@ if ! column_exists "users" "pin_hash"; then
     run_sql "ALTER TABLE users ADD COLUMN IF NOT EXISTS pin_hash VARCHAR(255);"
 fi
 
-echo ""
 echo "✅ Database schema is ready!"
+echo ""
+
+echo "🌱 Seeding database with initial data..."
+# Run the seed script - it is idempotent (safe to run multiple times)
+if python seed_db.py; then
+    echo "✅ Database seeding completed successfully"
+else
+    echo "⚠️  Database seeding failed (non-critical, continuing...)"
+fi
+
 echo ""
 echo "🌐 Starting uvicorn server..."
 

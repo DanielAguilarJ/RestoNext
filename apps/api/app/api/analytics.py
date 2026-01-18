@@ -4,7 +4,7 @@ AI-powered demand forecasting and Business Intelligence endpoints
 """
 
 from datetime import datetime, timedelta
-from typing import List
+from typing import List, Optional
 
 from fastapi import APIRouter, Depends, Query, HTTPException
 
@@ -30,6 +30,32 @@ from app.schemas.analytics_schemas import (
 from sqlalchemy.ext.asyncio import AsyncSession
 
 router = APIRouter(prefix="/analytics", tags=["Analytics - AI & BI"])
+
+
+# ============================================
+# Helper Functions
+# ============================================
+
+def normalize_datetime(dt: Optional[datetime]) -> Optional[datetime]:
+    """
+    Normalize a datetime by removing timezone info if present.
+    
+    This fixes the asyncpg error: "can't subtract offset-naive and offset-aware datetimes"
+    The database stores timestamps as TIMESTAMP WITHOUT TIME ZONE (naive),
+    but the frontend sends ISO 8601 dates with timezone info (aware).
+    
+    Args:
+        dt: A datetime object that may be offset-aware or offset-naive
+        
+    Returns:
+        A naive datetime (without timezone info) or None
+    """
+    if dt is None:
+        return None
+    if dt.tzinfo is not None:
+        # Remove timezone info to make it naive
+        return dt.replace(tzinfo=None)
+    return dt
 
 
 # ============================================
@@ -118,8 +144,12 @@ async def api_get_sales_by_hour(
     Returns data for a 7-day x 24-hour grid showing peak sales hours.
     Useful for staffing optimization and understanding customer patterns.
     """
+    # Normalize dates to naive datetime to match DB column format
+    start_date = normalize_datetime(start_date)
+    end_date = normalize_datetime(end_date)
+    
     if not end_date:
-        end_date = datetime.now()
+        end_date = datetime.utcnow()
     if not start_date:
         start_date = end_date - timedelta(days=7)
     
@@ -161,8 +191,12 @@ async def api_get_top_dishes(
     Helps identify high-margin dishes for promotions and low-margin 
     dishes that may need recipe adjustments.
     """
+    # Normalize dates to naive datetime to match DB column format
+    start_date = normalize_datetime(start_date)
+    end_date = normalize_datetime(end_date)
+    
     if not end_date:
-        end_date = datetime.now()
+        end_date = datetime.utcnow()
     if not start_date:
         start_date = end_date - timedelta(days=30)
     
@@ -227,8 +261,12 @@ async def api_get_kpis(
     
     Industry benchmark: Food cost should be 28-35% for profitability.
     """
+    # Normalize dates to naive datetime to match DB column format
+    start_date = normalize_datetime(start_date)
+    end_date = normalize_datetime(end_date)
+    
     if not end_date:
-        end_date = datetime.now()
+        end_date = datetime.utcnow()
     if not start_date:
         start_date = end_date - timedelta(days=30)
     
@@ -261,8 +299,12 @@ async def api_get_sales_by_category(
     Returns percentage breakdown of sales by category.
     Helps identify which menu sections drive the most revenue.
     """
+    # Normalize dates to naive datetime to match DB column format
+    start_date = normalize_datetime(start_date)
+    end_date = normalize_datetime(end_date)
+    
     if not end_date:
-        end_date = datetime.now()
+        end_date = datetime.utcnow()
     if not start_date:
         start_date = end_date - timedelta(days=30)
     
