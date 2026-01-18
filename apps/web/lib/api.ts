@@ -153,23 +153,27 @@ export interface LoginResponse {
 export const authApi = {
     /**
      * Login with email and password
+     * Backend expects JSON: { email: string, password: string }
      */
     login: async (email: string, password: string): Promise<LoginResponse> => {
-        const formData = new URLSearchParams();
-        formData.append('username', email);
-        formData.append('password', password);
-
         const response = await fetch(`${API_BASE_URL}/auth/login`, {
             method: 'POST',
             headers: {
-                'Content-Type': 'application/x-www-form-urlencoded',
+                'Content-Type': 'application/json',
             },
-            body: formData.toString(),
+            body: JSON.stringify({ email, password }),
         });
 
         if (!response.ok) {
             const errorData = await response.json().catch(() => ({}));
-            throw new Error(errorData.detail || 'Login failed');
+            // Extract meaningful error message
+            let errorMessage = 'Login failed';
+            if (errorData.detail) {
+                errorMessage = typeof errorData.detail === 'string'
+                    ? errorData.detail
+                    : JSON.stringify(errorData.detail);
+            }
+            throw new Error(errorMessage);
         }
 
         const data: LoginResponse = await response.json();

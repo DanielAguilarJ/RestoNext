@@ -27,7 +27,21 @@ export default function LoginPage() {
             await authApi.login(email, password);
             router.push("/");
         } catch (err: any) {
-            setError(err.message || "Error al iniciar sesión. Verifica tus credenciales.");
+            // Robust error message extraction
+            let errorMessage = "Error al iniciar sesión. Verifica tus credenciales.";
+
+            if (err?.message) {
+                errorMessage = typeof err.message === 'string'
+                    ? err.message
+                    : JSON.stringify(err.message);
+            } else if (err?.response?.data?.detail) {
+                const detail = err.response.data.detail;
+                errorMessage = typeof detail === 'string'
+                    ? detail
+                    : JSON.stringify(detail);
+            }
+
+            setError(errorMessage);
         } finally {
             setIsLoading(false);
         }
@@ -164,7 +178,7 @@ export default function LoginPage() {
                             </p>
                             <div className="flex items-center justify-center gap-4 text-sm">
                                 <code className="px-2 py-1 bg-gray-100 dark:bg-gray-800 rounded text-gray-700 dark:text-gray-300">
-                                    admin@demo.com
+                                    admin@restonext.com
                                 </code>
                                 <code className="px-2 py-1 bg-gray-100 dark:bg-gray-800 rounded text-gray-700 dark:text-gray-300">
                                     password123
@@ -182,3 +196,4 @@ export default function LoginPage() {
         </div>
     );
 }
+
