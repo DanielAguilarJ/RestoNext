@@ -250,11 +250,17 @@ class SelectedModifierSchema(BaseModel):
 
 
 class OrderItemCreate(BaseModel):
-    menu_item_id: UUID
+    """Order item for creating new orders - flexible to accept string or UUID"""
+    menu_item_id: str  # Accept string, will be validated as UUID in business logic
     quantity: int = 1
     selected_modifiers: List[SelectedModifierSchema] = []
     seat_number: Optional[int] = None
     notes: Optional[str] = None
+    
+    @property
+    def menu_item_uuid(self) -> UUID:
+        """Convert menu_item_id to UUID"""
+        return UUID(self.menu_item_id)
 
 
 class OrderItemResponse(BaseModel):
@@ -276,13 +282,25 @@ class OrderItemResponse(BaseModel):
 
 
 class OrderCreate(BaseModel):
-    table_id: UUID
+    """Create order schema - flexible for POS and self-service"""
+    table_id: Optional[str] = None  # Accept string, optional for some flows
     items: List[OrderItemCreate]
     notes: Optional[str] = None
     # Omnichannel
     service_type: str = "dine_in"
-    customer_id: Optional[UUID] = None
+    customer_id: Optional[str] = None  # Accept string
+    customer_name: Optional[str] = None  # For self-service without customer profile
     delivery_info: Optional[dict] = None
+    
+    @property
+    def table_uuid(self) -> Optional[UUID]:
+        """Convert table_id to UUID if present"""
+        return UUID(self.table_id) if self.table_id else None
+    
+    @property
+    def customer_uuid(self) -> Optional[UUID]:
+        """Convert customer_id to UUID if present"""
+        return UUID(self.customer_id) if self.customer_id else None
 
 
 class OrderResponse(BaseModel):

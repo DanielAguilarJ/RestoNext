@@ -39,9 +39,15 @@ async def create_order(
     Triggers WebSocket event `kitchen:new_order` for KDS displays.
     Bar items are routed separately to `bar:new_order`.
     """
-    # Get table
+    from uuid import UUID as PyUUID
+    
+    # Get table - handle string or UUID
+    table_id = order_data.table_uuid
+    if not table_id:
+        raise HTTPException(status_code=400, detail="table_id is required")
+    
     table_result = await db.execute(
-        select(Table).where(Table.id == order_data.table_id)
+        select(Table).where(Table.id == table_id)
     )
     table = table_result.scalar_one_or_none()
     
@@ -51,7 +57,7 @@ async def create_order(
     # Create order
     order = Order(
         tenant_id=current_user.tenant_id,
-        table_id=order_data.table_id,
+        table_id=table_id,
         waiter_id=current_user.id,
         status=OrderStatus.OPEN,
         notes=order_data.notes,
@@ -65,9 +71,11 @@ async def create_order(
     bar_items = []
     
     for item_data in order_data.items:
-        # Get menu item
+        # Get menu item - convert string to UUID if needed
+        menu_item_id = item_data.menu_item_uuid
+        
         menu_result = await db.execute(
-            select(MenuItem).where(MenuItem.id == item_data.menu_item_id)
+            select(MenuItem).where(MenuItem.id == menu_item_id)
         )
         menu_item = menu_result.scalar_one_or_none()
         

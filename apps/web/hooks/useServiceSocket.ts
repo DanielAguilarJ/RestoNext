@@ -13,7 +13,45 @@
 import { useEffect, useRef, useCallback, useState } from 'react';
 import { tokenUtils } from '@/lib/api';
 
-const WS_BASE_URL = process.env.NEXT_PUBLIC_WS_URL || 'ws://localhost:8000';
+/**
+ * Construct WebSocket URL that respects HTTPS requirements
+ * If the page is served over HTTPS, we must use WSS
+ */
+function getWebSocketUrl(): string {
+    // Check for environment variable first
+    const envWsUrl = process.env.NEXT_PUBLIC_WS_URL;
+
+    if (typeof window === 'undefined') {
+        // Server-side: use environment variable or default
+        return envWsUrl || 'ws://localhost:8000';
+    }
+
+    // Client-side: derive from current page protocol
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+
+    // If env variable is set, convert it to proper protocol
+    if (envWsUrl) {
+        // Replace ws:// or wss:// with the correct protocol
+        return envWsUrl.replace(/^wss?:/, protocol);
+    }
+
+    // Use API URL base if available
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL;
+    if (apiUrl) {
+        // Extract host from API URL and use WebSocket protocol
+        try {
+            const url = new URL(apiUrl);
+            return `${protocol}//${url.host}`;
+        } catch {
+            // Fallback to current host
+        }
+    }
+
+    // Fallback: use current host
+    return `${protocol}//${window.location.host}`;
+}
+
+const WS_BASE_URL = getWebSocketUrl();
 
 export interface ServiceRequestNotification {
     id: string;
