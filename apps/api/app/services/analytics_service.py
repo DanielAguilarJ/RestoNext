@@ -48,8 +48,8 @@ async def get_sales_by_hour(
     Returns data suitable for a 7-day (rows) x 24-hour (columns) heatmap.
     """
     # Query using PostgreSQL EXTRACT for hour and day of week
-    # Note: Using OrderStatus enum values directly - checking for completed orders
-    # 'completed' status means order is finished and paid
+    # CRITICAL: PostgreSQL stores enum NAMES (PAID, DELIVERED) not values (paid, delivered)
+    # SQLAlchemy's SQLEnum stores the Python enum name by default
     query = text("""
         SELECT 
             EXTRACT(HOUR FROM o.created_at)::int AS hour,
@@ -58,7 +58,7 @@ async def get_sales_by_hour(
             COUNT(o.id) AS order_count
         FROM orders o
         WHERE o.tenant_id = :tenant_id
-            AND o.status IN ('paid', 'delivered', 'completed')
+            AND o.status IN ('PAID', 'DELIVERED')
             AND o.created_at >= :start_date
             AND o.created_at <= :end_date
         GROUP BY 
@@ -114,7 +114,7 @@ async def get_top_profitable_dishes(
     Calculates profit margin as percentage.
     """
     # First, get revenue per menu item
-    # Include all completed/paid orders
+    # CRITICAL: Use uppercase enum names (PAID, DELIVERED)
     revenue_query = text("""
         SELECT 
             mi.id AS menu_item_id,
@@ -127,7 +127,7 @@ async def get_top_profitable_dishes(
         JOIN menu_items mi ON mi.id = oi.menu_item_id
         JOIN menu_categories mc ON mc.id = mi.category_id
         WHERE o.tenant_id = :tenant_id
-            AND o.status IN ('paid', 'delivered', 'completed')
+            AND o.status IN ('PAID', 'DELIVERED')
             AND o.created_at >= :start_date
             AND o.created_at <= :end_date
         GROUP BY mi.id, mi.name, mc.name
@@ -214,7 +214,7 @@ async def get_sales_comparison(
                 COUNT(o.id) AS order_count
             FROM orders o
             WHERE o.tenant_id = :tenant_id
-                AND o.status IN ('paid', 'delivered', 'completed')
+                AND o.status IN ('PAID', 'DELIVERED')
                 AND DATE(o.created_at) >= :start_date
                 AND DATE(o.created_at) <= :end_date
             GROUP BY DATE(o.created_at), EXTRACT(DOW FROM o.created_at)
@@ -282,7 +282,7 @@ async def get_kpis(
     - Average orders per day
     - Busiest hour and day
     """
-    # Basic order aggregations
+    # Basic order aggregations - use uppercase enum names
     query = text("""
         SELECT 
             COALESCE(AVG(o.total), 0) AS average_ticket,
@@ -290,7 +290,7 @@ async def get_kpis(
             COUNT(o.id) AS total_orders
         FROM orders o
         WHERE o.tenant_id = :tenant_id
-            AND o.status IN ('paid', 'delivered', 'completed')
+            AND o.status IN ('PAID', 'DELIVERED')
             AND o.created_at >= :start_date
             AND o.created_at <= :end_date
     """)
@@ -319,7 +319,7 @@ async def get_kpis(
         FROM order_items oi
         JOIN orders o ON o.id = oi.order_id
         WHERE o.tenant_id = :tenant_id
-            AND o.status IN ('paid', 'delivered', 'completed')
+            AND o.status IN ('PAID', 'DELIVERED')
             AND o.created_at >= :start_date
             AND o.created_at <= :end_date
     """)
@@ -346,7 +346,7 @@ async def get_kpis(
             COUNT(o.id) AS order_count
         FROM orders o
         WHERE o.tenant_id = :tenant_id
-            AND o.status IN ('paid', 'delivered', 'completed')
+            AND o.status IN ('PAID', 'DELIVERED')
             AND o.created_at >= :start_date
             AND o.created_at <= :end_date
         GROUP BY EXTRACT(HOUR FROM o.created_at)
@@ -370,7 +370,7 @@ async def get_kpis(
             COUNT(o.id) AS order_count
         FROM orders o
         WHERE o.tenant_id = :tenant_id
-            AND o.status IN ('paid', 'delivered', 'completed')
+            AND o.status IN ('PAID', 'DELIVERED')
             AND o.created_at >= :start_date
             AND o.created_at <= :end_date
         GROUP BY EXTRACT(DOW FROM o.created_at)
@@ -422,7 +422,7 @@ async def get_sales_by_category(
         JOIN menu_items mi ON mi.id = oi.menu_item_id
         JOIN menu_categories mc ON mc.id = mi.category_id
         WHERE o.tenant_id = :tenant_id
-            AND o.status IN ('paid', 'delivered', 'completed')
+            AND o.status IN ('PAID', 'DELIVERED')
             AND o.created_at >= :start_date
             AND o.created_at <= :end_date
         GROUP BY mc.id, mc.name

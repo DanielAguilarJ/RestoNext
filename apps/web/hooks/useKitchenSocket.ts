@@ -7,8 +7,41 @@ import { useEffect, useRef, useCallback, useState } from 'react';
 import { useKDSStore } from '@/lib/store';
 import { tokenUtils } from '@/lib/api';
 
-// WebSocket base URL (derive from API URL)
-const WS_BASE_URL = process.env.NEXT_PUBLIC_WS_URL || 'ws://localhost:8000';
+/**
+ * Construct WebSocket URL that respects HTTPS requirements
+ * If the page is served over HTTPS, we must use WSS
+ */
+function getWebSocketUrl(): string {
+    const envWsUrl = process.env.NEXT_PUBLIC_WS_URL;
+
+    if (typeof window === 'undefined') {
+        return envWsUrl || 'ws://localhost:8000';
+    }
+
+    // Derive protocol from current page
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+
+    if (envWsUrl) {
+        // Replace ws:// or wss:// with correct protocol
+        return envWsUrl.replace(/^wss?:/, protocol);
+    }
+
+    // Use API URL base if available
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL;
+    if (apiUrl) {
+        try {
+            const url = new URL(apiUrl);
+            return `${protocol}//${url.host}`;
+        } catch {
+            // Fallback
+        }
+    }
+
+    // Fallback: use current host
+    return `${protocol}//${window.location.host}`;
+}
+
+const WS_BASE_URL = getWebSocketUrl();
 
 export interface KitchenMessage {
     type: 'new_order' | 'order_update' | 'item_update' | 'ping' | 'pong';
