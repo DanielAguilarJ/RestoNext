@@ -45,6 +45,12 @@ export default function KDSPage() {
     }).filter((o): o is Order => o !== null);
 
     const handleCompleteOrder = async (orderId: string) => {
+        // Guard clause: Check if db is initialized
+        if (!db) {
+            console.error('[KDS] Database not initialized');
+            return;
+        }
+
         // In a real KDS, we might mark individual items as done.
         // For this demo, completing the ticket clears it from screen (marks completed?)
         // Or maybe just bumps status.
@@ -72,8 +78,8 @@ export default function KDSPage() {
                     <button
                         onClick={() => setView('kitchen')}
                         className={`px-6 py-2 rounded-md text-sm font-medium transition-all ${view === 'kitchen'
-                                ? 'bg-white text-blue-600 shadow-sm'
-                                : 'text-gray-500 hover:text-gray-700'
+                            ? 'bg-white text-blue-600 shadow-sm'
+                            : 'text-gray-500 hover:text-gray-700'
                             }`}
                     >
                         Kitchen
@@ -81,8 +87,8 @@ export default function KDSPage() {
                     <button
                         onClick={() => setView('bar')}
                         className={`px-6 py-2 rounded-md text-sm font-medium transition-all ${view === 'bar'
-                                ? 'bg-white text-blue-600 shadow-sm'
-                                : 'text-gray-500 hover:text-gray-700'
+                            ? 'bg-white text-blue-600 shadow-sm'
+                            : 'text-gray-500 hover:text-gray-700'
                             }`}
                     >
                         Bar
