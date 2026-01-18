@@ -1,13 +1,17 @@
 """
 RestoNext MX - Tables API Routes
 Table management and transfer operations
+
+This module provides two sets of endpoints:
+1. /tables - Basic table listing and status updates for POS
+2. /pos/tables - Advanced operations like table transfers
 """
 
+from typing import List, Optional
 from uuid import UUID
 from pydantic import BaseModel, Field
-from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy import select, and_
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -16,12 +20,29 @@ from app.core.security import get_current_user, require_waiter
 from app.models.models import User, Table, Order, OrderStatus, TableStatus
 from app.core.websocket_manager import ws_manager
 
-router = APIRouter(prefix="/pos/tables", tags=["POS - Tables"])
-
 
 # ============================================
 # Schemas
 # ============================================
+
+class TableResponse(BaseModel):
+    """Table response model"""
+    id: str
+    number: int
+    capacity: int
+    status: str
+    pos_x: int = 0
+    pos_y: int = 0
+    self_service_enabled: bool = True
+
+    class Config:
+        from_attributes = True
+
+
+class TableStatusUpdate(BaseModel):
+    """Request to update table status"""
+    status: str = Field(..., description="New status: free, occupied, or bill_requested")
+
 
 class TableTransferRequest(BaseModel):
     """Request to transfer orders from one table to another"""
@@ -40,11 +61,122 @@ class TableTransferResponse(BaseModel):
     destination_table_number: int
 
 
+# Create main router for /tables endpoints
+router = APIRouter(tags=["POS - Tables"])
+
+
 # ============================================
-# Table Transfer Endpoint
+# Basic Table Endpoints (/tables)
 # ============================================
 
-@router.post("/transfer", response_model=TableTransferResponse)
+@router.get("/tables", response_model=List[TableResponse])
+async def list_tables(
+    restaurant_id: Optional[str] = Query(None, description="Filter by restaurant/tenant ID (ignored, uses auth)"),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    List all tables for the current tenant.
+    Used by the POS to display the table map.
+    """
+    result = await db.execute(
+        select(Table)
+        .where(Table.tenant_id == current_user.tenant_id)
+        .order_by(Table.number)
+    )
+    tables = result.scalars().all()
+    
+    return [
+        TableResponse(
+            id=str(t.id),
+            number=t.number,
+            capacity=t.capacity,
+            status=t.status.value if t.status else "free",
+            pos_x=t.pos_x or 0,
+            pos_y=t.pos_y or 0,
+            self_service_enabled=t.self_service_enabled if hasattr(t, 'self_service_enabled') else True,
+        )
+        for t in tables
+    ]
+
+
+@router.patch("/tables/{table_id}/status", response_model=TableResponse)
+async def update_table_status(
+    table_id: str,
+    update: TableStatusUpdate,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Update a table's status (free, occupied, bill_requested).
+    Used by the POS when manually changing table state.
+    """
+    try:
+        table_uuid = UUID(table_id)
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid table_id format"
+        )
+    
+    result = await db.execute(
+        select(Table).where(
+            and_(
+                Table.id == table_uuid,
+                Table.tenant_id == current_user.tenant_id
+            )
+        )
+    )
+    table = result.scalar_one_or_none()
+    
+    if not table:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Table not found"
+        )
+    
+    # Validate status
+    try:
+        new_status = TableStatus(update.status)
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid status. Must be one of: {[s.value for s in TableStatus]}"
+        )
+    
+    table.status = new_status
+    await db.commit()
+    await db.refresh(table)
+    
+    # Notify via WebSocket
+    await ws_manager.broadcast_to_tenant(
+        current_user.tenant_id,
+        {
+            "event": "table:status_changed",
+            "data": {
+                "table_id": str(table.id),
+                "table_number": table.number,
+                "new_status": table.status.value,
+            }
+        }
+    )
+    
+    return TableResponse(
+        id=str(table.id),
+        number=table.number,
+        capacity=table.capacity,
+        status=table.status.value,
+        pos_x=table.pos_x or 0,
+        pos_y=table.pos_y or 0,
+        self_service_enabled=table.self_service_enabled if hasattr(table, 'self_service_enabled') else True,
+    )
+
+
+# ============================================
+# Table Transfer Endpoints (/pos/tables)
+# ============================================
+
+@router.post("/pos/tables/transfer", response_model=TableTransferResponse)
 async def transfer_table(
     transfer: TableTransferRequest,
     db: AsyncSession = Depends(get_db),
@@ -179,7 +311,7 @@ async def transfer_table(
     )
 
 
-@router.get("/free")
+@router.get("/pos/tables/free")
 async def get_free_tables(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),

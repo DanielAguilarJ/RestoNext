@@ -20,8 +20,20 @@ export const DATABASE_ID = process.env.NEXT_PUBLIC_APPWRITE_DATABASE_ID || '';
 // API Configuration
 // ============================================
 
+/**
+ * API Base URL Configuration
+ * 
+ * IMPORTANT: DigitalOcean App Platform strips the /api prefix before forwarding to the backend.
+ * So when NEXT_PUBLIC_API_URL is set to https://app.example.com/api, the backend receives requests at /
+ * 
+ * The URL should be the full path to the API including /api suffix.
+ * Example: https://restonext-apps-api-xxxxx.ondigitalocean.app/api
+ * 
+ * For local development: http://localhost:8000/api
+ */
 const rawApiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api';
-const API_BASE_URL = rawApiUrl.endsWith('/api') ? rawApiUrl : `${rawApiUrl}/api`;
+// Clean the URL: remove trailing slashes, ensure it ends with /api for consistency
+const API_BASE_URL = rawApiUrl.replace(/\/+$/, '');
 
 /**
  * Token storage utilities
@@ -44,7 +56,12 @@ const TokenStorage = {
 };
 
 /**
- * API Client with JWT handling
+ * API Client with JWT handling and global error handling
+ * 
+ * Features:
+ * - Automatic JWT token attachment
+ * - Global 401 error handling with redirect to login
+ * - Proper error message extraction
  */
 async function apiRequest<T>(
     endpoint: string,
@@ -61,22 +78,54 @@ async function apiRequest<T>(
         (headers as Record<string, string>)['Authorization'] = `Bearer ${token}`;
     }
 
-    const response = await fetch(`${API_BASE_URL}${endpoint}`, {
-        ...options,
-        headers,
-    });
+    // Ensure endpoint starts with / for proper URL construction
+    const normalizedEndpoint = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
+    const url = `${API_BASE_URL}${normalizedEndpoint}`;
 
-    if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.detail || `API Error: ${response.status}`);
+    try {
+        const response = await fetch(url, {
+            ...options,
+            headers,
+        });
+
+        // Handle 401 Unauthorized - clear token and redirect to login
+        if (response.status === 401) {
+            console.warn('[API] Unauthorized (401) - redirecting to login');
+            TokenStorage.remove();
+            // Only redirect if we're in the browser and not already on login page
+            if (typeof window !== 'undefined' && !window.location.pathname.includes('/login')) {
+                window.location.href = '/login';
+            }
+            throw new Error('Session expired. Please login again.');
+        }
+
+        // Handle 403 Forbidden
+        if (response.status === 403) {
+            console.warn('[API] Forbidden (403) - access denied');
+            throw new Error('Access denied. You do not have permission to perform this action.');
+        }
+
+        if (!response.ok) {
+            const errorData = await response.json().catch(() => ({}));
+            const errorMessage = errorData.detail || errorData.message || `API Error: ${response.status}`;
+            throw new Error(errorMessage);
+        }
+
+        // Handle 204 No Content
+        if (response.status === 204) {
+            return {} as T;
+        }
+
+        return response.json();
+    } catch (error) {
+        // Re-throw if it's already our custom error
+        if (error instanceof Error) {
+            throw error;
+        }
+        // Network errors
+        console.error('[API] Network error:', error);
+        throw new Error('Network error. Please check your connection.');
     }
-
-    // Handle 204 No Content
-    if (response.status === 204) {
-        return {} as T;
-    }
-
-    return response.json();
 }
 
 // ============================================
