@@ -15,6 +15,11 @@ COPY packages/ ./packages/
 COPY --from=deps /app/apps/web/node_modules ./apps/web/node_modules
 WORKDIR /app/apps/web
 ENV NEXT_TELEMETRY_DISABLED 1
+
+# Accept build-time environment variables from DigitalOcean
+ARG NEXT_PUBLIC_API_URL
+ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
+
 RUN npm run build
 
 # Stage 3: Production image

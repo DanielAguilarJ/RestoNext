@@ -84,6 +84,14 @@
             font-family: 'Courier New', monospace;
         }
 
+        .info-value.success {
+            color: #00ff88;
+        }
+
+        .info-value.failed {
+            color: #ff6b6b;
+        }
+
         .error-box {
             background: rgba(255, 107, 107, 0.1);
             border: 1px solid rgba(255, 107, 107, 0.3);
@@ -139,8 +147,7 @@
 
                 <div class="info-row">
                     <span class="info-label">Estado</span>
-                    <span class="info-value"
-                        style="color: {% if status == 'success' %}#00ff88{% else %}#ff6b6b{% endif %};">
+                    <span class="info-value {{ status }}">
                         {% if status == 'success' %}✅ Completado{% else %}❌ Fallido{% endif %}
                     </span>
                 </div>
