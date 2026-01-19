@@ -11,10 +11,9 @@ import { OperationsPulse } from "@/components/dashboard/OperationsPulse";
 import { AiProcurementWidget } from "@/components/dashboard/AiProcurementWidget";
 import { CateringOverview } from "@/components/dashboard/CateringOverview";
 import { LoyaltyHighlights } from "@/components/dashboard/LoyaltyHighlights";
-import { DashboardEmptyState, DashboardErrorState } from "@/components/dashboard/DashboardEmptyState";
+import { DashboardErrorState } from "@/components/dashboard/DashboardEmptyState";
 import { useDashboardHealth } from "@/hooks/useDashboardData";
-import { DashboardCardSkeleton } from "@/components/ui/Skeletons";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion } from "framer-motion";
 
 // Create a client for React Query
 const queryClient = new QueryClient({
@@ -32,10 +31,11 @@ const queryClient = new QueryClient({
 // ============================================
 
 function DashboardContent() {
-    const { isLoading, hasError, isDayZero, errors, refetchAll } = useDashboardHealth();
+    const { hasError, errors, refetchAll } = useDashboardHealth();
 
-    // Error State
-    if (hasError) {
+    // Error State - Only show if there's a critical network error
+    // Individual widgets will handle their own errors gracefully
+    if (hasError && errors.some(e => e?.message?.includes('Failed to fetch'))) {
         return (
             <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
                 <DashboardErrorState
@@ -46,14 +46,9 @@ function DashboardContent() {
         );
     }
 
-    // Day Zero State - New user with no data
-    if (isDayZero && !isLoading) {
-        return (
-            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-                <DashboardEmptyState />
-            </div>
-        );
-    }
+    // ALWAYS show the full executive dashboard
+    // Even on "day zero", managers need to see the control panel with all modules
+    // Individual widgets will display their empty states if no data is available
 
     return (
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
