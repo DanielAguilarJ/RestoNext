@@ -257,7 +257,7 @@ app.include_router(tables_router, tags=["POS - Tables"])
 # WebSocket Endpoints
 # ============================================
 
-@app.websocket("/ws/kitchen")
+@app.websocket("/api/ws/kitchen")
 async def kitchen_websocket(websocket: WebSocket):
     """
     WebSocket for Kitchen Display System (KDS).
@@ -274,7 +274,7 @@ async def kitchen_websocket(websocket: WebSocket):
         ws_manager.disconnect(websocket, "kitchen")
 
 
-@app.websocket("/ws/bar")
+@app.websocket("/api/ws/bar")
 async def bar_websocket(websocket: WebSocket):
     """
     WebSocket for Bar Display.
@@ -290,7 +290,7 @@ async def bar_websocket(websocket: WebSocket):
         ws_manager.disconnect(websocket, "bar")
 
 
-@app.websocket("/ws/waiter")
+@app.websocket("/api/ws/waiter")
 async def waiter_websocket(websocket: WebSocket):
     """
     WebSocket for Waiter notifications.
@@ -306,7 +306,7 @@ async def waiter_websocket(websocket: WebSocket):
         ws_manager.disconnect(websocket, "waiter")
 
 
-@app.websocket("/ws/cashier")
+@app.websocket("/api/ws/cashier")
 async def cashier_websocket(websocket: WebSocket):
     """
     WebSocket for Cashier/Payment station.
@@ -323,7 +323,7 @@ async def cashier_websocket(websocket: WebSocket):
         ws_manager.disconnect(websocket, "cashier")
 
 
-@app.websocket("/ws/pos")
+@app.websocket("/api/ws/pos")
 async def pos_websocket(websocket: WebSocket):
     """
     WebSocket for POS Dashboard.
@@ -339,7 +339,7 @@ async def pos_websocket(websocket: WebSocket):
         ws_manager.disconnect(websocket, "pos")
 
 
-@app.websocket("/ws/customer/{table_number}")
+@app.websocket("/api/ws/customer/{table_number}")
 async def customer_websocket(websocket: WebSocket, table_number: int):
     """
     WebSocket for Customer QR Menu.

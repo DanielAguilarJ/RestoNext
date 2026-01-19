@@ -168,7 +168,7 @@ export function useKitchenSocket(options: UseKitchenSocketOptions = {}): UseKitc
 
         // Build WebSocket URL with optional token
         const token = tokenUtils.getToken();
-        let wsUrl = `${WS_BASE_URL}/ws/kitchen`;
+        let wsUrl = `${WS_BASE_URL}/api/ws/kitchen`;
         if (token) {
             wsUrl += `?token=${encodeURIComponent(token)}`;
         }

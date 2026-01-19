@@ -309,59 +309,72 @@ async def get_saas_stats(
     - Identify high-value customers
     - Track AI costs by tenant
     """
-    # Get all tenants
-    result = await db.execute(
-        select(Tenant).order_by(Tenant.created_at.desc())
-    )
-    tenants = result.scalars().all()
-    
-    # Calculate stats
-    total_tenants = len(tenants)
-    active_tenants = sum(1 for t in tenants if t.is_active)
-    
-    # Group by plan
-    tenants_by_plan = {"starter": 0, "professional": 0, "enterprise": 0}
-    estimated_mrr = 0.0
-    
-    tenant_list = []
-    for tenant in tenants:
-        plan = _get_tenant_plan(tenant)
-        tenants_by_plan[plan] += 1
+    try:
+        # Get all tenants
+        result = await db.execute(
+            select(Tenant).order_by(Tenant.created_at.desc())
+        )
+        tenants = result.scalars().all()
         
-        if tenant.is_active:
-            estimated_mrr += PLAN_PRICING.get(plan, 0)
+        # Calculate stats
+        total_tenants = len(tenants)
+        active_tenants = sum(1 for t in tenants if t.is_active)
         
-        tenant_list.append(TenantPlanInfo(
-            id=str(tenant.id),
-            name=tenant.name,
-            slug=tenant.slug,
-            plan=plan,
-            estimated_revenue=PLAN_PRICING.get(plan, 0),
-            is_active=tenant.is_active,
-            created_at=tenant.created_at.isoformat()
-        ))
-    
-    # AI usage tracking (would typically come from a separate tracking table)
-    # For now, we'll return placeholder data structure
-    ai_usage = [
-        {
-            "tenant_id": str(tenant.id),
-            "tenant_name": tenant.name,
-            "ai_requests_30d": 0,  # Would be tracked in production
-            "estimated_cost_usd": 0.0,
-        }
-        for tenant in tenants
-        if _get_tenant_plan(tenant) == "enterprise"  # Only enterprise uses AI
-    ]
-    
-    return SaaSStatsResponse(
-        total_tenants=total_tenants,
-        active_tenants=active_tenants,
-        tenants_by_plan=tenants_by_plan,
-        estimated_mrr=estimated_mrr,
-        tenants=tenant_list,
-        ai_usage=ai_usage
-    )
+        # Group by plan
+        tenants_by_plan = {"starter": 0, "professional": 0, "enterprise": 0}
+        estimated_mrr = 0.0
+        
+        tenant_list = []
+        for tenant in tenants:
+            plan = _get_tenant_plan(tenant)
+            # Safe increment
+            tenants_by_plan[plan] = tenants_by_plan.get(plan, 0) + 1
+            
+            if tenant.is_active:
+                estimated_mrr += PLAN_PRICING.get(plan, 0)
+            
+            tenant_list.append(TenantPlanInfo(
+                id=str(tenant.id),
+                name=tenant.name,
+                slug=tenant.slug,
+                plan=plan,
+                estimated_revenue=PLAN_PRICING.get(plan, 0),
+                is_active=tenant.is_active,
+                created_at=tenant.created_at.isoformat() if tenant.created_at else ""
+            ))
+        
+        # AI usage tracking (would typically come from a separate tracking table)
+        # For now, we'll return placeholder data structure
+        ai_usage = [
+            {
+                "tenant_id": str(tenant.id),
+                "tenant_name": tenant.name,
+                "ai_requests_30d": 0,  # Would be tracked in production
+                "estimated_cost_usd": 0.0,
+            }
+            for tenant in tenants
+            if _get_tenant_plan(tenant) == "enterprise"  # Only enterprise uses AI
+        ]
+        
+        return SaaSStatsResponse(
+            total_tenants=total_tenants,
+            active_tenants=active_tenants,
+            tenants_by_plan=tenants_by_plan,
+            estimated_mrr=estimated_mrr,
+            tenants=tenant_list,
+            ai_usage=ai_usage
+        )
+    except Exception as e:
+        print(f"Error getting SaaS stats: {e}")
+        # Return empty stats on error to prevent dashboard crash
+        return SaaSStatsResponse(
+            total_tenants=0,
+            active_tenants=0,
+            tenants_by_plan={"starter": 0, "professional": 0, "enterprise": 0},
+            estimated_mrr=0.0,
+            tenants=[],
+            ai_usage=[]
+        )
 
 
 @router.get(
