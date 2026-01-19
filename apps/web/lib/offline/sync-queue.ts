@@ -1,6 +1,12 @@
 /**
  * RestoNext MX - Sync Queue Manager
  * Handles offline order queue and synchronization with backend
+ * 
+ * Features:
+ * - Bulletproof persistence in Dexie (IndexedDB)
+ * - Exponential backoff with jitter for retries
+ * - Sync status tracking for UI feedback
+ * - Configurable via environment variables
  */
 
 import {
@@ -9,7 +15,21 @@ import {
     PendingOrderData,
     PendingOrderStatus,
 } from './dexie-db';
-import { isOnline } from './network-status';
+import { isOnline, getConfirmedNetworkState } from './network-status';
+
+// ============================================
+// Configuration (Environment Variables)
+// ============================================
+
+const SYNC_RETRY_DELAY_MS = parseInt(
+    process.env.NEXT_PUBLIC_SYNC_RETRY_DELAY_MS || '5000'
+);
+const SYNC_MAX_RETRIES = parseInt(
+    process.env.NEXT_PUBLIC_SYNC_MAX_RETRIES || '10'
+);
+const SYNC_BACKOFF_MAX_MS = parseInt(
+    process.env.NEXT_PUBLIC_SYNC_BACKOFF_MAX_MS || '60000'
+);
 
 // ============================================
 // Types
@@ -39,7 +59,9 @@ export type SyncEventType =
     | 'sync_completed'
     | 'sync_failed'
     | 'conflict_detected'
-    | 'order_queued';
+    | 'order_queued'
+    | 'order_syncing'
+    | 'order_synced';
 
 export type SyncEventCallback = (
     event: SyncEventType,
@@ -53,6 +75,8 @@ export type SyncEventCallback = (
 class SyncQueueManagerClass {
     private isSyncing = false;
     private listeners: Set<SyncEventCallback> = new Set();
+    private syncingItems: Set<string> = new Set();
+    private syncPromise: Promise<SyncResult[]> | null = null;
 
     /**
      * Subscribe to sync events
@@ -70,8 +94,35 @@ class SyncQueueManagerClass {
      * Generate a unique local ID for offline orders
      */
     private generateLocalId(): string {
-        // Use timestamp + random for uniqueness without external deps
         return `local_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    }
+
+    /**
+     * Calculate retry delay with exponential backoff and jitter
+     */
+    private getRetryDelay(attempts: number): number {
+        // Exponential backoff: 5s, 10s, 20s, 40s, max 60s
+        const baseDelay = Math.min(
+            SYNC_RETRY_DELAY_MS * Math.pow(2, attempts),
+            SYNC_BACKOFF_MAX_MS
+        );
+        // Add jitter (±20%)
+        const jitter = baseDelay * (0.8 + Math.random() * 0.4);
+        return Math.round(jitter);
+    }
+
+    /**
+     * Check if a specific item is currently being synced
+     */
+    isSyncingItem(localId: string): boolean {
+        return this.syncingItems.has(localId);
+    }
+
+    /**
+     * Get all items currently being synced
+     */
+    getSyncingItems(): Set<string> {
+        return new Set(this.syncingItems);
     }
 
     /**
@@ -92,6 +143,7 @@ class SyncQueueManagerClass {
 
         await db.pending_orders.add(pendingOrder);
 
+        console.log(`[SyncQueue] Order ${localId} queued for sync`);
         this.emit('order_queued', { local_id: localId });
 
         // Return optimistic response for UI
@@ -116,11 +168,22 @@ class SyncQueueManagerClass {
     }
 
     /**
-     * Get all pending orders
+     * Get all pending orders (for UI display)
      */
     async getPendingOrders(): Promise<PendingOrder[]> {
         const db = getOfflineDB();
         return db.pending_orders.where('status').equals('pending_sync').toArray();
+    }
+
+    /**
+     * Get all orders including syncing ones (for complete queue view)
+     */
+    async getAllQueuedOrders(): Promise<PendingOrder[]> {
+        const db = getOfflineDB();
+        return db.pending_orders
+            .where('status')
+            .anyOf(['pending_sync', 'syncing'])
+            .toArray();
     }
 
     /**
@@ -133,29 +196,50 @@ class SyncQueueManagerClass {
 
     /**
      * Process all pending orders in the queue
+     * Returns immediately if already syncing (deduplication)
      */
     async processQueue(): Promise<SyncResult[]> {
-        if (this.isSyncing) {
-            console.log('[SyncQueue] Already syncing, skipping...');
+        // Deduplication: if already syncing, return the existing promise
+        if (this.isSyncing && this.syncPromise) {
+            console.log('[SyncQueue] Already syncing, waiting for existing process...');
+            return this.syncPromise;
+        }
+
+        // Check network state with debounced confirmation
+        if (!getConfirmedNetworkState()) {
+            console.log('[SyncQueue] Network offline (confirmed), skipping sync');
             return [];
         }
 
-        if (!isOnline()) {
-            console.log('[SyncQueue] Still offline, cannot sync');
-            return [];
-        }
+        this.syncPromise = this.doProcessQueue();
+        return this.syncPromise;
+    }
 
+    /**
+     * Internal queue processing
+     */
+    private async doProcessQueue(): Promise<SyncResult[]> {
         this.isSyncing = true;
         this.emit('sync_started');
 
         const results: SyncResult[] = [];
-        const db = getOfflineDB();
 
         try {
             const pendingOrders = await this.getPendingOrders();
             console.log(`[SyncQueue] Processing ${pendingOrders.length} pending orders`);
 
             for (const order of pendingOrders) {
+                // Skip if max retries exceeded
+                if (order.sync_attempts >= SYNC_MAX_RETRIES) {
+                    console.log(`[SyncQueue] Order ${order.local_id} exceeded max retries, marking as failed`);
+                    const db = getOfflineDB();
+                    await db.pending_orders.update(order.local_id, {
+                        status: 'failed' as PendingOrderStatus,
+                        last_error: 'Max retries exceeded',
+                    });
+                    continue;
+                }
+
                 const result = await this.syncOrder(order);
                 results.push(result);
 
@@ -164,6 +248,11 @@ class SyncQueueManagerClass {
                         local_id: order.local_id,
                         details: result.error,
                     });
+                }
+
+                // Add delay between orders to prevent overwhelming the server
+                if (pendingOrders.indexOf(order) < pendingOrders.length - 1) {
+                    await this.delay(500);
                 }
             }
 
@@ -180,9 +269,17 @@ class SyncQueueManagerClass {
             this.emit('sync_failed', { error });
         } finally {
             this.isSyncing = false;
+            this.syncPromise = null;
         }
 
         return results;
+    }
+
+    /**
+     * Delay helper
+     */
+    private delay(ms: number): Promise<void> {
+        return new Promise((resolve) => setTimeout(resolve, ms));
     }
 
     /**
@@ -193,7 +290,11 @@ class SyncQueueManagerClass {
         const API_BASE_URL =
             process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api';
 
-        // Mark as syncing
+        // Track as syncing
+        this.syncingItems.add(order.local_id);
+        this.emit('order_syncing', { local_id: order.local_id });
+
+        // Mark as syncing in DB
         await db.pending_orders.update(order.local_id, {
             status: 'syncing' as PendingOrderStatus,
             sync_attempts: order.sync_attempts + 1,
@@ -227,6 +328,8 @@ class SyncQueueManagerClass {
                         conflict_details: `Table ${order.order_data.table_id} may have been occupied while offline`,
                     });
 
+                    this.syncingItems.delete(order.local_id);
+
                     return {
                         success: false,
                         local_id: order.local_id,
@@ -235,11 +338,16 @@ class SyncQueueManagerClass {
                     };
                 }
 
-                // Other API error
+                // Other API error - mark for retry
+                const retryDelay = this.getRetryDelay(order.sync_attempts);
+                console.log(`[SyncQueue] Order ${order.local_id} failed, will retry in ${retryDelay}ms`);
+
                 await db.pending_orders.update(order.local_id, {
-                    status: 'failed' as PendingOrderStatus,
+                    status: 'pending_sync' as PendingOrderStatus,
                     last_error: errorData.detail || `API Error: ${response.status}`,
                 });
+
+                this.syncingItems.delete(order.local_id);
 
                 return {
                     success: false,
@@ -252,10 +360,16 @@ class SyncQueueManagerClass {
 
             // Success: remove from queue
             await db.pending_orders.delete(order.local_id);
+            this.syncingItems.delete(order.local_id);
 
             console.log(
                 `[SyncQueue] Order ${order.local_id} synced as ${serverOrder.id}`
             );
+
+            this.emit('order_synced', {
+                local_id: order.local_id,
+                server_id: serverOrder.id,
+            });
 
             return {
                 success: true,
@@ -268,6 +382,8 @@ class SyncQueueManagerClass {
                 status: 'pending_sync' as PendingOrderStatus,
                 last_error: error instanceof Error ? error.message : 'Network error',
             });
+
+            this.syncingItems.delete(order.local_id);
 
             return {
                 success: false,
@@ -301,10 +417,12 @@ class SyncQueueManagerClass {
                 order_data: updatedOrderData,
                 status: 'pending_sync' as PendingOrderStatus,
                 conflict_details: undefined,
+                sync_attempts: 0, // Reset retry count
             });
         } else {
             await db.pending_orders.update(localId, {
                 status: 'pending_sync' as PendingOrderStatus,
+                sync_attempts: 0,
             });
         }
 
@@ -318,6 +436,8 @@ class SyncQueueManagerClass {
     async discardOrder(localId: string): Promise<void> {
         const db = getOfflineDB();
         await db.pending_orders.delete(localId);
+        this.syncingItems.delete(localId);
+        console.log(`[SyncQueue] Order ${localId} discarded`);
     }
 
     /**
@@ -327,6 +447,16 @@ class SyncQueueManagerClass {
         const db = getOfflineDB();
         const count = await db.pending_orders.count();
         return count > 0;
+    }
+
+    /**
+     * Get sync status (for UI)
+     */
+    getSyncStatus(): { isSyncing: boolean; syncingCount: number } {
+        return {
+            isSyncing: this.isSyncing,
+            syncingCount: this.syncingItems.size,
+        };
     }
 }
 

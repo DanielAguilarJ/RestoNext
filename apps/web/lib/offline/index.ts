@@ -26,6 +26,8 @@ export {
     isOffline,
     onNetworkChange,
     waitForOnline,
+    getConfirmedNetworkState,
+    forceConnectivityCheck,
 } from './network-status';
 
 export {

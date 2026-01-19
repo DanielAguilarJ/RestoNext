@@ -1,7 +1,11 @@
 /**
  * Service Request WebSocket Hook
  * Connects to FastAPI WebSocket for real-time service request notifications
- * Used by POS/Waiter stations to receive call-waiter, bill requests, etc.
+ * 
+ * Features:
+ * - Exponential backoff with jitter for reconnection
+ * - Debounced connection state to prevent UI flicker
+ * - Configurable via environment variables
  * 
  * Events handled:
  * - service_request:new - Customer calls waiter
@@ -13,32 +17,42 @@
 import { useEffect, useRef, useCallback, useState } from 'react';
 import { tokenUtils } from '@/lib/api';
 
+// ============================================
+// Configuration (Environment Variables)
+// ============================================
+
+const WS_RECONNECT_BASE_MS = parseInt(
+    process.env.NEXT_PUBLIC_WS_RECONNECT_BASE_MS || '3000'
+);
+const WS_RECONNECT_MAX_MS = parseInt(
+    process.env.NEXT_PUBLIC_WS_RECONNECT_MAX_MS || '30000'
+);
+const WS_CONNECTION_DEBOUNCE_MS = parseInt(
+    process.env.NEXT_PUBLIC_WS_CONNECTION_DEBOUNCE_MS || '3000'
+);
+const WS_PING_INTERVAL_MS = parseInt(
+    process.env.NEXT_PUBLIC_WS_PING_INTERVAL_MS || '30000'
+);
+
 /**
  * Construct WebSocket URL that respects HTTPS requirements
  * If the page is served over HTTPS, we must use WSS
  */
 function getWebSocketUrl(): string {
-    // Check for environment variable first
     const envWsUrl = process.env.NEXT_PUBLIC_WS_URL;
 
     if (typeof window === 'undefined') {
-        // Server-side: use environment variable or default
         return envWsUrl || 'ws://localhost:8000';
     }
 
-    // Client-side: derive from current page protocol
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
 
-    // If env variable is set, convert it to proper protocol
     if (envWsUrl) {
-        // Replace ws:// or wss:// with the correct protocol
         return envWsUrl.replace(/^wss?:/, protocol);
     }
 
-    // Use API URL base if available
     const apiUrl = process.env.NEXT_PUBLIC_API_URL;
     if (apiUrl) {
-        // Extract host from API URL and use WebSocket protocol
         try {
             const url = new URL(apiUrl);
             return `${protocol}//${url.host}`;
@@ -47,11 +61,14 @@ function getWebSocketUrl(): string {
         }
     }
 
-    // Fallback: use current host
     return `${protocol}//${window.location.host}`;
 }
 
 const WS_BASE_URL = getWebSocketUrl();
+
+// ============================================
+// Types
+// ============================================
 
 export interface ServiceRequestNotification {
     id: string;
@@ -118,7 +135,10 @@ export function useServiceSocket(options: UseServiceSocketOptions = {}): UseServ
         playSound = true
     } = options;
 
-    const [isConnected, setIsConnected] = useState(false);
+    // Raw connection state (updates immediately)
+    const [rawIsConnected, setRawIsConnected] = useState(false);
+    // Debounced connection state (what UI sees)
+    const [isConnected, setIsConnected] = useState(true); // Start optimistic
     const [connectionError, setConnectionError] = useState<string | null>(null);
     const [pendingRequests, setPendingRequests] = useState<ServiceRequestNotification[]>([]);
     const [pendingBillRequests, setPendingBillRequests] = useState<BillRequestNotification[]>([]);
@@ -126,13 +146,54 @@ export function useServiceSocket(options: UseServiceSocketOptions = {}): UseServ
     const wsRef = useRef<WebSocket | null>(null);
     const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
     const pingIntervalRef = useRef<NodeJS.Timeout | null>(null);
+    const connectionDebounceRef = useRef<NodeJS.Timeout | null>(null);
+    const reconnectAttempts = useRef(0);
+    const mountedRef = useRef(true);
+    const manualDisconnect = useRef(false);
+
+    /**
+     * Calculate reconnection delay with exponential backoff and jitter
+     */
+    const getReconnectDelay = useCallback((): number => {
+        const baseDelay = Math.min(
+            WS_RECONNECT_BASE_MS * Math.pow(1.5, reconnectAttempts.current),
+            WS_RECONNECT_MAX_MS
+        );
+        // Add jitter (±20%)
+        const jitter = baseDelay * (0.8 + Math.random() * 0.4);
+        return Math.round(jitter);
+    }, []);
+
+    /**
+     * Update debounced connection state
+     * Immediately shows connected, but debounces disconnected
+     */
+    const updateDebouncedConnectionState = useCallback((connected: boolean) => {
+        if (connectionDebounceRef.current) {
+            clearTimeout(connectionDebounceRef.current);
+            connectionDebounceRef.current = null;
+        }
+
+        if (connected) {
+            // Immediately show connected
+            setIsConnected(true);
+            setConnectionError(null);
+            reconnectAttempts.current = 0;
+        } else {
+            // Debounce disconnected state to prevent flicker
+            connectionDebounceRef.current = setTimeout(() => {
+                if (mountedRef.current && !rawIsConnected) {
+                    setIsConnected(false);
+                }
+            }, WS_CONNECTION_DEBOUNCE_MS);
+        }
+    }, [rawIsConnected]);
 
     // Play notification sound with vibration
     const playNotificationSound = useCallback((type: 'waiter' | 'bill' | 'order' | 'alert') => {
         if (!playSound) return;
 
         try {
-            // Different sounds for different request types
             const soundMap: Record<string, string> = {
                 'waiter': '/sounds/bell.mp3',
                 'bill': '/sounds/cash.mp3',
@@ -141,10 +202,9 @@ export function useServiceSocket(options: UseServiceSocketOptions = {}): UseServ
             };
 
             const audio = new Audio(soundMap[type] || '/sounds/notification.mp3');
-            audio.volume = type === 'bill' ? 0.9 : 0.7; // Bill requests are louder
+            audio.volume = type === 'bill' ? 0.9 : 0.7;
             audio.play().catch(console.error);
 
-            // Trigger vibration on mobile for bill requests
             if (type === 'bill' && 'vibrate' in navigator) {
                 navigator.vibrate([200, 100, 200]);
             }
@@ -164,29 +224,22 @@ export function useServiceSocket(options: UseServiceSocketOptions = {}): UseServ
                 case 'service_request:new':
                     const request: ServiceRequestNotification = data.payload;
 
-                    // Add to pending requests
                     setPendingRequests(prev => {
-                        // Avoid duplicates
                         if (prev.some(r => r.id === request.id)) return prev;
                         return [...prev, request];
                     });
 
-                    // Play appropriate sound
                     playNotificationSound(request.request_type === 'bill' ? 'bill' : 'waiter');
-
-                    // Callback
                     onServiceRequest?.(request);
                     break;
 
                 case 'service_request:resolved':
-                    // Remove from pending requests
                     setPendingRequests(prev =>
                         prev.filter(r => r.id !== data.payload.id)
                     );
                     break;
 
                 case 'table:bill_requested':
-                    // Nuevo: Manejo de solicitud de cuenta desde QR
                     const billRequest: BillRequestNotification = {
                         table_id: data.payload.table_id,
                         table_number: data.payload.table_number,
@@ -196,46 +249,34 @@ export function useServiceSocket(options: UseServiceSocketOptions = {}): UseServ
                         created_at: data.payload.created_at || new Date().toISOString()
                     };
 
-                    // Add to pending bill requests
                     setPendingBillRequests(prev => {
                         if (prev.some(r => r.table_id === billRequest.table_id)) return prev;
                         return [...prev, billRequest];
                     });
 
-                    // Play urgent bill sound
                     playNotificationSound('bill');
-
-                    // Callback
                     onBillRequest?.(billRequest);
                     break;
 
                 case 'table:status_changed':
-                    // Mesa cambió de estado (sincronización en tiempo real)
                     const statusChange: TableStatusNotification = data.payload;
 
-                    // If status is no longer bill_requested or service_requested, remove from pending
                     if (statusChange.status === 'free' || statusChange.status === 'occupied') {
                         setPendingBillRequests(prev =>
                             prev.filter(r => r.table_id !== statusChange.table_id)
                         );
                     }
 
-                    // Callback
                     onTableStatusChange?.(statusChange);
                     break;
 
                 case 'table:new_self_service_order':
                     const order: SelfServiceOrderNotification = data.payload;
-
-                    // Play order sound
                     playNotificationSound('order');
-
-                    // Callback
                     onSelfServiceOrder?.(order);
                     break;
 
                 case 'table:call_waiter':
-                    // Legacy call waiter event (backward compatibility)
                     playNotificationSound('waiter');
                     break;
 
@@ -250,6 +291,7 @@ export function useServiceSocket(options: UseServiceSocketOptions = {}): UseServ
     // Connect to WebSocket
     const connect = useCallback(() => {
         if (wsRef.current?.readyState === WebSocket.OPEN) return;
+        if (manualDisconnect.current) return;
 
         setConnectionError(null);
 
@@ -260,61 +302,94 @@ export function useServiceSocket(options: UseServiceSocketOptions = {}): UseServ
         }
 
         try {
+            console.log(`[ServiceSocket] Connecting... (attempt ${reconnectAttempts.current + 1})`);
             const ws = new WebSocket(wsUrl);
             wsRef.current = ws;
 
             ws.onopen = () => {
+                if (!mountedRef.current) return;
+
                 console.log('📢 Service WebSocket connected');
-                setIsConnected(true);
-                setConnectionError(null);
+                setRawIsConnected(true);
+                updateDebouncedConnectionState(true);
 
                 // Ping to keep alive
                 pingIntervalRef.current = setInterval(() => {
                     if (ws.readyState === WebSocket.OPEN) {
                         ws.send('ping');
                     }
-                }, 30000);
+                }, WS_PING_INTERVAL_MS);
             };
 
             ws.onmessage = handleMessage;
 
             ws.onerror = (error) => {
                 console.error('Service WebSocket error:', error);
-                setConnectionError('Connection error');
+                if (mountedRef.current) {
+                    setConnectionError('Connection error');
+                }
             };
 
-            ws.onclose = () => {
-                setIsConnected(false);
+            ws.onclose = (event) => {
+                if (!mountedRef.current) return;
+
+                console.log(`[ServiceSocket] Closed (code: ${event.code})`);
+                setRawIsConnected(false);
+                updateDebouncedConnectionState(false);
                 wsRef.current = null;
 
                 if (pingIntervalRef.current) {
                     clearInterval(pingIntervalRef.current);
+                    pingIntervalRef.current = null;
                 }
 
-                // Reconnect after delay
-                reconnectTimeoutRef.current = setTimeout(() => {
-                    connect();
-                }, 3000);
+                // Auto-reconnect with exponential backoff (unless manually disconnected)
+                if (!manualDisconnect.current) {
+                    const delay = getReconnectDelay();
+                    reconnectAttempts.current++;
+
+                    console.log(`[ServiceSocket] Reconnecting in ${delay}ms (attempt ${reconnectAttempts.current})`);
+
+                    reconnectTimeoutRef.current = setTimeout(() => {
+                        if (mountedRef.current && !manualDisconnect.current) {
+                            connect();
+                        }
+                    }, delay);
+                }
             };
         } catch (error) {
             console.error('Failed to create WebSocket:', error);
-            setConnectionError('Failed to connect');
+            if (mountedRef.current) {
+                setConnectionError('Failed to connect');
+                updateDebouncedConnectionState(false);
+            }
         }
-    }, [handleMessage]);
+    }, [handleMessage, getReconnectDelay, updateDebouncedConnectionState]);
 
     // Disconnect
     const disconnect = useCallback(() => {
+        manualDisconnect.current = true;
+
         if (reconnectTimeoutRef.current) {
             clearTimeout(reconnectTimeoutRef.current);
+            reconnectTimeoutRef.current = null;
         }
         if (pingIntervalRef.current) {
             clearInterval(pingIntervalRef.current);
+            pingIntervalRef.current = null;
+        }
+        if (connectionDebounceRef.current) {
+            clearTimeout(connectionDebounceRef.current);
+            connectionDebounceRef.current = null;
         }
         if (wsRef.current) {
             wsRef.current.close();
             wsRef.current = null;
         }
+
+        setRawIsConnected(false);
         setIsConnected(false);
+        reconnectAttempts.current = 0;
     }, []);
 
     // Clear a specific request (mark as handled)
@@ -329,10 +404,15 @@ export function useServiceSocket(options: UseServiceSocketOptions = {}): UseServ
 
     // Auto-connect on mount
     useEffect(() => {
+        mountedRef.current = true;
+        manualDisconnect.current = false;
+
         if (autoConnect) {
             connect();
         }
+
         return () => {
+            mountedRef.current = false;
             disconnect();
         };
     }, [autoConnect, connect, disconnect]);
