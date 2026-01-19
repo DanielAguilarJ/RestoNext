@@ -61,7 +61,7 @@ class JobRunResponse(BaseModel):
     description="List all available database backup files. Requires Super Admin role."
 )
 async def get_backups(
-    current_user: User = Depends(require_roles([UserRole.ADMIN]))
+    current_user: User = Depends(require_roles(UserRole.ADMIN))
 ):
     """
     List all available database backups.
@@ -84,7 +84,7 @@ async def get_backups(
 )
 async def download_backup(
     filename: str,
-    current_user: User = Depends(require_roles([UserRole.ADMIN]))
+    current_user: User = Depends(require_roles(UserRole.ADMIN))
 ):
     """
     Download a specific backup file.
@@ -133,7 +133,7 @@ async def download_backup(
 )
 async def delete_backup(
     filename: str,
-    current_user: User = Depends(require_roles([UserRole.ADMIN]))
+    current_user: User = Depends(require_roles(UserRole.ADMIN))
 ):
     """
     Delete a specific backup file.
@@ -172,7 +172,7 @@ async def delete_backup(
     description="Trigger an immediate database backup. Requires Super Admin role."
 )
 async def create_backup_now(
-    current_user: User = Depends(require_roles([UserRole.ADMIN]))
+    current_user: User = Depends(require_roles(UserRole.ADMIN))
 ):
     """
     Trigger an immediate database backup.
@@ -206,7 +206,7 @@ async def create_backup_now(
 )
 async def run_job(
     job_name: str,
-    current_user: User = Depends(require_roles([UserRole.ADMIN]))
+    current_user: User = Depends(require_roles(UserRole.ADMIN))
 ):
     """
     Manually trigger a scheduled job.
@@ -292,7 +292,7 @@ def _get_tenant_plan(tenant: Tenant) -> str:
     description="Get overall platform metrics including tenants, revenue, and AI usage. Requires Super Admin."
 )
 async def get_saas_stats(
-    current_user: User = Depends(require_roles([UserRole.ADMIN])),
+    current_user: User = Depends(require_roles(UserRole.ADMIN)),
     db: AsyncSession = Depends(get_db)
 ):
     """
@@ -416,7 +416,7 @@ class ImpersonationResponse(BaseModel):
 )
 async def impersonate_tenant(
     tenant_id: str,
-    current_user: User = Depends(require_roles([UserRole.ADMIN])),
+    current_user: User = Depends(require_roles(UserRole.ADMIN)),
     db: AsyncSession = Depends(get_db)
 ):
     """
