@@ -296,22 +296,34 @@ async def quick_complete_onboarding(
     
     # Update tenant with wizard data
     tenant.trade_name = data.name
-    tenant.name = data.name  # Also update the main name field
+    tenant.name = data.name
     
     if data.logo_url:
         tenant.logo_url = data.logo_url
     
     # Update config with service preferences
-    current_config = tenant.config or {}
-    current_config["currency"] = data.currency
-    current_config["service_types"] = data.service_types
-    tenant.config = current_config
+    # FIX: Use correct fields model (tenant.config does not exist)
+    tenant.currency = data.currency
+    
+    # Store service_types in features_config
+    current_features = dict(tenant.features_config) if tenant.features_config else {}
+    current_features["service_types"] = data.service_types
+    tenant.features_config = current_features
     
     # Mark onboarding as complete for wizard flow
     tenant.onboarding_step = "complete"
     # Note: onboarding_complete stays False until fiscal info is filled
     
-    await db.commit()
+    try:
+        await db.commit()
+    except Exception as e:
+        await db.rollback()
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Database commit error: {str(e)}"
+        )
     
     demo_seeded = False
     
@@ -321,7 +333,11 @@ async def quick_complete_onboarding(
             await _seed_demo_data_for_tenant(db, tenant.id)
             demo_seeded = True
         except Exception as e:
+            # Don't fail the whole request if seeding fails, just log it
             print(f"Warning: Failed to seed demo data: {e}")
+            # But we might need to rollback the seeding part? 
+            # Since we committed above, the main onboarding is safe. 
+            pass
     
     await db.refresh(tenant)
     
