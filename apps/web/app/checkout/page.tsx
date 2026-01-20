@@ -29,7 +29,13 @@ const stripePromise = loadStripe(
  * or absolute (https://domain.com/api)
  */
 const getApiBaseUrl = (): string => {
-    const envUrl = process.env.NEXT_PUBLIC_API_URL || "https://whale-app-i6h36.ondigitalocean.app/api";
+    let envUrl = process.env.NEXT_PUBLIC_API_URL || "https://whale-app-i6h36.ondigitalocean.app/api";
+
+    // HOTFIX: Correct invalid API subdomain if present due to misconfiguration
+    if (envUrl.includes("api.whale-app-i6h36.ondigitalocean.app")) {
+        console.warn("[Checkout] Correcting invalid API URL:", envUrl);
+        envUrl = "https://whale-app-i6h36.ondigitalocean.app/api";
+    }
 
     // If running on server-side, return the env URL as-is
     if (typeof window === "undefined") {

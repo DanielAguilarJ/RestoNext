@@ -29,7 +29,17 @@ export const DATABASE_ID = process.env.NEXT_PUBLIC_APPWRITE_DATABASE_ID || '';
  * The URL should be the full path to the API including /api suffix.
  * In production, this is set via environment variables in digitalocean-app.yaml
  */
-const rawApiUrl = process.env.NEXT_PUBLIC_API_URL || 'https://whale-app-i6h36.ondigitalocean.app/api';
+const getRawApiUrl = () => {
+    const url = process.env.NEXT_PUBLIC_API_URL || 'https://whale-app-i6h36.ondigitalocean.app/api';
+    // HOTFIX: Correct invalid API subdomain if present
+    if (url.includes('api.whale-app-i6h36.ondigitalocean.app')) {
+        console.warn('[API] Correcting invalid API URL configuration');
+        return 'https://whale-app-i6h36.ondigitalocean.app/api';
+    }
+    return url;
+};
+
+const rawApiUrl = getRawApiUrl();
 // Clean the URL: remove trailing slashes, ensure it ends with /api for consistency
 const API_BASE_URL = rawApiUrl.replace(/\/+$/, '');
 
