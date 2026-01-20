@@ -39,6 +39,11 @@ We will modify the following migration files to include `IF NOT EXISTS` checks (
 
 *(Note: `a006_fix_missing_columns.py` is already idempotent)*
 
+## Status Update (2026-01-22)
+- ✅ All migration scripts (`a001` through `add_self_service_dining`) have been verified as idempotent.
+- ✅ `apps/api/start.sh` has been simplified to run `alembic upgrade head` directly, removing manual `psql` patches.
+- 🚀 Ready for deployment verification.
+
 ## Verification Plan
 
 ### Automated Tests
