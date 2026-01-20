@@ -42,7 +42,31 @@ import {
 } from 'lucide-react';
 
 // API Configuration
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'https://whale-app-i6h36.ondigitalocean.app/api';
+// API Configuration
+const getApiBaseUrl = (): string => {
+    let envUrl = process.env.NEXT_PUBLIC_API_URL || 'https://whale-app-i6h36.ondigitalocean.app/api';
+
+    // HOTFIX: Correct invalid API subdomain if present due to misconfiguration
+    if (envUrl.includes("api.whale-app-i6h36.ondigitalocean.app")) {
+        console.warn("[Onboarding] Correcting invalid API URL:", envUrl);
+        envUrl = "https://whale-app-i6h36.ondigitalocean.app/api";
+    }
+
+    // If running on server-side, return the env URL as-is
+    if (typeof window === "undefined") {
+        return envUrl.replace(/\/+$/, "");
+    }
+
+    // If it's a relative path (starts with /), prefix with window origin
+    if (envUrl.startsWith("/")) {
+        return `${window.location.origin}${envUrl}`;
+    }
+
+    // Remove trailing slashes for consistency
+    return envUrl.replace(/\/+$/, "");
+};
+
+const API_BASE_URL = getApiBaseUrl();
 
 const getToken = () => {
     if (typeof window === 'undefined') return null;

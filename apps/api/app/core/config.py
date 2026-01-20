@@ -65,7 +65,7 @@ class Settings(BaseSettings):
         """
         # Default origins
         defaults = [
-
+            "*", # Allow all origins to fix production connection issues
             "https://whale-app-i6h36.ondigitalocean.app",
         ]
         
