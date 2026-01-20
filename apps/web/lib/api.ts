@@ -94,18 +94,42 @@ async function apiRequest<T>(
             if (typeof window !== 'undefined' && !window.location.pathname.includes('/login')) {
                 window.location.href = '/login';
             }
-            throw new Error('Session expired. Please login again.');
+            throw new Error('Sesión expirada. Por favor inicia sesión de nuevo.');
         }
 
         // Handle 403 Forbidden
         if (response.status === 403) {
             console.warn('[API] Forbidden (403) - access denied');
-            throw new Error('Access denied. You do not have permission to perform this action.');
+            throw new Error('Acceso denegado. No tienes permisos para esta acción.');
+        }
+
+        // Handle 404 Not Found
+        if (response.status === 404) {
+            console.warn(`[API] Not Found (404) - endpoint: ${endpoint}`);
+            throw new Error('Recurso no encontrado. Verifica la configuración del servidor.');
+        }
+
+        // Handle 422 Validation Error
+        if (response.status === 422) {
+            const errorData = await response.json().catch(() => ({}));
+            console.warn('[API] Validation Error (422):', errorData);
+            const detail = errorData.detail;
+            if (Array.isArray(detail)) {
+                const messages = detail.map((e: { msg?: string; loc?: string[] }) => e.msg || 'Error de validación').join('. ');
+                throw new Error(messages);
+            }
+            throw new Error(typeof detail === 'string' ? detail : 'Error de validación en los datos enviados.');
+        }
+
+        // Handle 500+ Server Errors
+        if (response.status >= 500) {
+            console.error(`[API] Server Error (${response.status}) - endpoint: ${endpoint}`);
+            throw new Error('Error del servidor. Por favor intenta de nuevo más tarde.');
         }
 
         if (!response.ok) {
             const errorData = await response.json().catch(() => ({}));
-            const errorMessage = errorData.detail || errorData.message || `API Error: ${response.status}`;
+            const errorMessage = errorData.detail || errorData.message || `Error de API: ${response.status}`;
             throw new Error(errorMessage);
         }
 
@@ -116,13 +140,18 @@ async function apiRequest<T>(
 
         return response.json();
     } catch (error) {
-        // Re-throw if it's already our custom error
-        if (error instanceof Error) {
+        // Re-throw if it's already an Error with a message (our custom errors)
+        if (error instanceof Error && error.message) {
+            // Check if it's a network error (TypeError with "Failed to fetch")
+            if (error.name === 'TypeError' && error.message.includes('fetch')) {
+                console.error('[API] Network error - cannot reach server:', url);
+                throw new Error('No se puede conectar al servidor. Verifica tu conexión a internet.');
+            }
             throw error;
         }
-        // Network errors
-        console.error('[API] Network error:', error);
-        throw new Error('Network error. Please check your connection.');
+        // Unknown errors
+        console.error('[API] Unknown error:', error);
+        throw new Error('Error desconocido. Por favor intenta de nuevo.');
     }
 }
 
@@ -457,7 +486,14 @@ export class WebSocketClient {
 
     connect(endpoint: string = '/ws'): void {
         const token = TokenStorage.get();
-        const wsUrl = API_BASE_URL.replace(/^http/, 'ws').replace('/api', '') + endpoint;
+
+        // For WebSocket connections in production with DigitalOcean:
+        // The API_BASE_URL is https://domain/api
+        // DO routes /api/* to the backend and STRIPS /api
+        // So we need to connect to wss://domain/api/ws/... which becomes /ws/... at the backend
+        // 
+        // Transform: https://whale-app-i6h36.ondigitalocean.app/api -> wss://whale-app-i6h36.ondigitalocean.app/api
+        const wsUrl = API_BASE_URL.replace(/^http/, 'ws') + endpoint;
         const url = token ? `${wsUrl}?token=${token}` : wsUrl;
 
         this.ws = new WebSocket(url);

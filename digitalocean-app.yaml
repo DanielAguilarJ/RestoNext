@@ -120,10 +120,10 @@ services:
   - key: NEXT_PUBLIC_API_URL
     scope: RUN_AND_BUILD_TIME
     value: https://whale-app-i6h36.ondigitalocean.app/api
-  # WebSocket URL
+  # WebSocket URL - base path for WS connections (frontend appends /ws/kitchen, etc.)
   - key: NEXT_PUBLIC_WS_URL
     scope: RUN_AND_BUILD_TIME
-    value: wss://whale-app-i6h36.ondigitalocean.app/api/ws
+    value: wss://whale-app-i6h36.ondigitalocean.app/api
   # Stripe Publishable Key (safe to expose)
   - key: NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY
     scope: RUN_AND_BUILD_TIME

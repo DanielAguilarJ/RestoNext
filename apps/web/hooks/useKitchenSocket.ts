@@ -10,35 +10,43 @@ import { tokenUtils } from '@/lib/api';
 /**
  * Construct WebSocket URL that respects HTTPS requirements
  * If the page is served over HTTPS, we must use WSS
+ * 
+ * DigitalOcean App Platform Routing:
+ * - Frontend calls: wss://whale-app-i6h36.ondigitalocean.app/api/ws/kitchen
+ * - DO strips /api prefix before forwarding to backend
+ * - Backend receives: /ws/kitchen (which matches @app.websocket("/ws/kitchen"))
  */
 function getWebSocketUrl(): string {
     const envWsUrl = process.env.NEXT_PUBLIC_WS_URL;
 
     if (typeof window === 'undefined') {
-        return envWsUrl || 'wss://whale-app-i6h36.ondigitalocean.app/api/ws';
+        // Server-side: use env var or production default
+        return envWsUrl || 'wss://whale-app-i6h36.ondigitalocean.app/api';
     }
 
-    // Derive protocol from current page
+    // Client-side: Derive protocol from current page
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
 
     if (envWsUrl) {
-        // Replace ws:// or wss:// with correct protocol
+        // Replace ws:// or wss:// with correct protocol based on page
         return envWsUrl.replace(/^wss?:/, protocol);
     }
 
-    // Use API URL base if available
+    // Use API URL base if available (transform http(s) to ws(s))
     const apiUrl = process.env.NEXT_PUBLIC_API_URL;
     if (apiUrl) {
         try {
             const url = new URL(apiUrl);
-            return `${protocol}//${url.host}`;
+            const wsProtocol = url.protocol === 'https:' ? 'wss:' : 'ws:';
+            // Keep the full path including /api
+            return `${wsProtocol}//${url.host}${url.pathname}`;
         } catch {
-            // Fallback
+            // Fallback on parse error
         }
     }
 
-    // Fallback: use current host
-    return `${protocol}//${window.location.host}`;
+    // Fallback: use current host with /api path
+    return `${protocol}//${window.location.host}/api`;
 }
 
 const WS_BASE_URL = getWebSocketUrl();
@@ -167,8 +175,11 @@ export function useKitchenSocket(options: UseKitchenSocketOptions = {}): UseKitc
         setConnectionError(null);
 
         // Build WebSocket URL with optional token
+        // WS_BASE_URL already includes /api (e.g., wss://domain/api)
+        // Append /ws/kitchen to get: wss://domain/api/ws/kitchen
+        // DO strips /api, backend receives /ws/kitchen
         const token = tokenUtils.getToken();
-        let wsUrl = `${WS_BASE_URL}/api/ws/kitchen`;
+        let wsUrl = `${WS_BASE_URL}/ws/kitchen`;
         if (token) {
             wsUrl += `?token=${encodeURIComponent(token)}`;
         }
