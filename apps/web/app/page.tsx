@@ -108,7 +108,7 @@ function HeroSection() {
                         <div className="absolute inset-0 rounded-xl bg-gradient-to-r from-brand-500 to-orange-500 opacity-0 group-hover:opacity-100 transition-opacity -z-10 blur-xl" />
                     </Link>
                     <Link
-                        href="#demo"
+                        href="/login?demo=true"
                         className="inline-flex items-center gap-2 px-8 py-4 bg-white/5 text-white font-semibold rounded-xl border border-white/10 hover:bg-white/10 transition-all duration-300"
                     >
                         <span>Ver Demo</span>
@@ -392,8 +392,8 @@ function PricingSection() {
                             viewport={{ once: true }}
                             transition={{ delay: idx * 0.1 }}
                             className={`relative rounded-2xl p-8 ${plan.highlighted
-                                    ? 'bg-gradient-to-b from-brand-600/20 to-brand-600/5 border-2 border-brand-500/50'
-                                    : 'bg-zinc-900/50 border border-zinc-800'
+                                ? 'bg-gradient-to-b from-brand-600/20 to-brand-600/5 border-2 border-brand-500/50'
+                                : 'bg-zinc-900/50 border border-zinc-800'
                                 }`}
                         >
                             {/* Popular Badge */}
@@ -432,8 +432,8 @@ function PricingSection() {
                             <Link
                                 href={`/checkout?plan=${plan.id}&billing=${isAnnual ? 'annual' : 'monthly'}`}
                                 className={`mt-8 block w-full py-3 px-4 text-center font-semibold rounded-xl transition-all duration-300 ${plan.highlighted
-                                        ? 'bg-brand-500 text-white hover:bg-brand-600 shadow-lg shadow-brand-500/25'
-                                        : 'bg-zinc-800 text-white hover:bg-zinc-700'
+                                    ? 'bg-brand-500 text-white hover:bg-brand-600 shadow-lg shadow-brand-500/25'
+                                    : 'bg-zinc-800 text-white hover:bg-zinc-700'
                                     }`}
                             >
                                 {plan.cta}

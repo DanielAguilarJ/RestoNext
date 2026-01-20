@@ -5,18 +5,27 @@
  * Authentication with Appwrite - Premium UI
  */
 
-import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { useState, useEffect } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { UtensilsCrossed, Mail, Lock, Loader2, ArrowLeft, Sparkles } from "lucide-react";
 import Link from "next/link";
 import { authApi } from "@/lib/api";
 
-export default function LoginPage() {
+function LoginForm() {
     const router = useRouter();
+    const searchParams = useSearchParams();
     const [email, setEmail] = useState("");
     const [password, setPassword] = useState("");
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
+
+    // Auto-fill demo credentials if ?demo=true
+    useEffect(() => {
+        if (searchParams.get("demo") === "true") {
+            setEmail("admin@restonext.com");
+            setPassword("password123");
+        }
+    }, [searchParams]);
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -194,6 +203,17 @@ export default function LoginPage() {
                 </p>
             </div>
         </div>
+    );
+}
+
+// Suspense Boundary wrapper due to useSearchParams
+import { Suspense } from "react";
+
+export default function LoginPage() {
+    return (
+        <Suspense fallback={<div className="min-h-screen flex items-center justify-center"><Loader2 className="w-10 h-10 animate-spin text-brand-500" /></div>}>
+            <LoginForm />
+        </Suspense>
     );
 }
 
