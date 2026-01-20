@@ -237,6 +237,16 @@ async def get_current_tenant_profile(
             detail="Tenant not found"
         )
     
+    # Check if logo is stored in features_config (Base64 workaround)
+    if tenant.logo_url == "stored_in_features_config" and tenant.features_config:
+        custom_logo = tenant.features_config.get("custom_logo_base64")
+        if custom_logo:
+            # Override logo_url in response
+            # We convert to dict first to avoid modifying the ORM object in session
+            tenant_dict = TenantPublic.model_validate(tenant).model_dump()
+            tenant_dict["logo_url"] = custom_logo
+            return TenantPublic(**tenant_dict)
+            
     return tenant
 
 
@@ -298,17 +308,27 @@ async def quick_complete_onboarding(
     tenant.trade_name = data.name
     tenant.name = data.name
     
+    # Store service_types and handle Logo in features_config
+    current_features = dict(tenant.features_config) if tenant.features_config else {}
+    current_features["service_types"] = data.service_types
+    
     if data.logo_url:
-        tenant.logo_url = data.logo_url
+        # Check if logo is a huge Base64 string
+        if len(data.logo_url) > 255:
+            # Store base64 in features_config to avoid DB column limit (String(512))
+            current_features["custom_logo_base64"] = data.logo_url
+            tenant.logo_url = "stored_in_features_config"
+        else:
+            tenant.logo_url = data.logo_url
+            # Clean up base64 if switching to a normal URL
+            if "custom_logo_base64" in current_features:
+                del current_features["custom_logo_base64"]
+    
+    tenant.features_config = current_features
     
     # Update config with service preferences
     # FIX: Use correct fields model (tenant.config does not exist)
     tenant.currency = data.currency
-    
-    # Store service_types in features_config
-    current_features = dict(tenant.features_config) if tenant.features_config else {}
-    current_features["service_types"] = data.service_types
-    tenant.features_config = current_features
     
     # Mark onboarding as complete for wizard flow
     tenant.onboarding_step = "complete"
