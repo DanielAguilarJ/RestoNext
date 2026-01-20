@@ -34,7 +34,9 @@ function LoginForm() {
 
         try {
             await authApi.login(email, password);
-            router.push("/");
+            // Respect redirect param, default to dashboard
+            const redirectTo = searchParams.get('redirect') || '/dashboard';
+            router.push(redirectTo);
         } catch (err: any) {
             // Robust error message extraction
             let errorMessage = "Error al iniciar sesión. Verifica tus credenciales.";

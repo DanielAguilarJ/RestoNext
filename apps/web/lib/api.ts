@@ -44,7 +44,24 @@ const rawApiUrl = getRawApiUrl();
 const API_BASE_URL = rawApiUrl.replace(/\/+$/, '');
 
 /**
+ * Cookie utilities for middleware compatibility
+ * Next.js middleware runs on the edge and only has access to cookies, not localStorage
+ */
+const setCookie = (name: string, value: string, days: number = 7): void => {
+    if (typeof document === 'undefined') return;
+    const expires = new Date();
+    expires.setTime(expires.getTime() + days * 24 * 60 * 60 * 1000);
+    document.cookie = `${name}=${value};expires=${expires.toUTCString()};path=/;SameSite=Lax`;
+};
+
+const removeCookie = (name: string): void => {
+    if (typeof document === 'undefined') return;
+    document.cookie = `${name}=;expires=Thu, 01 Jan 1970 00:00:00 GMT;path=/`;
+};
+
+/**
  * Token storage utilities
+ * Syncs token to both localStorage (for client) and cookie (for middleware)
  */
 const TokenStorage = {
     get: (): string | null => {
@@ -54,13 +71,25 @@ const TokenStorage = {
     set: (token: string): void => {
         if (typeof window !== 'undefined') {
             localStorage.setItem('access_token', token);
+            // Sync to cookie for Next.js middleware
+            setCookie('restonext_token', token, 7);
         }
     },
     remove: (): void => {
         if (typeof window !== 'undefined') {
             localStorage.removeItem('access_token');
+            // Remove cookies too
+            removeCookie('restonext_token');
+            removeCookie('restonext_licenses');
         }
     }
+};
+
+/**
+ * Set tenant licenses in cookie for middleware route protection
+ */
+export const setLicensesCookie = (licenses: string[]): void => {
+    setCookie('restonext_licenses', licenses.join(','), 7);
 };
 
 /**
