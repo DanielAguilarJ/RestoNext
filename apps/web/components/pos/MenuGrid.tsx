@@ -22,6 +22,7 @@ import { useState, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { MenuGridSkeleton } from "../ui/Skeletons";
 import { EmptyState } from "../ui/EmptyState";
+import Image from "next/image";
 
 interface MenuGridProps {
     isLoading: boolean;
@@ -131,7 +132,7 @@ export function MenuGrid({ isLoading, items, onAddItem, searchQuery = '' }: Menu
     return (
         <div className="flex-1 p-4 overflow-y-auto">
             <motion.div
-                className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4"
+                className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4"
                 variants={containerVariants}
                 initial="hidden"
                 animate="visible"
@@ -141,6 +142,7 @@ export function MenuGrid({ isLoading, items, onAddItem, searchQuery = '' }: Menu
                     {items.map((item) => {
                         const isPressed = pressedItem === item.$id;
                         const isAdded = addedItems.has(item.$id);
+                        const hasImage = item.image_url && item.image_url.startsWith('http');
 
                         return (
                             <motion.button
@@ -160,60 +162,62 @@ export function MenuGrid({ isLoading, items, onAddItem, searchQuery = '' }: Menu
                                 onTouchStart={() => handlePress(item.$id)}
                                 onTouchEnd={handleRelease}
                                 className={`
-                                    relative group p-4 text-left 
-                                    bg-white/70 dark:bg-gray-800/70 
+                                    relative group p-3 text-left 
+                                    bg-white/80 dark:bg-gray-800/80 backdrop-blur-sm
                                     hover:bg-white dark:hover:bg-gray-800 
-                                    rounded-2xl transition-colors duration-200 
-                                    shadow-sm hover:shadow-lg
-                                    border-2 border-transparent hover:border-brand-200 dark:hover:border-brand-800
+                                    rounded-2xl transition-all duration-200 
+                                    shadow-sm hover:shadow-md
+                                    border border-gray-100 dark:border-gray-700
+                                    hover:border-brand-200 dark:hover:border-brand-800
                                     overflow-hidden
                                     touch-manipulation
                                     
                                     /* FAT FINGER OPTIMIZATION */
-                                    min-h-[140px]  /* Generous height */
-                                    min-w-[100px]  /* Minimum width */
+                                    min-h-[160px]
+                                    flex flex-col
                                     
                                     /* Active/Press State */
-                                    ${isPressed ? 'shadow-inner bg-brand-50 dark:bg-brand-900/30' : ''}
+                                    ${isPressed ? 'bg-brand-50 dark:bg-brand-900/30' : ''}
                                     ${isAdded ? 'ring-2 ring-green-500 bg-green-50 dark:bg-green-900/20' : ''}
                                 `}
                             >
-                                {/* Product Image/Emoji */}
-                                <motion.div
-                                    className={`
-                                        w-16 h-16 mx-auto
-                                        bg-gradient-to-br from-brand-100 to-brand-200 
-                                        dark:from-brand-900/50 dark:to-brand-800/50 
-                                        rounded-xl flex items-center justify-center mb-3
-                                        ${isAdded ? 'bg-green-100 dark:bg-green-900/50' : ''}
-                                    `}
-                                    animate={isPressed ? { scale: 0.9 } : { scale: 1 }}
-                                    transition={{ type: "spring", stiffness: 500, damping: 30 }}
-                                >
+                                {/* Product Image */}
+                                <div className="relative w-full aspect-[4/3] mb-3 rounded-xl overflow-hidden bg-gray-100 dark:bg-gray-700">
                                     <AnimatePresence mode="wait">
                                         {isAdded ? (
                                             <motion.div
                                                 key="check"
-                                                initial={{ scale: 0, rotate: -180 }}
-                                                animate={{ scale: 1, rotate: 0 }}
-                                                exit={{ scale: 0, rotate: 180 }}
-                                                transition={{ type: "spring", stiffness: 500, damping: 25 }}
+                                                className="absolute inset-0 z-10 flex items-center justify-center bg-green-500/20 backdrop-blur-sm"
+                                                initial={{ opacity: 0 }}
+                                                animate={{ opacity: 1 }}
+                                                exit={{ opacity: 0 }}
                                             >
-                                                <Check className="w-8 h-8 text-green-500" />
+                                                <motion.div
+                                                    initial={{ scale: 0, rotate: -180 }}
+                                                    animate={{ scale: 1, rotate: 0 }}
+                                                    transition={{ type: "spring", stiffness: 300 }}
+                                                    className="w-12 h-12 bg-white rounded-full flex items-center justify-center shadow-lg"
+                                                >
+                                                    <Check className="w-6 h-6 text-green-600" strokeWidth={3} />
+                                                </motion.div>
                                             </motion.div>
-                                        ) : (
-                                            <motion.span
-                                                key="emoji"
-                                                className="text-3xl"
-                                                initial={{ scale: 0.8 }}
-                                                animate={{ scale: 1 }}
-                                                transition={{ type: "spring", stiffness: 400 }}
-                                            >
-                                                {item.image_url || "🥘"}
-                                            </motion.span>
-                                        )}
+                                        ) : null}
                                     </AnimatePresence>
-                                </motion.div>
+
+                                    {hasImage ? (
+                                        <Image
+                                            src={item.image_url!}
+                                            alt={item.name}
+                                            fill
+                                            className="object-cover transition-transform duration-500 group-hover:scale-105"
+                                            sizes="(max-width: 768px) 50vw, (max-width: 1200px) 33vw, 25vw"
+                                        />
+                                    ) : (
+                                        <div className="absolute inset-0 flex items-center justify-center text-4xl bg-gradient-to-br from-gray-100 to-gray-200 dark:from-gray-800 dark:to-gray-700">
+                                            {item.image_url || "🥘"}
+                                        </div>
+                                    )}
+                                </div>
 
                                 {/* Product Name */}
                                 <div className="font-semibold text-sm text-gray-900 dark:text-white line-clamp-2 min-h-[40px] text-center">

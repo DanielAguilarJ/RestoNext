@@ -3,7 +3,7 @@
  * Horizontal scrollable category tabs for POS
  * 
  * Fat-Finger Optimization:
- * - Minimum 48px height touch targets
+ * - Minimum 44px height touch targets
  * - Generous horizontal padding
  * - Clear active state
  * - Momentum scrolling on touch
@@ -16,7 +16,7 @@
 
 import { MenuCategory } from "../../../../packages/shared/src/index";
 import { cn } from "@/lib/utils";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion } from "framer-motion";
 import { CategorySelectorSkeleton } from "../ui/Skeletons";
 
 interface CategorySelectorProps {
@@ -64,9 +64,9 @@ export function CategorySelector({
     }
 
     return (
-        <div className="glass sticky top-[72px] z-10 border-b border-gray-200/50 dark:border-gray-700/50">
+        <div className="sticky top-[72px] z-10 py-2 bg-gray-50/95 dark:bg-black/95 backdrop-blur-sm supports-[backdrop-filter]:bg-gray-50/80 dark:supports-[backdrop-filter]:bg-black/80">
             <motion.div
-                className="flex gap-2 p-3 overflow-x-auto scrollbar-hide"
+                className="flex gap-3 px-4 overflow-x-auto scrollbar-hide items-center h-16"
                 style={{
                     WebkitOverflowScrolling: 'touch',
                     scrollSnapType: 'x proximity'
@@ -87,35 +87,27 @@ export function CategorySelector({
                             whileTap={{ scale: 0.97 }}
                             className={cn(
                                 // Base styles - FAT FINGER FRIENDLY
-                                "relative flex items-center gap-2 px-5 py-3 rounded-full whitespace-nowrap",
-                                "font-medium transition-colors duration-200",
-                                "touch-manipulation",
-                                "min-h-[48px]",  // Minimum touch target height
-                                "min-w-[80px]",  // Minimum width
-                                "scroll-snap-align-start",
+                                "relative flex items-center gap-2 px-6 py-2.5 rounded-full transition-all duration-200",
+                                "min-h-[44px]",
+                                "select-none outline-none focus-visible:ring-2 focus-visible:ring-gray-400",
 
                                 // Non-selected state
                                 !isSelected && [
-                                    "text-gray-700 dark:text-gray-300",
-                                    "hover:bg-white/50 dark:hover:bg-gray-700/50",
-                                    "border border-gray-200/50 dark:border-gray-700/50"
-                                ],
-
-                                // Selected state (text only, bg handled by motion.div)
-                                isSelected && [
-                                    "text-white font-semibold",
+                                    "bg-gray-100 dark:bg-gray-800",
+                                    "hover:bg-gray-200 dark:hover:bg-gray-700",
+                                    "active:scale-95"
                                 ]
                             )}
                             style={{ scrollSnapAlign: 'start' }}
                         >
-                            {/* Animated Background Pill (Shared Layout) */}
+                            {/* Animated Background Pill */}
                             {isSelected && (
                                 <motion.div
                                     layoutId="category-pill"
                                     className={cn(
                                         "absolute inset-0 rounded-full",
-                                        "bg-gradient-to-r from-brand-500 to-brand-600",
-                                        "shadow-lg shadow-brand-500/30"
+                                        "bg-gray-900 dark:bg-white",
+                                        "shadow-sm"
                                     )}
                                     initial={false}
                                     transition={{
@@ -126,50 +118,25 @@ export function CategorySelector({
                                 />
                             )}
 
-                            {/* Selection Ring Animation */}
-                            <AnimatePresence>
-                                {isSelected && (
-                                    <motion.div
-                                        className="absolute inset-0 rounded-full ring-2 ring-brand-300 ring-offset-2"
-                                        initial={{ opacity: 0, scale: 0.8 }}
-                                        animate={{ opacity: 1, scale: 1 }}
-                                        exit={{ opacity: 0, scale: 1.1 }}
-                                        transition={{ duration: 0.2 }}
-                                    />
-                                )}
-                            </AnimatePresence>
-
                             {/* Content (above background) */}
-                            <span className="relative z-10 flex items-center gap-2">
+                            <span className={cn(
+                                "relative z-10 flex items-center gap-2",
+                                isSelected ? "text-white dark:text-gray-900" : "text-gray-600 dark:text-gray-400"
+                            )}>
                                 {/* Optional Category Icon/Emoji */}
                                 {(cat as any).icon && (
-                                    <motion.span
-                                        className="text-lg"
-                                        animate={isSelected ? { scale: [1, 1.2, 1] } : undefined}
-                                        transition={{ duration: 0.3 }}
-                                    >
+                                    <span className="text-lg">
                                         {(cat as any).icon}
-                                    </motion.span>
+                                    </span>
                                 )}
 
                                 {/* Category Name */}
-                                <span className="text-sm sm:text-base">{cat.name}</span>
-
-                                {/* Optional Item Count Badge */}
-                                {(cat as any).item_count !== undefined && (cat as any).item_count > 0 && (
-                                    <motion.span
-                                        className={cn(
-                                            "ml-1 px-2 py-0.5 rounded-full text-xs font-bold",
-                                            isSelected
-                                                ? "bg-white/20 text-white"
-                                                : "bg-gray-200 dark:bg-gray-600 text-gray-600 dark:text-gray-300"
-                                        )}
-                                        animate={isSelected ? { scale: [1, 1.1, 1] } : undefined}
-                                        transition={{ delay: 0.1, duration: 0.2 }}
-                                    >
-                                        {(cat as any).item_count}
-                                    </motion.span>
-                                )}
+                                <span className={cn(
+                                    "text-sm font-semibold tracking-wide",
+                                    "whitespace-nowrap"
+                                )}>
+                                    {cat.name}
+                                </span>
                             </span>
                         </motion.button>
                     );

@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { motion } from "framer-motion";
+import { motion, useScroll, useTransform } from "framer-motion";
 import {
     UtensilsCrossed,
     ChefHat,
@@ -14,14 +14,17 @@ import {
     Shield,
     Zap,
     Users,
+    Clock,
     ArrowRight,
     Check,
     Star,
     Menu,
     X,
     ChevronDown,
+    Smartphone,
     CreditCard,
     FileText,
+    TrendingUp,
 } from "lucide-react";
 
 // ============================================
@@ -453,18 +456,21 @@ const testimonials = [
     {
         name: "María González",
         role: "Dueña, Tacos El Patrón",
+        image: "/testimonials/maria.jpg",
         content: "RestoNext revolucionó mi negocio. Antes tardaba 2 horas en cuadrar caja, ahora 10 minutos. La facturación automática es un sueño.",
         rating: 5,
     },
     {
         name: "Roberto Hernández",
         role: "Gerente, Mariscos Costa Azul",
+        image: "/testimonials/roberto.jpg",
         content: "El KDS en cocina eliminó los errores de comandas. Mis cocineros aman la pantalla y los clientes reciben su comida más rápido.",
         rating: 5,
     },
     {
         name: "Ana Torres",
         role: "Administradora, Café Central",
+        image: "/testimonials/ana.jpg",
         content: "La predicción de inventario con IA nos ha ahorrado miles de pesos en desperdicio. Súper recomendado.",
         rating: 5,
     },
@@ -507,7 +513,7 @@ function TestimonialsSection() {
 
                             {/* Content */}
                             <p className="text-zinc-300 leading-relaxed mb-6">
-                                &quot;{testimonial.content}&quot;
+                                "{testimonial.content}"
                             </p>
 
                             {/* Author */}

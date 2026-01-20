@@ -504,39 +504,29 @@ async def handle_stripe_webhook(
 # ============================================
 
 async def _handle_checkout_completed(session: dict, db: AsyncSession):
-    """Handle successful checkout session completion."""
-    tenant_id = session.get("metadata", {}).get("tenant_id")
-    plan = session.get("metadata", {}).get("plan")
-    customer_id = session.get("customer")
+    """
+    Handle successful checkout session completion.
     
-    if not tenant_id or not plan:
-        logger.warning("Checkout session missing tenant_id or plan in metadata")
-        return
+    Uses ProvisioningService for complete user setup including:
+    - Activating subscription
+    - Updating tenant permissions
+    - Sending welcome email
+    """
+    from app.services.provisioning_service import ProvisioningService
     
-    # Update tenant
-    result = await db.execute(
-        select(Tenant).where(Tenant.id == tenant_id)
-    )
-    tenant = result.scalar_one_or_none()
+    provisioning = ProvisioningService(db)
     
-    if not tenant:
-        logger.error(f"Tenant not found: {tenant_id}")
-        return
-    
-    # Update addons based on plan
-    tenant.active_addons = _update_tenant_plan_from_addons(plan)
-    
-    # Update billing config with customer ID
-    billing_config = tenant.billing_config or {}
-    billing_config["stripe_customer_id"] = customer_id
-    billing_config["subscription_status"] = "active"
-    billing_config["current_plan"] = plan
-    billing_config["subscription_updated_at"] = datetime.utcnow().isoformat()
-    tenant.billing_config = billing_config
-    
-    await db.commit()
-    
-    logger.info(f"Tenant {tenant_id} upgraded to plan: {plan}")
+    try:
+        success = await provisioning.provision_from_checkout(session)
+        if success:
+            logger.info(f"Successfully provisioned from checkout: {session.get('id')}")
+        else:
+            logger.warning(f"Provisioning returned False for checkout: {session.get('id')}")
+    except Exception as e:
+        logger.error(f"Provisioning error for checkout {session.get('id')}: {e}")
+        # Re-raise to be caught by webhook handler
+        raise
+
 
 
 async def _handle_payment_succeeded(invoice: dict, db: AsyncSession):

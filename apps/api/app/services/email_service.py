@@ -290,6 +290,103 @@ class EmailService:
                 "year": "2026"
             }
         )
+    
+    # ============================================
+    # Subscription Lifecycle Emails
+    # ============================================
+    
+    async def send_welcome_email(
+        self,
+        to_email: str,
+        name: str,
+        restaurant_name: str,
+        plan_name: str,
+        login_url: str
+    ) -> bool:
+        """
+        Send welcome email after successful subscription.
+        
+        Args:
+            to_email: Recipient email address
+            name: User's name
+            restaurant_name: Restaurant name
+            plan_name: Name of the subscribed plan
+            login_url: URL to login page
+            
+        Returns:
+            True if sent successfully
+        """
+        return await self.send_email(
+            to=[to_email],
+            subject=f"🎉 ¡Bienvenido a RestoNext {plan_name}! - {restaurant_name}",
+            template_name="welcome_subscription.html",
+            template_data={
+                "name": name,
+                "restaurant_name": restaurant_name,
+                "plan_name": plan_name,
+                "login_url": login_url,
+                "year": "2026"
+            }
+        )
+    
+    async def send_payment_failed(
+        self,
+        to_email: str,
+        name: str,
+        restaurant_name: str,
+        invoice_url: Optional[str] = None
+    ) -> bool:
+        """
+        Send notification when payment fails.
+        
+        Args:
+            to_email: Recipient email address
+            name: User's name
+            restaurant_name: Restaurant name
+            invoice_url: URL to retry payment
+            
+        Returns:
+            True if sent successfully
+        """
+        return await self.send_email(
+            to=[to_email],
+            subject=f"⚠️ Problema con tu pago - {restaurant_name}",
+            template_name="payment_failed.html",
+            template_data={
+                "name": name,
+                "restaurant_name": restaurant_name,
+                "invoice_url": invoice_url or "",
+                "year": "2026"
+            }
+        )
+    
+    async def send_subscription_canceled(
+        self,
+        to_email: str,
+        name: str,
+        restaurant_name: str
+    ) -> bool:
+        """
+        Send notification when subscription is canceled.
+        
+        Args:
+            to_email: Recipient email address
+            name: User's name
+            restaurant_name: Restaurant name
+            
+        Returns:
+            True if sent successfully
+        """
+        return await self.send_email(
+            to=[to_email],
+            subject=f"Tu suscripción ha sido cancelada - {restaurant_name}",
+            template_name="subscription_canceled.html",
+            template_data={
+                "name": name,
+                "restaurant_name": restaurant_name,
+                "year": "2026"
+            }
+        )
 
 
 # ============================================

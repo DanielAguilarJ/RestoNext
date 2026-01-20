@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>¡Bienvenido a RestoNext!</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #f5f5f5;
+            color: #333;
+        }
+
+        .container {
+            max-width: 600px;
+            margin: 0 auto;
+            padding: 40px 20px;
+        }
+
+        .card {
+            background: #ffffff;
+            border-radius: 16px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+            overflow: hidden;
+        }
+
+        .header {
+            background: linear-gradient(135deg, #d92d20 0%, #f97316 100%);
+            padding: 40px 30px;
+            text-align: center;
+        }
+
+        .header h1 {
+            color: #ffffff;
+            margin: 0;
+            font-size: 28px;
+            font-weight: 700;
+        }
+
+        .header p {
+            color: rgba(255, 255, 255, 0.9);
+            margin: 10px 0 0;
+            font-size: 16px;
+        }
+
+        .content {
+            padding: 40px 30px;
+        }
+
+        .greeting {
+            font-size: 20px;
+            color: #333;
+            margin-bottom: 20px;
+        }
+
+        .highlight-box {
+            background: linear-gradient(135deg, #fef3f2 0%, #fff7ed 100%);
+            border-left: 4px solid #d92d20;
+            padding: 20px;
+            border-radius: 8px;
+            margin: 25px 0;
+        }
+
+        .highlight-box h3 {
+            margin: 0 0 10px;
+            color: #d92d20;
+            font-size: 16px;
+        }
+
+        .plan-badge {
+            display: inline-block;
+            background: linear-gradient(135deg, #d92d20 0%, #f97316 100%);
+            color: white;
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-weight: 600;
+            font-size: 14px;
+        }
+
+        .btn {
+            display: inline-block;
+            background: linear-gradient(135deg, #d92d20 0%, #f97316 100%);
+            color: #ffffff !important;
+            text-decoration: none;
+            padding: 16px 32px;
+            border-radius: 10px;
+            font-weight: 600;
+            font-size: 16px;
+            margin: 25px 0;
+            text-align: center;
+        }
+
+        .btn:hover {
+            opacity: 0.9;
+        }
+
+        .features {
+            margin: 30px 0;
+        }
+
+        .feature-item {
+            display: flex;
+            align-items: center;
+            padding: 12px 0;
+            border-bottom: 1px solid #f0f0f0;
+        }
+
+        .feature-icon {
+            width: 24px;
+            height: 24px;
+            background: #22c55e;
+            border-radius: 50%;
+            margin-right: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-size: 14px;
+        }
+
+        .footer {
+            background: #fafafa;
+            padding: 30px;
+            text-align: center;
+            color: #666;
+            font-size: 14px;
+        }
+
+        .social-links {
+            margin-top: 20px;
+        }
+
+        .social-links a {
+            color: #d92d20;
+            text-decoration: none;
+            margin: 0 10px;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <div class="card">
+            <div class="header">
+                <h1>🎉 ¡Bienvenido a RestoNext!</h1>
+                <p>Tu sistema de gestión de restaurantes</p>
+            </div>
+
+            <div class="content">
+                <p class="greeting">¡Hola {{ name }}!</p>
+
+                <p>Tu cuenta para <strong>{{ restaurant_name }}</strong> ha sido creada exitosamente. Estamos
+                    emocionados de tenerte con nosotros.</p>
+
+                <div class="highlight-box">
+                    <h3>Tu Plan Activo</h3>
+                    <span class="plan-badge">{{ plan_name }}</span>
+                    <p style="margin: 10px 0 0; font-size: 14px; color: #666;">
+                        Tu período de prueba de 14 días ha comenzado. ¡Disfrútalo!
+                    </p>
+                </div>
+
+                <div class="features">
+                    <h3 style="color: #333; margin-bottom: 15px;">Lo que puedes hacer ahora:</h3>
+                    <div class="feature-item">
+                        <div class="feature-icon">✓</div>
+                        <span>Configurar tus mesas y menú</span>
+                    </div>
+                    <div class="feature-item">
+                        <div class="feature-icon">✓</div>
+                        <span>Tomar pedidos con el POS</span>
+                    </div>
+                    <div class="feature-item">
+                        <div class="feature-icon">✓</div>
+                        <span>Generar facturas electrónicas (CFDI 4.0)</span>
+                    </div>
+                    <div class="feature-item">
+                        <div class="feature-icon">✓</div>
+                        <span>Ver reportes y analytics en tiempo real</span>
+                    </div>
+                </div>
+
+                <div style="text-align: center;">
+                    <a href="{{ login_url }}" class="btn">Entrar a mi Dashboard</a>
+                </div>
+
+                <p style="color: #666; font-size: 14px; margin-top: 30px;">
+                    ¿Necesitas ayuda? Nuestro equipo de soporte está disponible en
+                    <a href="mailto:soporte@restonext.mx" style="color: #d92d20;">soporte@restonext.mx</a>
+                </p>
+            </div>
+
+            <div class="footer">
+                <p><strong>RestoNext MX</strong></p>
+                <p>El sistema POS más potente para restaurantes en México</p>
+                <p style="margin-top: 20px; font-size: 12px; color: #999;">
+                    © {{ year }} RestoNext. Todos los derechos reservados.
+                </p>
+            </div>
+        </div>
+    </div>
+</body>
+
+</html>

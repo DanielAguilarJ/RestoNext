@@ -29,6 +29,7 @@ from app.core.scheduler import init_scheduler, start_scheduler, shutdown_schedul
 _startup_complete = False
 
 from app.api.auth import router as auth_router
+from app.api.signup import router as signup_router
 from app.api.pos import router as pos_router
 from app.api.billing import router as billing_router
 from app.api.analytics import router as analytics_router
@@ -223,6 +224,7 @@ app.add_middleware(
 
 # Register API routers
 app.include_router(auth_router)
+app.include_router(signup_router)  # Signup checkout flow
 app.include_router(pos_router)
 app.include_router(billing_router)
 app.include_router(analytics_router)
