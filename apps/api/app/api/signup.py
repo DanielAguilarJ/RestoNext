@@ -299,13 +299,12 @@ async def signup_checkout(
         await db.commit()
         
         # Generate access token for immediate login
-        access_token = create_access_token(
-            data={
-                "sub": str(user.id),
-                "tenant_id": str(tenant.id),
-                "role": user.role.value,
-            }
+        token_obj = create_access_token(
+            user_id=str(user.id),
+            tenant_id=str(tenant.id),
+            role=user.role.value,
         )
+        access_token = token_obj.access_token
         
         return SignupCheckoutResponse(
             access_token=access_token,
