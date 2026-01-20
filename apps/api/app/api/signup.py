@@ -319,8 +319,12 @@ async def signup_checkout(
         raise
     except Exception as e:
         await db.rollback()
-        logger.error(f"Signup error: {e}")
+        import traceback
+        error_trace = traceback.format_exc()
+        logger.error(f"Signup error: {e}\n{error_trace}")
+        
+        # DEBUG: Exposing raw error to client for debugging purposes
         raise HTTPException(
             status_code=500,
-            detail="Error al crear la cuenta. Por favor intenta de nuevo."
+            detail=f"DEBUG ERROR: {type(e).__name__}: {str(e)}"
         )
