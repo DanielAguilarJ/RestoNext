@@ -68,31 +68,93 @@ function renderMarkdown(markdown: string): string {
 }
 
 export default function TermsPage() {
-    const [document, setDocument] = useState<LegalDocument | null>(null);
-    const [loading, setLoading] = useState(true);
+    // Static Terms Document
+    const STATIC_TERMS: LegalDocument = {
+        id: "terms-v1",
+        type: "terms",
+        version: "1.0",
+        title: "Términos y Condiciones de Uso",
+        content: `
+### 1. Aceptación de los Términos
+
+Bienvenido a RestoNext ("nosotros", "nuestro" o "la Plataforma"). Al acceder o utilizar nuestro software como servicio (SaaS) para la gestión de restaurantes, usted ("el Cliente" o "Usuario") acepta estar legalmente vinculado por estos Términos y Condiciones.
+
+Si no está de acuerdo con alguna parte de estos términos, no podrá utilizar nuestros servicios.
+
+### 2. Descripción del Servicio
+
+RestoNext proporciona una plataforma integral de gestión para restaurantes que incluye, pero no se limita a:
+- Punto de Venta (POS) en la nube.
+- Sistema de Pantallas de Cocina (KDS).
+- Gestión de Inventarios y Menús.
+- Facturación Electrónica (CFDI 4.0).
+- Reportes y Analítica.
+
+Nos reservamos el derecho de modificar, suspender o discontinuar cualquier aspecto del servicio en cualquier momento, notificando a los usuarios sobre cambios significativos.
+
+### 3. Cuentas y Seguridad
+
+Para utilizar el servicio, debe registrarse y crear una cuenta. Usted es responsable de:
+- Mantener la confidencialidad de sus credenciales de acceso.
+- Todas las actividades que ocurran bajo su cuenta.
+- Notificarnos inmediatamente sobre cualquier uso no autorizado.
+
+RestoNext implementa medidas de seguridad estándar de la industria, pero no se hace responsable por pérdidas derivadas del robo de credenciales del usuario.
+
+### 4. Planes y Pagos
+
+**4.1 Suscripciones**
+El servicio se ofrece bajo modelos de suscripción mensual o anual. Los precios están publicados en nuestro sitio web y pueden estar sujetos a impuestos aplicables (IVA).
+
+**4.2 Facturación**
+El cobro se realiza por adelantado. Al proporcionar un método de pago, nos autoriza a cobrar las tarifas correspondientes.
+
+**4.3 Cancelación**
+Puede cancelar su suscripción en cualquier momento. El servicio continuará activo hasta el final del periodo de facturación pagado. No se ofrecen reembolsos por periodos parciales.
+
+### 5. Propiedad Intelectual
+
+**5.1 RestoNext**
+Todo el software, código, diseños, logotipos y tecnología subyacente son propiedad exclusiva de RestoNext y están protegidos por leyes de derechos de autor y propiedad intelectual.
+
+**5.2 Datos del Cliente**
+Usted conserva la propiedad total de los datos (menús, ventas, clientes) que ingresa en la plataforma. Nos otorga una licencia limitada para alojar, procesar y realizar copias de seguridad de estos datos para la prestación del servicio.
+
+### 6. Facturación Electrónica (SAT)
+
+RestoNext facilita la emisión de CFDI 4.0. Sin embargo, el Cliente es el único responsable de la veracidad de los datos fiscales ingresados y del cumplimiento de sus obligaciones tributarias ante el Servicio de Administración Tributaria (SAT).
+
+### 7. Limitación de Responsabilidad
+
+El servicio se proporciona "tal cual" (as is). En la máxima medida permitida por la ley, RestoNext no será responsable por:
+- Daños indirectos, incidentales o consecuentes (pérdida de beneficios, datos o interrupción del negocio).
+- Fallos derivados de problemas de conectividad a internet del Cliente.
+
+### 8. Nivel de Servicio (SLA)
+
+Nos esforzamos por mantener una disponibilidad del 99.9%. En caso de interrupciones programadas por mantenimiento, notificaremos con anticipación.
+
+### 9. Legislación Aplicable
+
+Estos términos se rigen por las leyes de los Estados Unidos Mexicanos. Cualquier disputa se resolverá en los tribunales competentes de la Ciudad de México.
+
+---
+**Contacto Legal**
+Si tiene dudas sobre estos términos, contáctenos en: legal@restonext.mx
+        `,
+        effective_date: new Date().toISOString(),
+        is_current: true,
+        created_at: new Date().toISOString()
+    };
+
+    const [document, setDocument] = useState<LegalDocument | null>(STATIC_TERMS);
+    const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
 
-    useEffect(() => {
-        const fetchTerms = async () => {
-            try {
-                const response = await fetch(`${API_BASE_URL}/legal/latest/terms`);
-
-                if (!response.ok) {
-                    throw new Error('Failed to fetch terms');
-                }
-
-                const data = await response.json();
-                setDocument(data);
-            } catch (err) {
-                console.error('Error fetching terms:', err);
-                setError('No se pudieron cargar los términos y condiciones');
-            } finally {
-                setLoading(false);
-            }
-        };
-
-        fetchTerms();
-    }, []);
+    // Removed dynamic fetch to ensure immediate availability
+    /*
+    useEffect(() => { ... }
+    */
 
     const formatDate = (dateString: string) => {
         return new Date(dateString).toLocaleDateString('es-MX', {
