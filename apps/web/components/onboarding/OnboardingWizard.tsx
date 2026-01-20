@@ -51,6 +51,12 @@ const getToken = () => {
 
 async function apiRequest<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
     const token = getToken();
+
+    // Debug: Log token status
+    if (!token) {
+        console.warn('[OnboardingWizard] No access token found in localStorage');
+    }
+
     const headers: HeadersInit = {
         'Content-Type': 'application/json',
         ...options.headers,
@@ -58,12 +64,48 @@ async function apiRequest<T>(endpoint: string, options: RequestInit = {}): Promi
     if (token) {
         (headers as Record<string, string>)['Authorization'] = `Bearer ${token}`;
     }
-    const response = await fetch(`${API_BASE_URL}${endpoint}`, { ...options, headers });
-    if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.detail || `API Error: ${response.status}`);
+
+    const url = `${API_BASE_URL}${endpoint}`;
+    console.log('[OnboardingWizard] Making API request to:', url);
+
+    try {
+        const response = await fetch(url, { ...options, headers });
+
+        if (!response.ok) {
+            // Handle specific HTTP errors
+            if (response.status === 401) {
+                throw new Error('Sesión expirada. Por favor, inicia sesión nuevamente.');
+            }
+            if (response.status === 403) {
+                throw new Error('No tienes permiso para realizar esta acción.');
+            }
+            if (response.status === 404) {
+                throw new Error('Recurso no encontrado. El endpoint puede estar incorrecto.');
+            }
+            if (response.status === 422) {
+                const errorData = await response.json().catch(() => ({}));
+                throw new Error(errorData.detail || 'Error de validación');
+            }
+
+            const errorData = await response.json().catch(() => ({}));
+            throw new Error(errorData.detail || `Error del servidor: ${response.status}`);
+        }
+
+        return response.json();
+    } catch (error: any) {
+        // Handle network errors specifically
+        if (error.name === 'TypeError' && error.message === 'Failed to fetch') {
+            console.error('[OnboardingWizard] Network error - possible causes: CORS, server down, wrong URL');
+            console.error('[OnboardingWizard] API URL:', url);
+            console.error('[OnboardingWizard] Token present:', !!token);
+
+            if (!token) {
+                throw new Error('No se encontró token de autenticación. Por favor, inicia el proceso de registro nuevamente desde /checkout');
+            }
+            throw new Error('No se pudo conectar con el servidor. Verifica tu conexión a internet y que el servidor esté disponible.');
+        }
+        throw error;
     }
-    return response.json();
 }
 
 // Types

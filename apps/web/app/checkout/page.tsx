@@ -196,7 +196,14 @@ function CheckoutContent() {
 
             const { access_token, checkout_session_url } = await signupResponse.json();
 
-            // Step 2: Redirect to Stripe Checkout
+            // Step 2: Save access token BEFORE redirecting to Stripe
+            // This token will be available when the user returns from Stripe to /onboarding
+            if (access_token) {
+                localStorage.setItem('access_token', access_token);
+                console.log('[Checkout] Access token saved to localStorage');
+            }
+
+            // Step 3: Redirect to Stripe Checkout
             if (checkout_session_url) {
                 window.location.href = checkout_session_url;
             } else {
