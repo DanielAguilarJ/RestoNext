@@ -98,23 +98,44 @@ export default function DashboardHome() {
             return;
         }
 
-        // Fetch user data
+        // Fetch user data and tenant info
         async function fetchUserData() {
             try {
                 const API_URL = process.env.NEXT_PUBLIC_API_URL || "https://whale-app-i6h36.ondigitalocean.app/api";
-                const response = await fetch(`${API_URL}/auth/me`, {
+
+                // Fetch user info
+                const userResponse = await fetch(`${API_URL}/auth/me`, {
                     headers: {
                         "Authorization": `Bearer ${token}`,
                     },
                 });
 
-                if (!response.ok) {
+                if (!userResponse.ok) {
                     throw new Error("Authentication failed");
                 }
 
-                const data = await response.json();
-                setUserName(data.name || data.email || "Usuario");
-                setTenantName(data.tenant?.name || "Mi Restaurante");
+                const userData = await userResponse.json();
+                setUserName(userData.name || userData.email || "Usuario");
+
+                // Fetch tenant info (includes trade_name from onboarding)
+                try {
+                    const tenantResponse = await fetch(`${API_URL}/tenant/me`, {
+                        headers: {
+                            "Authorization": `Bearer ${token}`,
+                        },
+                    });
+
+                    if (tenantResponse.ok) {
+                        const tenantData = await tenantResponse.json();
+                        // Use trade_name (from onboarding) if available, fallback to name
+                        setTenantName(tenantData.trade_name || tenantData.name || "Mi Restaurante");
+                    } else {
+                        setTenantName("Mi Restaurante");
+                    }
+                } catch {
+                    // Tenant fetch failed, use default
+                    setTenantName("Mi Restaurante");
+                }
             } catch (error) {
                 console.error("Auth error:", error);
                 router.push("/login");
