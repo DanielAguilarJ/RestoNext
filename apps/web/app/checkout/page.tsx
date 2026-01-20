@@ -23,7 +23,29 @@ const stripePromise = loadStripe(
     process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY || ""
 );
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+/**
+ * Get API base URL handling both absolute and relative paths
+ * In production with DigitalOcean, NEXT_PUBLIC_API_URL might be relative (/api)
+ * or absolute (https://domain.com/api)
+ */
+const getApiBaseUrl = (): string => {
+    const envUrl = process.env.NEXT_PUBLIC_API_URL || "https://whale-app-i6h36.ondigitalocean.app/api";
+
+    // If running on server-side, return the env URL as-is
+    if (typeof window === "undefined") {
+        return envUrl.replace(/\/+$/, "");
+    }
+
+    // If it's a relative path (starts with /), prefix with window origin
+    if (envUrl.startsWith("/")) {
+        return `${window.location.origin}${envUrl}`;
+    }
+
+    // Remove trailing slashes for consistency
+    return envUrl.replace(/\/+$/, "");
+};
+
+const API_BASE_URL = getApiBaseUrl();
 
 // Plan configurations
 const PLANS = {

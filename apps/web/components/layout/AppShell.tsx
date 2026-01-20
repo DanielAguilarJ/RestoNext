@@ -19,7 +19,7 @@ import GlobalErrorBoundary from '@/components/ui/GlobalErrorBoundary';
 import { FileText, Shield, ArrowRight, Loader2 } from 'lucide-react';
 
 // API Configuration
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api';
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'https://whale-app-i6h36.ondigitalocean.app/api';
 
 const getToken = () => {
     if (typeof window === 'undefined') return null;

@@ -33,7 +33,7 @@ import {
 } from 'lucide-react';
 
 // API Configuration
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api';
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'https://whale-app-i6h36.ondigitalocean.app/api';
 
 // Token utilities
 const getToken = () => {
@@ -358,8 +358,8 @@ export default function BillingSettingsPage() {
                         <div
                             key={plan.id}
                             className={`relative p-6 rounded-3xl border-2 transition-all duration-300 hover:scale-[1.02] ${plan.is_current
-                                    ? `${planColors[plan.id]?.border || 'border-slate-600'} ${planColors[plan.id]?.bg || 'bg-slate-800/50'}`
-                                    : 'border-slate-700 bg-slate-800/30 hover:border-slate-500'
+                                ? `${planColors[plan.id]?.border || 'border-slate-600'} ${planColors[plan.id]?.bg || 'bg-slate-800/50'}`
+                                : 'border-slate-700 bg-slate-800/30 hover:border-slate-500'
                                 }`}
                         >
                             {/* Popular Badge */}

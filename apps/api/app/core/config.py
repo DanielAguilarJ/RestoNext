@@ -65,9 +65,8 @@ class Settings(BaseSettings):
         """
         # Default origins
         defaults = [
-            "http://localhost:3000", 
-            "http://127.0.0.1:3000",
-            "https://resto-next-ten.vercel.app"
+
+            "https://whale-app-i6h36.ondigitalocean.app",
         ]
         
         # Try to parse BACKEND_CORS_ORIGINS from environment

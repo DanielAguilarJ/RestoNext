@@ -7,10 +7,13 @@ const nextConfig = {
     output: 'standalone',
 
     // Environment variables accessible on client
+    // IMPORTANT: These fallbacks are only used if env vars are not set
+    // In production, DigitalOcean sets these via the app spec
     env: {
-        NEXT_PUBLIC_API_URL: process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api",
-        NEXT_PUBLIC_WS_URL: process.env.NEXT_PUBLIC_WS_URL || "ws://localhost:8000",
+        NEXT_PUBLIC_API_URL: process.env.NEXT_PUBLIC_API_URL || "https://whale-app-i6h36.ondigitalocean.app/api",
+        NEXT_PUBLIC_WS_URL: process.env.NEXT_PUBLIC_WS_URL || "wss://whale-app-i6h36.ondigitalocean.app/api/ws",
     },
+
 
     // Image optimization
     images: {

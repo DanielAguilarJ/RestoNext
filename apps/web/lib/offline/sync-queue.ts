@@ -288,7 +288,7 @@ class SyncQueueManagerClass {
     private async syncOrder(order: PendingOrder): Promise<SyncResult> {
         const db = getOfflineDB();
         const API_BASE_URL =
-            process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api';
+            process.env.NEXT_PUBLIC_API_URL || 'https://whale-app-i6h36.ondigitalocean.app/api';
 
         // Track as syncing
         this.syncingItems.add(order.local_id);

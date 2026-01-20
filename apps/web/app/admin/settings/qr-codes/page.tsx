@@ -9,11 +9,11 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { QRCodeSVG } from 'qrcode.react';
-import { 
-    RefreshCw, 
-    Printer, 
-    Download, 
-    QrCode, 
+import {
+    RefreshCw,
+    Printer,
+    Download,
+    QrCode,
     Settings2,
     CheckCircle2,
     XCircle,
@@ -41,7 +41,7 @@ interface TablesResponse {
 }
 
 // API functions
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api';
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'https://whale-app-i6h36.ondigitalocean.app/api';
 
 async function getToken(): Promise<string | null> {
     if (typeof window === 'undefined') return null;
@@ -71,7 +71,7 @@ async function toggleSelfService(tableId: string, enabled: boolean): Promise<voi
     const token = await getToken();
     const res = await fetch(`${API_BASE}/admin/tables/${tableId}/self-service`, {
         method: 'PATCH',
-        headers: { 
+        headers: {
             Authorization: `Bearer ${token}`,
             'Content-Type': 'application/json'
         },
@@ -96,13 +96,13 @@ function StatusBadge({ status }: { status: string }) {
         occupied: 'bg-amber-100 text-amber-700 border-amber-200',
         bill_requested: 'bg-purple-100 text-purple-700 border-purple-200'
     };
-    
+
     const labels = {
         free: 'Libre',
         occupied: 'Ocupada',
         bill_requested: 'Cuenta solicitada'
     };
-    
+
     return (
         <span className={`px-2 py-1 text-xs font-medium rounded-full border ${styles[status as keyof typeof styles] || styles.free}`}>
             {labels[status as keyof typeof labels] || status}
@@ -111,15 +111,15 @@ function StatusBadge({ status }: { status: string }) {
 }
 
 // Table Card component
-function TableCard({ 
-    table, 
-    onRotate, 
+function TableCard({
+    table,
+    onRotate,
     onToggle,
     onCloseSession,
     onPrint,
     isRotating,
-    restaurantName 
-}: { 
+    restaurantName
+}: {
     table: TableQRInfo;
     onRotate: (id: string) => void;
     onToggle: (id: string, enabled: boolean) => void;
@@ -129,7 +129,7 @@ function TableCard({
     restaurantName: string;
 }) {
     const [showQR, setShowQR] = useState(false);
-    
+
     return (
         <div className="bg-white rounded-2xl border border-gray-200 shadow-sm hover:shadow-md transition-shadow overflow-hidden">
             {/* Header */}
@@ -145,16 +145,16 @@ function TableCard({
                 </div>
                 <StatusBadge status={table.status} />
             </div>
-            
+
             {/* QR Preview */}
-            <div 
+            <div
                 className="p-4 bg-gray-50 flex items-center justify-center cursor-pointer hover:bg-gray-100 transition-colors"
                 onClick={() => setShowQR(!showQR)}
             >
                 {showQR ? (
                     <div className="p-4 bg-white rounded-xl shadow-inner">
-                        <QRCodeSVG 
-                            value={table.qr_url} 
+                        <QRCodeSVG
+                            value={table.qr_url}
                             size={160}
                             level="H"
                             includeMargin={true}
@@ -170,7 +170,7 @@ function TableCard({
                     </div>
                 )}
             </div>
-            
+
             {/* Self-Service Toggle */}
             <div className="px-4 py-3 border-t border-gray-100 flex items-center justify-between">
                 <div className="flex items-center gap-2">
@@ -179,20 +179,18 @@ function TableCard({
                 </div>
                 <button
                     onClick={() => onToggle(table.id, !table.self_service_enabled)}
-                    className={`relative w-12 h-6 rounded-full transition-colors ${
-                        table.self_service_enabled 
-                            ? 'bg-emerald-500' 
+                    className={`relative w-12 h-6 rounded-full transition-colors ${table.self_service_enabled
+                            ? 'bg-emerald-500'
                             : 'bg-gray-300'
-                    }`}
-                >
-                    <span 
-                        className={`absolute top-1 w-4 h-4 rounded-full bg-white shadow transition-transform ${
-                            table.self_service_enabled ? 'left-7' : 'left-1'
                         }`}
+                >
+                    <span
+                        className={`absolute top-1 w-4 h-4 rounded-full bg-white shadow transition-transform ${table.self_service_enabled ? 'left-7' : 'left-1'
+                            }`}
                     />
                 </button>
             </div>
-            
+
             {/* Token Info */}
             <div className="px-4 py-2 border-t border-gray-100 bg-gray-50/50">
                 <p className="text-xs text-gray-500">
@@ -204,7 +202,7 @@ function TableCard({
                     </p>
                 )}
             </div>
-            
+
             {/* Actions */}
             <div className="p-3 border-t border-gray-100 grid grid-cols-3 gap-2">
                 <button
@@ -220,7 +218,7 @@ function TableCard({
                     )}
                     <span className="hidden sm:inline">Rotar</span>
                 </button>
-                
+
                 <button
                     onClick={() => onPrint(table)}
                     className="flex items-center justify-center gap-1 px-3 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-200 rounded-xl hover:bg-gray-50 transition-colors"
@@ -229,7 +227,7 @@ function TableCard({
                     <Printer className="w-4 h-4" />
                     <span className="hidden sm:inline">Imprimir</span>
                 </button>
-                
+
                 {table.status !== 'free' && (
                     <button
                         onClick={() => onCloseSession(table.id)}
@@ -265,7 +263,7 @@ function PrintableQRCard({ table, restaurantName }: { table: TableQRInfo; restau
             }}>
                 {restaurantName}
             </div>
-            
+
             <div style={{
                 display: 'inline-block',
                 padding: '16px',
@@ -273,14 +271,14 @@ function PrintableQRCard({ table, restaurantName }: { table: TableQRInfo; restau
                 borderRadius: '12px',
                 border: '2px solid #e5e7eb'
             }}>
-                <QRCodeSVG 
-                    value={table.qr_url} 
+                <QRCodeSVG
+                    value={table.qr_url}
                     size={180}
                     level="H"
                     includeMargin={false}
                 />
             </div>
-            
+
             <div style={{
                 marginTop: '16px',
                 padding: '12px 20px',
@@ -292,7 +290,7 @@ function PrintableQRCard({ table, restaurantName }: { table: TableQRInfo; restau
             }}>
                 Mesa {table.number}
             </div>
-            
+
             <div style={{
                 marginTop: '12px',
                 fontSize: '14px',
@@ -300,7 +298,7 @@ function PrintableQRCard({ table, restaurantName }: { table: TableQRInfo; restau
             }}>
                 Escanea para ordenar desde tu celular
             </div>
-            
+
             <div style={{
                 marginTop: '8px',
                 fontSize: '11px',
@@ -322,12 +320,12 @@ export default function QRCodesPage() {
     const [rotatingId, setRotatingId] = useState<string | null>(null);
     const [selectedForPrint, setSelectedForPrint] = useState<TableQRInfo | null>(null);
     const printRef = useRef<HTMLDivElement>(null);
-    
+
     // Fetch tables on mount
     useEffect(() => {
         loadTables();
     }, []);
-    
+
     const loadTables = async () => {
         try {
             setLoading(true);
@@ -340,15 +338,15 @@ export default function QRCodesPage() {
             setLoading(false);
         }
     };
-    
+
     const handleRotateToken = async (tableId: string) => {
         try {
             setRotatingId(tableId);
             const result = await rotateToken(tableId);
-            
+
             // Update table in state with new QR URL
-            setTables(prev => prev.map(t => 
-                t.id === tableId 
+            setTables(prev => prev.map(t =>
+                t.id === tableId
                     ? { ...t, qr_url: result.new_qr_url, qr_token_generated_at: new Date().toISOString() }
                     : t
             ));
@@ -358,23 +356,23 @@ export default function QRCodesPage() {
             setRotatingId(null);
         }
     };
-    
+
     const handleToggleSelfService = async (tableId: string, enabled: boolean) => {
         try {
             await toggleSelfService(tableId, enabled);
-            setTables(prev => prev.map(t => 
+            setTables(prev => prev.map(t =>
                 t.id === tableId ? { ...t, self_service_enabled: enabled } : t
             ));
         } catch (err) {
             alert('Error: ' + (err instanceof Error ? err.message : 'Unknown error'));
         }
     };
-    
+
     const handleCloseSession = async (tableId: string) => {
         if (!confirm('¿Estás seguro de cerrar esta mesa? Se marcará como pagada y se rotará el token.')) {
             return;
         }
-        
+
         try {
             await closeSession(tableId);
             await loadTables(); // Reload to get updated status
@@ -382,19 +380,19 @@ export default function QRCodesPage() {
             alert('Error: ' + (err instanceof Error ? err.message : 'Unknown error'));
         }
     };
-    
+
     const handlePrint = (table: TableQRInfo) => {
         setSelectedForPrint(table);
         setTimeout(() => {
             window.print();
         }, 100);
     };
-    
+
     const handleBulkRotate = async () => {
         if (!confirm('¿Rotar TODOS los tokens? Los QR actuales dejarán de funcionar.')) {
             return;
         }
-        
+
         try {
             setLoading(true);
             const token = await getToken();
@@ -411,7 +409,7 @@ export default function QRCodesPage() {
             setLoading(false);
         }
     };
-    
+
     if (loading) {
         return (
             <div className="min-h-screen bg-gray-50 flex items-center justify-center">
@@ -422,7 +420,7 @@ export default function QRCodesPage() {
             </div>
         );
     }
-    
+
     if (error) {
         return (
             <div className="min-h-screen bg-gray-50 flex items-center justify-center">
@@ -430,7 +428,7 @@ export default function QRCodesPage() {
                     <XCircle className="w-12 h-12 text-red-500 mx-auto mb-4" />
                     <h2 className="text-lg font-semibold text-red-700 mb-2">Error</h2>
                     <p className="text-red-600">{error}</p>
-                    <button 
+                    <button
                         onClick={loadTables}
                         className="mt-4 px-4 py-2 bg-red-100 text-red-700 rounded-lg hover:bg-red-200"
                     >
@@ -440,7 +438,7 @@ export default function QRCodesPage() {
             </div>
         );
     }
-    
+
     return (
         <>
             {/* Print Styles */}
@@ -463,17 +461,17 @@ export default function QRCodesPage() {
                     }
                 }
             `}</style>
-            
+
             {/* Print Container (hidden on screen) */}
             {selectedForPrint && (
                 <div className="print-container hidden print:block" ref={printRef}>
-                    <PrintableQRCard 
-                        table={selectedForPrint} 
-                        restaurantName={restaurantName} 
+                    <PrintableQRCard
+                        table={selectedForPrint}
+                        restaurantName={restaurantName}
                     />
                 </div>
             )}
-            
+
             {/* Main Content */}
             <div className="min-h-screen bg-gray-50 print:hidden">
                 {/* Header */}
@@ -491,7 +489,7 @@ export default function QRCodesPage() {
                                     Administra los códigos QR de tus mesas para auto-servicio
                                 </p>
                             </div>
-                            
+
                             <div className="flex gap-3">
                                 <button
                                     onClick={handleBulkRotate}
@@ -500,7 +498,7 @@ export default function QRCodesPage() {
                                     <Shield className="w-4 h-4" />
                                     Rotar Todos
                                 </button>
-                                
+
                                 <button
                                     onClick={loadTables}
                                     className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-orange-500 rounded-xl hover:bg-orange-600 transition-colors"
@@ -510,7 +508,7 @@ export default function QRCodesPage() {
                                 </button>
                             </div>
                         </div>
-                        
+
                         {/* Stats */}
                         <div className="grid grid-cols-3 gap-4 mt-6">
                             <div className="bg-emerald-50 rounded-xl p-4 border border-emerald-100">
@@ -534,7 +532,7 @@ export default function QRCodesPage() {
                         </div>
                     </div>
                 </div>
-                
+
                 {/* Tables Grid */}
                 <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
                     {tables.length === 0 ? (
@@ -562,7 +560,7 @@ export default function QRCodesPage() {
                         </div>
                     )}
                 </div>
-                
+
                 {/* Security Note */}
                 <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-8">
                     <div className="bg-blue-50 border border-blue-100 rounded-xl p-4 flex items-start gap-3">
@@ -570,8 +568,8 @@ export default function QRCodesPage() {
                         <div>
                             <h4 className="font-medium text-blue-900">Seguridad de Tokens</h4>
                             <p className="text-sm text-blue-700 mt-1">
-                                Los tokens se rotan automáticamente cuando se cierra una mesa. 
-                                Esto invalida el QR anterior, evitando que clientes anteriores 
+                                Los tokens se rotan automáticamente cuando se cierra una mesa.
+                                Esto invalida el QR anterior, evitando que clientes anteriores
                                 accedan a la mesa. Rota manualmente si sospechas de acceso no autorizado.
                             </p>
                         </div>

@@ -103,7 +103,7 @@ export function LicenseProvider({ children, initialLicenses }: LicenseProviderPr
                 return;
             }
 
-            const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+            const API_URL = process.env.NEXT_PUBLIC_API_URL || "https://whale-app-i6h36.ondigitalocean.app/api";
 
             const response = await fetch(`${API_URL}/auth/me`, {
                 headers: {

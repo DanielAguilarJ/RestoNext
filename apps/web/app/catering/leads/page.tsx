@@ -9,7 +9,7 @@ import { LeadsKanban, Lead, LeadStatusType } from "@/components/catering/LeadsKa
 // API Functions
 // ============================================
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api';
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'https://whale-app-i6h36.ondigitalocean.app/api';
 
 async function fetchLeads(): Promise<Lead[]> {
     const token = localStorage.getItem('token');
@@ -260,8 +260,8 @@ export default function LeadsPage() {
                         <button
                             onClick={() => setViewMode('kanban')}
                             className={`p-2 rounded-md transition ${viewMode === 'kanban'
-                                    ? 'bg-emerald-600 text-white'
-                                    : 'text-neutral-400 hover:text-white'
+                                ? 'bg-emerald-600 text-white'
+                                : 'text-neutral-400 hover:text-white'
                                 }`}
                             title="Vista Kanban"
                         >
@@ -270,8 +270,8 @@ export default function LeadsPage() {
                         <button
                             onClick={() => setViewMode('list')}
                             className={`p-2 rounded-md transition ${viewMode === 'list'
-                                    ? 'bg-emerald-600 text-white'
-                                    : 'text-neutral-400 hover:text-white'
+                                ? 'bg-emerald-600 text-white'
+                                : 'text-neutral-400 hover:text-white'
                                 }`}
                             title="Vista Lista"
                         >
@@ -375,12 +375,12 @@ export default function LeadsPage() {
                                         </td>
                                         <td className="px-4 py-3">
                                             <span className={`inline-flex px-2 py-1 text-xs font-medium rounded-full ${lead.status === 'new' ? 'bg-blue-500/20 text-blue-400' :
-                                                    lead.status === 'contacted' ? 'bg-cyan-500/20 text-cyan-400' :
-                                                        lead.status === 'proposal_sent' ? 'bg-violet-500/20 text-violet-400' :
-                                                            lead.status === 'negotiation' ? 'bg-amber-500/20 text-amber-400' :
-                                                                lead.status === 'won' ? 'bg-emerald-500/20 text-emerald-400' :
-                                                                    lead.status === 'lost' ? 'bg-red-500/20 text-red-400' :
-                                                                        'bg-neutral-500/20 text-neutral-400'
+                                                lead.status === 'contacted' ? 'bg-cyan-500/20 text-cyan-400' :
+                                                    lead.status === 'proposal_sent' ? 'bg-violet-500/20 text-violet-400' :
+                                                        lead.status === 'negotiation' ? 'bg-amber-500/20 text-amber-400' :
+                                                            lead.status === 'won' ? 'bg-emerald-500/20 text-emerald-400' :
+                                                                lead.status === 'lost' ? 'bg-red-500/20 text-red-400' :
+                                                                    'bg-neutral-500/20 text-neutral-400'
                                                 }`}>
                                                 {lead.status === 'new' ? 'Nuevo' :
                                                     lead.status === 'contacted' ? 'Contactado' :

@@ -419,7 +419,7 @@ export default function ProposalPortalPage() {
     const [paymentIntent, setPaymentIntent] = useState<PaymentIntentData | null>(null);
     const [paymentLoading, setPaymentLoading] = useState(false);
 
-    const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api';
+    const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'https://whale-app-i6h36.ondigitalocean.app/api';
 
     // Fetch proposal data
     useEffect(() => {
@@ -650,8 +650,8 @@ export default function ProposalPortalPage() {
                             return (
                                 <div key={step} className="flex items-center">
                                     <div className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-sm font-medium transition ${isActive
-                                            ? 'bg-emerald-100 text-emerald-700'
-                                            : 'bg-neutral-100 text-neutral-400'
+                                        ? 'bg-emerald-100 text-emerald-700'
+                                        : 'bg-neutral-100 text-neutral-400'
                                         } ${isCurrent ? 'ring-2 ring-emerald-500 ring-offset-2' : ''}`}>
                                         {idx === 3 && isActive ? (
                                             <Sparkles className="w-4 h-4" />
@@ -665,8 +665,8 @@ export default function ProposalPortalPage() {
                                     </div>
                                     {idx < 3 && (
                                         <div className={`w-8 h-0.5 mx-1 ${idx < currentIdx || (currentStep === 'confirmed' && idx < 2)
-                                                ? 'bg-emerald-300'
-                                                : 'bg-neutral-200'
+                                            ? 'bg-emerald-300'
+                                            : 'bg-neutral-200'
                                             }`} />
                                     )}
                                 </div>

@@ -27,11 +27,9 @@ export const DATABASE_ID = process.env.NEXT_PUBLIC_APPWRITE_DATABASE_ID || '';
  * So when NEXT_PUBLIC_API_URL is set to https://app.example.com/api, the backend receives requests at /
  * 
  * The URL should be the full path to the API including /api suffix.
- * Example: https://restonext-apps-api-xxxxx.ondigitalocean.app/api
- * 
- * For local development: http://localhost:8000/api
+ * In production, this is set via environment variables in digitalocean-app.yaml
  */
-const rawApiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api';
+const rawApiUrl = process.env.NEXT_PUBLIC_API_URL || 'https://whale-app-i6h36.ondigitalocean.app/api';
 // Clean the URL: remove trailing slashes, ensure it ends with /api for consistency
 const API_BASE_URL = rawApiUrl.replace(/\/+$/, '');
 
