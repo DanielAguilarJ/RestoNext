@@ -27,9 +27,11 @@ const PUBLIC_ROUTES = [
     "/",                    // Landing page
     "/login",
     "/checkout",
+    "/onboarding",          // Onboarding wizard (handles own auth via localStorage)
     "/legal",
     "/menu",                // Customer-facing QR menu
     "/portal",              // Customer portal (dining)
+    "/dine",                // Self-service dining
     "/_next",
     "/api",
     "/favicon.ico",
@@ -41,7 +43,6 @@ const PUBLIC_ROUTES = [
 // Routes that require authentication but no specific module license
 const AUTH_PROTECTED_ROUTES = [
     "/dashboard",
-    "/onboarding",
     "/settings",
     "/billing",
 ];
