@@ -91,7 +91,7 @@ export default function DashboardHome() {
 
     useEffect(() => {
         // Check authentication
-        const token = localStorage.getItem("restonext_token") || localStorage.getItem("access_token");
+        const token = localStorage.getItem("access_token");
 
         if (!token) {
             router.push("/login");
