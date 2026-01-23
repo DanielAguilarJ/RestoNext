@@ -10,6 +10,7 @@ Production Features:
 
 import asyncio
 import os
+import time
 import uuid
 from contextlib import asynccontextmanager
 
@@ -24,6 +25,8 @@ from app.core.config import get_settings
 from app.core.database import init_db
 from app.core.websocket_manager import ws_manager
 from app.core.scheduler import init_scheduler, start_scheduler, shutdown_scheduler
+from app.core.logging_config import setup_logging, set_log_context, clear_log_context, get_logger
+from app.core.activity_logger import activity_logger
 
 # Startup state tracking for health checks
 _startup_complete = False
@@ -50,6 +53,7 @@ from app.api.admin import router as admin_router
 from app.api.subscription import router as subscription_router, webhook_router as stripe_webhook_router
 from app.api.legal import router as legal_router
 from app.api.tables import router as tables_router
+from app.api.activity import router as activity_router
 
 settings = get_settings()
 
@@ -88,9 +92,15 @@ async def lifespan(app: FastAPI):
     # ============================================
     # Startup
     # ============================================
-    print("INFO:     🚀 Starting RestoNext MX API...")
-    print(f"INFO:     Environment: {settings.sentry_environment}")
-    print(f"INFO:     Debug mode: {settings.debug}")
+    
+    # Initialize logging system first
+    log_level = "DEBUG" if settings.debug else "INFO"
+    setup_logging(log_level=log_level, app_name="restonext-api")
+    logger = get_logger("restonext.startup")
+    
+    activity_logger.startup("restonext-api", "1.0.0", settings.sentry_environment)
+    logger.info(f"Environment: {settings.sentry_environment}")
+    logger.info(f"Debug mode: {settings.debug}")
     
     # Initialize database (CRITICAL - must succeed)
     try:
@@ -168,30 +178,84 @@ app = FastAPI(
 
 
 # ============================================
-# Error Handling Middleware (Sentry Integration)
+# Request Logging Middleware
 # ============================================
 
 @app.middleware("http")
-async def sentry_error_middleware(request: Request, call_next):
+async def request_logging_middleware(request: Request, call_next):
     """
-    Middleware to capture unhandled exceptions and return clean error responses.
+    Middleware to log all HTTP requests with timing.
     
     Features:
-    - Captures errors to Sentry with event ID
-    - Returns clean JSON response to client
-    - Includes reference ID for support
+    - Generates unique request ID for tracing
+    - Logs request start and completion
+    - Tracks response time
+    - Extracts user context from JWT if available
     """
+    # Generate unique request ID
+    request_id = str(uuid.uuid4())[:12]
+    start_time = time.perf_counter()
+    
+    # Try to extract user info from JWT token
+    user_id = None
+    tenant_id = None
+    auth_header = request.headers.get("Authorization", "")
+    if auth_header.startswith("Bearer "):
+        try:
+            from app.core.security import decode_access_token
+            token = auth_header[7:]
+            payload = decode_access_token(token)
+            user_id = payload.get("sub")
+            tenant_id = payload.get("tenant_id")
+        except Exception:
+            pass  # Invalid token, continue without context
+    
+    # Set logging context
+    set_log_context(request_id=request_id, user_id=user_id, tenant_id=tenant_id)
+    
+    # Skip logging for health checks and static files
+    path = request.url.path
+    skip_logging = path in ["/health", "/ping", "/favicon.ico"] or path.startswith("/_next")
+    
     try:
         response = await call_next(request)
+        
+        # Calculate duration
+        duration_ms = (time.perf_counter() - start_time) * 1000
+        
+        # Log the request (skip noisy endpoints)
+        if not skip_logging:
+            activity_logger.api_request(
+                method=request.method,
+                path=path,
+                status_code=response.status_code,
+                duration_ms=duration_ms
+            )
+        
+        # Add request ID to response headers for client debugging
+        response.headers["X-Request-ID"] = request_id
+        
         return response
+        
     except Exception as exc:
-        # Generate unique error reference ID
-        error_ref = str(uuid.uuid4())[:8]
+        duration_ms = (time.perf_counter() - start_time) * 1000
+        
+        # Log the error
+        activity_logger.error(
+            error_type=type(exc).__name__,
+            message=str(exc)[:200],
+            metadata={
+                "path": path,
+                "method": request.method,
+                "request_id": request_id,
+                "duration_ms": round(duration_ms, 2)
+            }
+        )
         
         # Capture to Sentry if configured
         if settings.sentry_dsn:
             with sentry_sdk.push_scope() as scope:
-                scope.set_tag("error_ref", error_ref)
+                scope.set_tag("request_id", request_id)
                 scope.set_context("request", {
                     "url": str(request.url),
                     "method": request.method,
@@ -199,18 +263,18 @@ async def sentry_error_middleware(request: Request, call_next):
                 })
                 sentry_sdk.capture_exception(exc)
         
-        # Log the error
-        print(f"ERROR [{error_ref}]: {type(exc).__name__}: {str(exc)}")
-        
         # Return clean JSON response
         return JSONResponse(
             status_code=500,
             content={
                 "error": "Internal Server Error",
                 "message": "Ha ocurrido un error inesperado. Por favor intenta de nuevo.",
-                "ref": error_ref
-            }
+                "ref": request_id
+            },
+            headers={"X-Request-ID": request_id}
         )
+    finally:
+        clear_log_context()
 
 
 # CORS configuration
@@ -253,6 +317,8 @@ app.include_router(stripe_webhook_router, tags=["Webhooks"])
 app.include_router(legal_router, tags=["Legal"])
 # Table operations (transfer, etc.)
 app.include_router(tables_router, tags=["POS - Tables"])
+# Activity logging (frontend logs receiver)
+app.include_router(activity_router, tags=["Logging"])
 
 
 # ============================================

@@ -3,6 +3,7 @@ import {
 } from '../../../packages/shared/src/index';
 import { isOnline, syncQueueManager, type OptimisticOrder } from './offline';
 import { Client, Account, Databases } from 'appwrite';
+import { Logger } from './logger';
 
 // ============================================
 // Appwrite SDK (for backward compatibility)
@@ -118,6 +119,8 @@ async function apiRequest<T>(
     // Ensure endpoint starts with / for proper URL construction
     const normalizedEndpoint = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
     const url = `${API_BASE_URL}${normalizedEndpoint}`;
+    const method = (options.method || 'GET').toUpperCase();
+    const startTime = performance.now();
 
     try {
         const response = await fetch(url, {
@@ -125,8 +128,11 @@ async function apiRequest<T>(
             headers,
         });
 
+        const durationMs = performance.now() - startTime;
+
         // Handle 401 Unauthorized - clear token and redirect to login
         if (response.status === 401) {
+            Logger.apiCall(method, normalizedEndpoint, 401, durationMs, 'Unauthorized');
             console.warn('[API] Unauthorized (401) - redirecting to login');
             TokenStorage.remove();
             // Only redirect if we're in the browser and not already on login page
@@ -174,21 +180,29 @@ async function apiRequest<T>(
 
         // Handle 204 No Content
         if (response.status === 204) {
+            Logger.apiCall(method, normalizedEndpoint, 204, durationMs);
             return {} as T;
         }
 
+        // Log successful request
+        Logger.apiCall(method, normalizedEndpoint, response.status, durationMs);
+
         return response.json();
     } catch (error) {
+        const durationMs = performance.now() - startTime;
+
         // Re-throw if it's already an Error with a message (our custom errors)
         if (error instanceof Error && error.message) {
             // Check if it's a network error (TypeError with "Failed to fetch")
             if (error.name === 'TypeError' && error.message.includes('fetch')) {
+                Logger.apiCall(method, normalizedEndpoint, 0, durationMs, 'Network error');
                 console.error('[API] Network error - cannot reach server:', url);
                 throw new Error('No se puede conectar al servidor. Verifica tu conexión a internet.');
             }
             throw error;
         }
         // Unknown errors
+        Logger.apiCall(method, normalizedEndpoint, 0, durationMs, 'Unknown error');
         console.error('[API] Unknown error:', error);
         throw new Error('Error desconocido. Por favor intenta de nuevo.');
     }

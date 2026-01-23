@@ -4,6 +4,7 @@ import "./globals.css";
 import { RxDBProvider } from "../lib/db-provider";
 import { TenantProvider } from "../lib/tenant-provider";
 import AppShell from "@/components/layout/AppShell";
+import { ActivityTracker } from "@/components/analytics/ActivityTracker";
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -31,13 +32,14 @@ export default function RootLayout({
             <body className={inter.className}>
                 <RxDBProvider>
                     <TenantProvider>
-                        <AppShell>
-                            {children}
-                        </AppShell>
+                        <ActivityTracker>
+                            <AppShell>
+                                {children}
+                            </AppShell>
+                        </ActivityTracker>
                     </TenantProvider>
                 </RxDBProvider>
             </body>
         </html>
     );
 }
-
