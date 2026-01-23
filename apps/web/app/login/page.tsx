@@ -6,13 +6,12 @@
  */
 
 import { useState, useEffect } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import { UtensilsCrossed, Mail, Lock, Loader2, ArrowLeft, Sparkles } from "lucide-react";
 import Link from "next/link";
 import { authApi } from "@/lib/api";
 
 function LoginForm() {
-    const router = useRouter();
     const searchParams = useSearchParams();
     const [email, setEmail] = useState("");
     const [password, setPassword] = useState("");
@@ -36,7 +35,10 @@ function LoginForm() {
             await authApi.login(email, password);
             // Respect redirect param, default to dashboard
             const redirectTo = searchParams.get('redirect') || '/dashboard';
-            router.push(redirectTo);
+            // Use window.location.href instead of router.push() 
+            // This ensures the newly-set cookie is sent with the request
+            // router.push() uses client-side navigation which may not include cookies in Edge middleware
+            window.location.href = redirectTo;
         } catch (err: any) {
             // Robust error message extraction
             let errorMessage = "Error al iniciar sesión. Verifica tus credenciales.";

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, Suspense, useCallback } from "react";
-import { useSearchParams, useRouter } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { motion } from "framer-motion";
 import {
@@ -17,7 +17,6 @@ import OnboardingWizard from "@/components/onboarding/OnboardingWizard";
 
 function OnboardingContent() {
     const searchParams = useSearchParams();
-    const router = useRouter();
 
     const success = searchParams.get("success") === "true";
     const canceled = searchParams.get("canceled") === "true";
@@ -55,8 +54,10 @@ function OnboardingContent() {
 
     // Handle wizard completion - redirect to dashboard (safe route)
     const handleWizardComplete = useCallback(() => {
-        router.push('/dashboard');
-    }, [router]);
+        // Use window.location.href instead of router.push() 
+        // This ensures any cookies (token) are properly sent with the request
+        window.location.href = '/dashboard';
+    }, []);
 
     // Loading state
     if (isLoading) {
