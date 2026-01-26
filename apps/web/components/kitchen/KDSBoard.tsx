@@ -67,7 +67,7 @@ export function KDSBoard() {
             <header className="relative z-10 flex items-center justify-between mb-6">
                 <div className="flex items-center gap-4">
                     <Link
-                        href="/"
+                        href="/dashboard"
                         className="p-3 glass-dark rounded-xl text-gray-400 hover:text-white transition-all duration-300 hover:scale-105"
                     >
                         <ArrowLeft className="w-6 h-6" />

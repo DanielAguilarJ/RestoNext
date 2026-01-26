@@ -527,7 +527,7 @@ export default function POSPage() {
 
                 <header className="glass shadow-lg p-4 flex items-center justify-between sticky top-0 z-20">
                     <div className="flex items-center gap-4">
-                        <Link href="/" className="p-2 hover:bg-white/50 dark:hover:bg-gray-700/50 rounded-xl transition-all duration-300 min-w-[48px] min-h-[48px] flex items-center justify-center">
+                        <Link href="/dashboard" className="p-2 hover:bg-white/50 dark:hover:bg-gray-700/50 rounded-xl transition-all duration-300 min-w-[48px] min-h-[48px] flex items-center justify-center">
                             <ArrowLeft className="w-6 h-6" />
                         </Link>
                         <div>

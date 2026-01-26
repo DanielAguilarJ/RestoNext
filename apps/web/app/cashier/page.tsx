@@ -144,7 +144,7 @@ export default function CashierPage() {
             <header className="glass shadow-lg p-4 flex items-center justify-between sticky top-0 z-20">
                 <div className="flex items-center gap-4">
                     <Link
-                        href="/"
+                        href="/dashboard"
                         className="p-3 hover:bg-white/50 dark:hover:bg-gray-700/50 rounded-xl transition-all"
                     >
                         <ArrowLeft className="w-6 h-6" />

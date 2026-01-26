@@ -71,8 +71,8 @@ export default function InventoryPage() {
             {/* Header */}
             <div className="relative z-10 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-8">
                 <div>
-                    <Link href="/" className="text-sm text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white mb-2 inline-block transition-colors">
-                        ← Volver al inicio
+                    <Link href="/dashboard" className="text-sm text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white mb-2 inline-block transition-colors">
+                        ← Volver al Dashboard
                     </Link>
                     <h1 className="text-3xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
                         <Package className="w-8 h-8 text-teal-600" />
