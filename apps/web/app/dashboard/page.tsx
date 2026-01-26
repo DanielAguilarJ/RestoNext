@@ -6,14 +6,15 @@ import { useRouter } from "next/navigation";
 import {
     UtensilsCrossed, ChefHat, Receipt, QrCode,
     Sparkles, Package, BarChart3, Settings,
-    Users, Calendar, CreditCard, ArrowRight, Loader2
+    Users, Calendar, CreditCard, ArrowRight, Loader2, Coffee
 } from "lucide-react";
 import { motion } from "framer-motion";
+import { kdsApi } from "@/lib/api";
 
 // ============================================
-// Dashboard Modules
+// Dashboard Modules (base config)
 // ============================================
-const dashboardModules = [
+const getModules = (kdsMode: 'restaurant' | 'cafeteria') => [
     {
         title: "Punto de Venta",
         description: "Toma pedidos y gestiona mesas",
@@ -46,14 +47,24 @@ const dashboardModules = [
         color: "from-blue-500 to-cyan-500",
         badge: null,
     },
-    {
-        title: "Cajero",
-        description: "Cierre de caja y pagos",
-        icon: Receipt,
-        href: "/cashier",
-        color: "from-purple-500 to-pink-500",
-        badge: null,
-    },
+    // Dynamic cashier based on mode
+    kdsMode === 'cafeteria'
+        ? {
+            title: "Caja Cafetería",
+            description: "Cobro y envío a cocina",
+            icon: Coffee,
+            href: "/cashier/cafeteria",
+            color: "from-amber-500 to-orange-500",
+            badge: "CAFÉ",
+        }
+        : {
+            title: "Cajero",
+            description: "Cierre de caja y pagos",
+            icon: Receipt,
+            href: "/cashier",
+            color: "from-purple-500 to-pink-500",
+            badge: null,
+        },
     {
         title: "Self-Service",
         description: "Menú QR para clientes",
@@ -88,6 +99,7 @@ export default function DashboardHome() {
     const [isLoading, setIsLoading] = useState(true);
     const [userName, setUserName] = useState<string>("");
     const [tenantName, setTenantName] = useState<string>("");
+    const [kdsMode, setKdsMode] = useState<'restaurant' | 'cafeteria'>('restaurant');
 
     useEffect(() => {
         // Check authentication
@@ -135,6 +147,15 @@ export default function DashboardHome() {
                 } catch {
                     // Tenant fetch failed, use default
                     setTenantName("Mi Restaurante");
+                }
+
+                // Fetch KDS config to determine mode
+                try {
+                    const kdsConfig = await kdsApi.getConfig();
+                    setKdsMode(kdsConfig.mode || 'restaurant');
+                } catch {
+                    // KDS config fetch failed, use default restaurant mode
+                    setKdsMode('restaurant');
                 }
             } catch (error) {
                 console.error("Auth error:", error);
@@ -243,7 +264,7 @@ export default function DashboardHome() {
                     </h2>
 
                     <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-                        {dashboardModules.map((module, idx) => (
+                        {getModules(kdsMode).map((module, idx) => (
                             <motion.div
                                 key={module.title}
                                 initial={{ opacity: 0, y: 20 }}

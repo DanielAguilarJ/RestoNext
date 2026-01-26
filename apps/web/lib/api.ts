@@ -466,6 +466,73 @@ export const ordersApi = {
 };
 
 // ============================================
+// KDS (Kitchen Display System) API
+// ============================================
+
+export interface KDSConfig {
+    mode: 'cafeteria' | 'restaurant';
+    warning_minutes: number;
+    critical_minutes: number;
+    audio_alerts: boolean;
+    shake_animation: boolean;
+}
+
+export const kdsApi = {
+    /**
+     * Get KDS configuration for current tenant
+     */
+    getConfig: async (): Promise<KDSConfig> => {
+        return apiRequest<KDSConfig>('/kds/config');
+    },
+
+    /**
+     * Update KDS configuration
+     */
+    updateConfig: async (config: Partial<KDSConfig>): Promise<KDSConfig> => {
+        return apiRequest<KDSConfig>('/kds/config', {
+            method: 'PATCH',
+            body: JSON.stringify(config),
+        });
+    },
+
+    /**
+     * Mark order as paid and send to kitchen (cafeteria mode)
+     */
+    markPaid: async (orderId: string, paymentMethod?: string, notes?: string): Promise<Order> => {
+        return apiRequest<Order>(`/kds/orders/${orderId}/paid`, {
+            method: 'POST',
+            body: JSON.stringify({ payment_method: paymentMethod, notes }),
+        });
+    },
+
+    /**
+     * Update order status in kitchen
+     */
+    updateOrderStatus: async (orderId: string, status: string): Promise<Order> => {
+        return apiRequest<Order>(`/kds/orders/${orderId}/status`, {
+            method: 'PATCH',
+            body: JSON.stringify({ status }),
+        });
+    },
+
+    /**
+     * Get active kitchen orders
+     */
+    getOrders: async (): Promise<Order[]> => {
+        return apiRequest<Order[]>('/kds/orders');
+    },
+
+    /**
+     * Complete and remove order from kitchen display
+     */
+    completeOrder: async (orderId: string): Promise<{ message: string }> => {
+        return apiRequest<{ message: string }>(`/kds/orders/${orderId}/complete`, {
+            method: 'DELETE',
+        });
+    }
+};
+
+// ============================================
 // Menu API
 // ============================================
 
