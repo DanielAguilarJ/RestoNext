@@ -42,7 +42,7 @@ function getWebSocketUrl(): string {
     const envWsUrl = process.env.NEXT_PUBLIC_WS_URL;
 
     if (typeof window === 'undefined') {
-        return envWsUrl || 'wss://whale-app-i6h36.ondigitalocean.app/api/ws';
+        return envWsUrl || 'wss://restonext.me/api';
     }
 
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';

@@ -12,7 +12,7 @@ import { tokenUtils } from '@/lib/api';
  * If the page is served over HTTPS, we must use WSS
  * 
  * DigitalOcean App Platform Routing:
- * - Frontend calls: wss://whale-app-i6h36.ondigitalocean.app/api/ws/kitchen
+ * - Frontend calls: wss://restonext.me/api/ws/kitchen
  * - DO strips /api prefix before forwarding to backend
  * - Backend receives: /ws/kitchen (which matches @app.websocket("/ws/kitchen"))
  */
@@ -21,7 +21,10 @@ function getWebSocketUrl(): string {
 
     if (typeof window === 'undefined') {
         // Server-side: use env var or production default
-        return envWsUrl || 'wss://whale-app-i6h36.ondigitalocean.app/api';
+        // Note: In production this should come from env var
+        // Strip trailing /ws if present to avoid duplication (e.g. /api/ws/ws/kitchen)
+        // But for path-based routing it should likely be base URL
+        return envWsUrl || 'wss://restonext.me/api';
     }
 
     // Client-side: Derive protocol from current page

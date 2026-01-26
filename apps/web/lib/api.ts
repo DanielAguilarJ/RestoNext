@@ -31,13 +31,7 @@ export const DATABASE_ID = process.env.NEXT_PUBLIC_APPWRITE_DATABASE_ID || '';
  * In production, this is set via environment variables in digitalocean-app.yaml
  */
 const getRawApiUrl = () => {
-    const url = process.env.NEXT_PUBLIC_API_URL || 'https://whale-app-i6h36.ondigitalocean.app/api';
-    // HOTFIX: Correct invalid API subdomain if present
-    if (url.includes('api.whale-app-i6h36.ondigitalocean.app')) {
-        console.warn('[API] Correcting invalid API URL configuration');
-        return 'https://whale-app-i6h36.ondigitalocean.app/api';
-    }
-    return url;
+    return process.env.NEXT_PUBLIC_API_URL || 'https://restonext.me/api';
 };
 
 const rawApiUrl = getRawApiUrl();
@@ -551,7 +545,7 @@ export class WebSocketClient {
         // DO routes /api/* to the backend and STRIPS /api
         // So we need to connect to wss://domain/api/ws/... which becomes /ws/... at the backend
         // 
-        // Transform: https://whale-app-i6h36.ondigitalocean.app/api -> wss://whale-app-i6h36.ondigitalocean.app/api
+        // Transform: https://restonext.me/api -> wss://restonext.me/api
         const wsUrl = API_BASE_URL.replace(/^http/, 'ws') + endpoint;
         const url = token ? `${wsUrl}?token=${token}` : wsUrl;
 

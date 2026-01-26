@@ -101,7 +101,7 @@ export default function DashboardHome() {
         // Fetch user data and tenant info
         async function fetchUserData() {
             try {
-                const API_URL = process.env.NEXT_PUBLIC_API_URL || "https://whale-app-i6h36.ondigitalocean.app/api";
+                const API_URL = process.env.NEXT_PUBLIC_API_URL || "https://restonext.me/api";
 
                 // Fetch user info
                 const userResponse = await fetch(`${API_URL}/auth/me`, {

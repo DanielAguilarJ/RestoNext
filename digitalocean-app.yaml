@@ -43,11 +43,11 @@ services:
   # CORS - Production domains
   - key: BACKEND_CORS_ORIGINS
     scope: RUN_TIME
-    value: '["https://whale-app-i6h36.ondigitalocean.app"]'
+    value: '["https://restonext.me", "https://www.restonext.me"]'
   # Frontend URL (for Stripe redirects)
   - key: FRONTEND_URL
     scope: RUN_TIME
-    value: https://whale-app-i6h36.ondigitalocean.app
+    value: https://restonext.me
   # ========== STRIPE CONFIGURATION ==========
   - key: STRIPE_SECRET_KEY
     scope: RUN_TIME
@@ -120,11 +120,11 @@ services:
   # DigitalOcean internally routes /api to the api service
   - key: NEXT_PUBLIC_API_URL
     scope: RUN_AND_BUILD_TIME
-    value: https://whale-app-i6h36.ondigitalocean.app/api
+    value: https://restonext.me/api
   # WebSocket URL - base path for WS connections (frontend appends /ws/kitchen, etc.)
   - key: NEXT_PUBLIC_WS_URL
     scope: RUN_AND_BUILD_TIME
-    value: wss://whale-app-i6h36.ondigitalocean.app/api
+    value: wss://restonext.me/api
   # Stripe Publishable Key (safe to expose)
   - key: NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY
     scope: RUN_AND_BUILD_TIME

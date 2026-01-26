@@ -419,7 +419,7 @@ export default function ProposalPortalPage() {
     const [paymentIntent, setPaymentIntent] = useState<PaymentIntentData | null>(null);
     const [paymentLoading, setPaymentLoading] = useState(false);
 
-    const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'https://whale-app-i6h36.ondigitalocean.app/api';
+    const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'https://restonext.me/api';
 
     // Fetch proposal data
     useEffect(() => {

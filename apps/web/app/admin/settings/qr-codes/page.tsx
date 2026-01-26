@@ -41,7 +41,7 @@ interface TablesResponse {
 }
 
 // API functions
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'https://whale-app-i6h36.ondigitalocean.app/api';
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'https://restonext.me/api';
 
 async function getToken(): Promise<string | null> {
     if (typeof window === 'undefined') return null;
@@ -180,8 +180,8 @@ function TableCard({
                 <button
                     onClick={() => onToggle(table.id, !table.self_service_enabled)}
                     className={`relative w-12 h-6 rounded-full transition-colors ${table.self_service_enabled
-                            ? 'bg-emerald-500'
-                            : 'bg-gray-300'
+                        ? 'bg-emerald-500'
+                        : 'bg-gray-300'
                         }`}
                 >
                     <span

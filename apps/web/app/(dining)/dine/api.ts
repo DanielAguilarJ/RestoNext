@@ -3,7 +3,7 @@
  * API functions for self-service dining endpoints
  */
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'https://whale-app-i6h36.ondigitalocean.app/api';
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'https://restonext.me/api';
 
 interface DiningApiConfig {
     tenantId: string;

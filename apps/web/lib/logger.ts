@@ -108,7 +108,7 @@ function getApiBaseUrl(): string {
     if (typeof window === 'undefined') return '';
 
     // Use the same API URL as the rest of the app
-    const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'https://whale-app-i6h36.ondigitalocean.app/api';
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'https://restonext.me/api';
     return apiUrl.replace(/\/+$/, '');
 }
 

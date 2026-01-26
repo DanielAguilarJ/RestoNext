@@ -145,7 +145,7 @@ const sendToUsbPrinter = async (data: Uint8Array): Promise<void> => {
 // Network Printer Functions
 // ============================================
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'https://whale-app-i6h36.ondigitalocean.app/api';
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'https://restonext.me/api';
 
 /**
  * Send data to network printer via backend proxy

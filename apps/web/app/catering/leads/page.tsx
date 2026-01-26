@@ -9,7 +9,7 @@ import { LeadsKanban, Lead, LeadStatusType } from "@/components/catering/LeadsKa
 // API Functions
 // ============================================
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'https://whale-app-i6h36.ondigitalocean.app/api';
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'https://restonext.me/api';
 
 async function fetchLeads(): Promise<Lead[]> {
     const token = localStorage.getItem('token');

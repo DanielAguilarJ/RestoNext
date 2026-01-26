@@ -66,7 +66,8 @@ class Settings(BaseSettings):
         # Default origins
         defaults = [
             "*", # Allow all origins to fix production connection issues
-            "https://whale-app-i6h36.ondigitalocean.app",
+            "https://restonext.me",
+            "https://www.restonext.me",
         ]
         
         # Try to parse BACKEND_CORS_ORIGINS from environment
