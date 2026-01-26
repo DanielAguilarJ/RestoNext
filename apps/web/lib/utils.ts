@@ -33,12 +33,20 @@ export function formatTimeElapsed(startTime: Date): string {
 
 /**
  * Get timer status based on elapsed minutes
+ * @param minutes - Elapsed time in minutes
+ * @param warningMinutes - Minutes before warning status (default: 5)
+ * @param criticalMinutes - Minutes before critical status (default: 10)
  */
-export function getTimerStatus(minutes: number): "normal" | "warning" | "critical" {
-    if (minutes >= 15) return "critical";
-    if (minutes >= 10) return "warning";
+export function getTimerStatus(
+    minutes: number,
+    warningMinutes: number = 5,
+    criticalMinutes: number = 10
+): "normal" | "warning" | "critical" {
+    if (minutes >= criticalMinutes) return "critical";
+    if (minutes >= warningMinutes) return "warning";
     return "normal";
 }
+
 
 /**
  * Generate unique ID

@@ -38,11 +38,13 @@ class UserRole(str, enum.Enum):
 
 class OrderStatus(str, enum.Enum):
     OPEN = "open"
+    PENDING_PAYMENT = "pending_payment"  # Cafeteria: created, waiting for payment before kitchen
     IN_PROGRESS = "in_progress"
     READY = "ready"
     DELIVERED = "delivered"
     PAID = "paid"
     CANCELLED = "cancelled"
+
 
 
 class TableStatus(str, enum.Enum):
@@ -512,6 +514,9 @@ class Order(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime, default=datetime.utcnow, onupdate=datetime.utcnow
     )
+    # Cafeteria flow: timestamp when order was paid and sent to kitchen
+    paid_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+
     
     # Relationships
     tenant: Mapped["Tenant"] = relationship(back_populates="orders")

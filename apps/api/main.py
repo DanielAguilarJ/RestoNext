@@ -54,6 +54,7 @@ from app.api.subscription import router as subscription_router, webhook_router a
 from app.api.legal import router as legal_router
 from app.api.tables import router as tables_router
 from app.api.activity import router as activity_router
+from app.api.kds import router as kds_router
 
 settings = get_settings()
 
@@ -319,6 +320,8 @@ app.include_router(legal_router, tags=["Legal"])
 app.include_router(tables_router, tags=["POS - Tables"])
 # Activity logging (frontend logs receiver)
 app.include_router(activity_router, tags=["Logging"])
+# KDS (Kitchen Display System) for cafeteria flow
+app.include_router(kds_router, tags=["Kitchen Display"])
 
 
 # ============================================
