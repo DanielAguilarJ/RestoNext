@@ -67,6 +67,14 @@ function getWebSocketUrl(): string {
 const WS_BASE_URL = getWebSocketUrl();
 
 // ============================================
+// Global Circuit Breaker
+// ============================================
+let globalLastAttempt = 0;
+let globalAttemptCount = 0;
+const CIRCUIT_BREAKER_WINDOW = 2000; // 2 seconds
+const CIRCUIT_BREAKER_THRESHOLD = 5; // Max 5 attempts in window
+
+// ============================================
 // Types
 // ============================================
 
@@ -302,7 +310,25 @@ export function useServiceSocket(options: UseServiceSocketOptions = {}): UseServ
         }
 
         try {
-            console.log(`[ServiceSocket] Connecting... (attempt ${reconnectAttempts.current + 1})`);
+            // Circuit Breaker Check
+            const now = Date.now();
+            if (now - globalLastAttempt < CIRCUIT_BREAKER_WINDOW) {
+                globalAttemptCount++;
+            } else {
+                globalAttemptCount = 1; // Reset if outside window
+            }
+            globalLastAttempt = now;
+
+            if (globalAttemptCount > CIRCUIT_BREAKER_THRESHOLD) {
+                console.error(`[ServiceSocket] ⛔ Circuit breaker activated: ${globalAttemptCount} attempts in < ${CIRCUIT_BREAKER_WINDOW}ms`);
+                if (mountedRef.current) {
+                    setConnectionError('Connection blocked: Too many attempts');
+                    manualDisconnect.current = true; // Stop auto-reconnect
+                }
+                return;
+            }
+
+            console.log(`[ServiceSocket] Connecting... (local attempt ${reconnectAttempts.current + 1}, global ${globalAttemptCount})`);
             const ws = new WebSocket(wsUrl);
             wsRef.current = ws;
 

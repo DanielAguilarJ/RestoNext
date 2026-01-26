@@ -20,7 +20,8 @@ import {
 import {
     useServiceSocket,
     ServiceRequestNotification,
-    BillRequestNotification
+    BillRequestNotification,
+    TableStatusNotification
 } from '@/hooks/useServiceSocket';
 import { usePOSStore } from '@/lib/store';
 import { formatPrice } from '@/lib/utils';
@@ -31,6 +32,8 @@ interface ServiceRequestPopupProps {
 }
 
 export function ServiceRequestPopup({ onResolve, onTableSelect }: ServiceRequestPopupProps) {
+    const { tables, updateTableStatus, setSelectedTable } = usePOSStore();
+
     const {
         pendingRequests,
         pendingBillRequests,
@@ -39,13 +42,11 @@ export function ServiceRequestPopup({ onResolve, onTableSelect }: ServiceRequest
         isConnected
     } = useServiceSocket({
         playSound: true,
-        onTableStatusChange: (status) => {
+        onTableStatusChange: React.useCallback((status: TableStatusNotification) => {
             // Auto-update table status in store
             updateTableStatus(status.table_id, status.status);
-        }
+        }, [updateTableStatus])
     });
-
-    const { tables, updateTableStatus, setSelectedTable } = usePOSStore();
 
     const [expandedRequest, setExpandedRequest] = useState<string | null>(null);
     const [dismissing, setDismissing] = useState<Set<string>>(new Set());
@@ -189,8 +190,8 @@ export function ServiceRequestPopup({ onResolve, onTableSelect }: ServiceRequest
                     >
                         {/* Urgency Indicator Bar */}
                         <div className={`h-1 w-full ${urgency === 'critical' ? 'bg-red-500 animate-pulse' :
-                                urgency === 'warning' ? 'bg-yellow-500' :
-                                    'bg-green-500'
+                            urgency === 'warning' ? 'bg-yellow-500' :
+                                'bg-green-500'
                             }`} />
 
                         {/* Header */}
