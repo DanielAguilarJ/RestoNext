@@ -1,15 +1,48 @@
 "use client";
 
-import { useEffect, useState } from "react";
+/**
+ * KDSBoard - Kitchen Display System Board
+ * 
+ * Features:
+ * - Mode-aware filtering (cafeteria vs restaurant)
+ * - Initial orders load on mount
+ * - Real-time WebSocket updates
+ * - Configurable time thresholds
+ * - Audio alerts for critical orders
+ */
+
+import { useEffect, useState, useRef, useCallback } from "react";
 import Link from "next/link";
 import { useKDSStore } from "@/lib/store";
 import { useKitchenSocket } from "@/hooks/useKitchenSocket";
-import { cn, formatTimeElapsed, getTimerStatus } from "@/lib/utils";
-import { Clock, Check, ChefHat, ArrowLeft, Flame, Bell, Sparkles, Wifi, WifiOff, RefreshCw } from "lucide-react";
+import { kdsApi, KDSConfig } from "@/lib/api";
+import { cn, formatTimeElapsed } from "@/lib/utils";
+import { Clock, Check, ChefHat, ArrowLeft, Flame, Bell, Sparkles, Wifi, WifiOff, RefreshCw, Volume2, VolumeX } from "lucide-react";
+
+// Default config if API call fails
+const DEFAULT_CONFIG: KDSConfig = {
+    mode: 'restaurant',
+    warning_minutes: 5,
+    critical_minutes: 10,
+    audio_alerts: true,
+    shake_animation: true,
+};
+
+// Helper to get timer status based on config
+function getTimerStatusWithConfig(minutes: number, config: KDSConfig): "normal" | "warning" | "critical" {
+    if (minutes >= config.critical_minutes) return "critical";
+    if (minutes >= config.warning_minutes) return "warning";
+    return "normal";
+}
 
 export function KDSBoard() {
     const { tickets, addTicket, updateItemStatus, setTickets } = useKDSStore();
     const [currentTime, setCurrentTime] = useState(new Date());
+    const [config, setConfig] = useState<KDSConfig>(DEFAULT_CONFIG);
+    const [isLoadingConfig, setIsLoadingConfig] = useState(true);
+    const [audioEnabled, setAudioEnabled] = useState(true);
+    const audioContextRef = useRef<AudioContext | null>(null);
+    const criticalOrdersPlayedRef = useRef<Set<string>>(new Set());
 
     // Connect to Kitchen WebSocket
     const {
@@ -24,6 +57,46 @@ export function KDSBoard() {
         maxReconnectAttempts: 10,
     });
 
+    // Load KDS config and initial orders on mount
+    useEffect(() => {
+        async function loadInitialData() {
+            setIsLoadingConfig(true);
+            try {
+                // Load config
+                const kdsConfig = await kdsApi.getConfig();
+                setConfig(kdsConfig);
+                setAudioEnabled(kdsConfig.audio_alerts);
+
+                // Load existing kitchen orders
+                const orders = await kdsApi.getOrders();
+
+                // Transform API orders to ticket format
+                const initialTickets = orders.map((order: any) => ({
+                    id: order.id,
+                    orderId: order.id,
+                    tableNumber: order.table_number || 0,
+                    items: (order.items || []).map((item: any) => ({
+                        id: item.id,
+                        name: item.name || item.menu_item_name,
+                        quantity: item.quantity,
+                        modifiers: item.modifiers || item.selected_modifiers?.map((m: any) => m.name || m) || [],
+                        notes: item.notes,
+                        status: item.status || 'pending',
+                    })),
+                    createdAt: order.paid_at ? new Date(order.paid_at) : new Date(order.created_at),
+                }));
+
+                setTickets(initialTickets);
+            } catch (error) {
+                console.error("Failed to load KDS config or orders:", error);
+            } finally {
+                setIsLoadingConfig(false);
+            }
+        }
+
+        loadInitialData();
+    }, [setTickets]);
+
     // Update timer every second
     useEffect(() => {
         const interval = setInterval(() => {
@@ -33,16 +106,77 @@ export function KDSBoard() {
         return () => clearInterval(interval);
     }, []);
 
-    const handleItemClick = (ticketId: string, itemId: string, currentStatus: string) => {
+    // Audio alert for critical orders
+    useEffect(() => {
+        if (!config.audio_alerts || !audioEnabled) return;
+
+        tickets.forEach(ticket => {
+            const minutes = Math.floor((currentTime.getTime() - ticket.createdAt.getTime()) / 60000);
+            const status = getTimerStatusWithConfig(minutes, config);
+
+            if (status === "critical" && !criticalOrdersPlayedRef.current.has(ticket.id)) {
+                playCriticalAlert();
+                criticalOrdersPlayedRef.current.add(ticket.id);
+            }
+        });
+    }, [currentTime, tickets, config, audioEnabled]);
+
+    // Play critical alert sound
+    const playCriticalAlert = useCallback(() => {
+        try {
+            if (!audioContextRef.current) {
+                audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)();
+            }
+            const ctx = audioContextRef.current;
+
+            // Create an urgent sounding alert (two-tone)
+            const playTone = (freq: number, startTime: number, duration: number) => {
+                const oscillator = ctx.createOscillator();
+                const gainNode = ctx.createGain();
+                oscillator.connect(gainNode);
+                gainNode.connect(ctx.destination);
+                oscillator.frequency.value = freq;
+                oscillator.type = 'sine';
+                gainNode.gain.value = 0.4;
+                oscillator.start(startTime);
+                oscillator.stop(startTime + duration);
+            };
+
+            const now = ctx.currentTime;
+            // Urgent two-tone pattern
+            playTone(880, now, 0.15);
+            playTone(660, now + 0.18, 0.15);
+            playTone(880, now + 0.36, 0.15);
+        } catch (error) {
+            console.debug('Could not play critical alert sound');
+        }
+    }, []);
+
+    const handleItemClick = async (ticketId: string, itemId: string, currentStatus: string) => {
         const nextStatus = currentStatus === "pending"
             ? "preparing"
             : currentStatus === "preparing"
                 ? "ready"
                 : "pending";
 
+        // Optimistically update UI
         updateItemStatus(ticketId, itemId, nextStatus as "pending" | "preparing" | "ready");
 
-        // TODO: Send status update to server via WebSocket or API
+        // Send update to server
+        try {
+            await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'https://restonext.me/api'}/kds/items/${itemId}/status`, {
+                method: 'PATCH',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${localStorage.getItem('access_token')}`,
+                },
+                body: JSON.stringify({ status: nextStatus }),
+            });
+        } catch (error) {
+            console.error('Failed to update item status:', error);
+            // Revert on error
+            updateItemStatus(ticketId, itemId, currentStatus as "pending" | "preparing" | "ready");
+        }
     };
 
     const getTimerMinutes = (createdAt: Date) => {
@@ -53,6 +187,25 @@ export function KDSBoard() {
         disconnect();
         setTimeout(connect, 100);
     };
+
+    const toggleAudio = () => {
+        setAudioEnabled(prev => !prev);
+        // Initialize audio context on user interaction
+        if (!audioContextRef.current) {
+            audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)();
+        }
+    };
+
+    if (isLoadingConfig) {
+        return (
+            <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-900 to-gray-800 flex items-center justify-center">
+                <div className="flex flex-col items-center gap-4">
+                    <ChefHat className="w-12 h-12 text-orange-500 animate-pulse" />
+                    <p className="text-gray-400">Cargando configuración...</p>
+                </div>
+            </div>
+        );
+    }
 
     return (
         <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-900 to-gray-800 p-4 relative overflow-hidden">
@@ -81,13 +234,29 @@ export function KDSBoard() {
                                 Cocina
                                 <Flame className="w-5 h-5 text-orange-500" />
                             </h1>
-                            <p className="text-sm text-gray-400">Kitchen Display System</p>
+                            <p className="text-sm text-gray-400">
+                                {config.mode === 'cafeteria' ? 'Modo Cafetería' : 'Modo Restaurante'}
+                            </p>
                         </div>
                     </div>
                 </div>
 
-                {/* Stats & Connection Status */}
+                {/* Stats & Controls */}
                 <div className="flex items-center gap-4">
+                    {/* Audio Toggle */}
+                    <button
+                        onClick={toggleAudio}
+                        className={cn(
+                            "p-2 rounded-xl transition-all",
+                            audioEnabled
+                                ? "bg-emerald-500/20 text-emerald-400"
+                                : "bg-gray-700/50 text-gray-500"
+                        )}
+                        title={audioEnabled ? "Silenciar alertas" : "Activar alertas"}
+                    >
+                        {audioEnabled ? <Volume2 className="w-5 h-5" /> : <VolumeX className="w-5 h-5" />}
+                    </button>
+
                     {/* Connection Status */}
                     <div className={cn(
                         "glass-dark rounded-xl px-4 py-2 flex items-center gap-2 transition-all duration-300",
@@ -144,7 +313,7 @@ export function KDSBoard() {
             <div className="relative z-10 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
                 {tickets.map((ticket, ticketIndex) => {
                     const minutes = getTimerMinutes(ticket.createdAt);
-                    const timerStatus = getTimerStatus(minutes);
+                    const timerStatus = getTimerStatusWithConfig(minutes, config);
 
                     return (
                         <div
@@ -152,7 +321,7 @@ export function KDSBoard() {
                             className={cn(
                                 "rounded-2xl overflow-hidden transition-all duration-300 animate-scale-in",
                                 "shadow-xl hover:shadow-2xl",
-                                timerStatus === "critical" && "animate-border-glow ring-2 ring-red-500/50"
+                                timerStatus === "critical" && config.shake_animation && "animate-shake ring-2 ring-red-500/50"
                             )}
                             style={{ animationDelay: `${ticketIndex * 0.1}s` }}
                         >
@@ -167,7 +336,7 @@ export function KDSBoard() {
                             >
                                 <div className="flex items-center gap-3">
                                     <span className="text-white font-bold text-lg">
-                                        Mesa {ticket.tableNumber}
+                                        {ticket.tableNumber === 0 ? "Mostrador" : `Mesa ${ticket.tableNumber}`}
                                     </span>
                                     {timerStatus === "critical" && (
                                         <span className="px-2 py-0.5 bg-white/20 rounded-full text-xs font-bold text-white animate-pulse">
@@ -225,7 +394,7 @@ export function KDSBoard() {
                                         {/* Modifiers */}
                                         {item.modifiers.length > 0 && (
                                             <div className="mt-2 flex flex-wrap gap-1">
-                                                {item.modifiers.map((mod, i) => (
+                                                {item.modifiers.map((mod: string, i: number) => (
                                                     <span key={i} className="px-2 py-0.5 bg-gray-600/50 rounded text-xs text-gray-300">
                                                         {mod}
                                                     </span>
@@ -276,7 +445,11 @@ export function KDSBoard() {
                         <ChefHat className="w-12 h-12 text-gray-600" />
                     </div>
                     <p className="text-xl font-medium text-gray-400 mb-2">Sin pedidos pendientes</p>
-                    <p className="text-gray-500 mb-4">Los nuevos pedidos aparecerán aquí automáticamente</p>
+                    <p className="text-gray-500 mb-4">
+                        {config.mode === 'cafeteria'
+                            ? 'Los pedidos pagados aparecerán aquí automáticamente'
+                            : 'Los nuevos pedidos aparecerán aquí automáticamente'}
+                    </p>
 
                     {/* Connection hint */}
                     <div className={cn(
