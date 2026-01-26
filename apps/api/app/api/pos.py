@@ -340,3 +340,164 @@ async def request_bill(
     await db.commit()
     
     return {"status": "bill_requested"}
+
+
+# ============================================
+# Cafeteria Order Endpoint
+# ============================================
+
+from pydantic import BaseModel, Field
+from typing import Optional, List as TypingList
+from datetime import datetime
+
+class CafeteriaOrderItem(BaseModel):
+    menu_item_id: str
+    quantity: int = 1
+    notes: Optional[str] = None
+
+class CafeteriaOrderCreate(BaseModel):
+    items: TypingList[CafeteriaOrderItem]
+    payment_method: str = Field("cash", description="'cash', 'card', or 'transfer'")
+    total: float = 0
+
+@router.post("/cafeteria", status_code=status.HTTP_201_CREATED)
+async def create_cafeteria_order(
+    order_data: CafeteriaOrderCreate,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_cashier),
+):
+    """
+    Create an order in cafeteria mode (already paid).
+    
+    This endpoint:
+    1. Creates the order
+    2. Marks it as paid (IN_PROGRESS status)
+    3. Sends it directly to kitchen display
+    
+    Requires no table selection - uses a default "counter" table.
+    """
+    from uuid import UUID as PyUUID
+    
+    # Get or create a counter/takeout table for this tenant
+    counter_table_result = await db.execute(
+        select(Table).where(
+            Table.tenant_id == current_user.tenant_id,
+            Table.number == 0  # Convention: table 0 is counter/takeout
+        )
+    )
+    counter_table = counter_table_result.scalar_one_or_none()
+    
+    if not counter_table:
+        # Create counter table if it doesn't exist
+        counter_table = Table(
+            tenant_id=current_user.tenant_id,
+            number=0,
+            capacity=1,
+            zone="counter",
+            status=TableStatus.FREE,
+        )
+        db.add(counter_table)
+        await db.flush()
+    
+    # Create order with IN_PROGRESS status (already paid, ready for kitchen)
+    order = Order(
+        tenant_id=current_user.tenant_id,
+        table_id=counter_table.id,
+        waiter_id=current_user.id,
+        status=OrderStatus.IN_PROGRESS,  # Directly to kitchen
+        paid_at=datetime.utcnow(),
+        notes=f"Cafetería - {order_data.payment_method}",
+    )
+    db.add(order)
+    await db.flush()
+    
+    # Process items
+    subtotal = 0.0
+    kitchen_items = []
+    
+    for item_data in order_data.items:
+        # Get menu item
+        try:
+            menu_item_id = PyUUID(item_data.menu_item_id)
+        except ValueError:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Invalid menu_item_id format: {item_data.menu_item_id}"
+            )
+        
+        menu_result = await db.execute(
+            select(MenuItem).where(MenuItem.id == menu_item_id)
+        )
+        menu_item = menu_result.scalar_one_or_none()
+        
+        if not menu_item:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Menu item {item_data.menu_item_id} not found"
+            )
+        
+        if not menu_item.is_available:
+            raise HTTPException(
+                status_code=400,
+                detail=f"{menu_item.name} is not available"
+            )
+        
+        unit_price = menu_item.price
+        
+        # Create order item
+        order_item = OrderItem(
+            order_id=order.id,
+            menu_item_id=menu_item.id,
+            menu_item_name=menu_item.name,
+            route_to=menu_item.route_to,
+            quantity=item_data.quantity,
+            unit_price=unit_price,
+            selected_modifiers=[],
+            notes=item_data.notes,
+            status=OrderItemStatus.PENDING,
+        )
+        db.add(order_item)
+        
+        item_total = unit_price * item_data.quantity
+        subtotal += item_total
+        
+        # Add to kitchen notification
+        kitchen_items.append({
+            "id": str(order_item.id),
+            "name": menu_item.name,
+            "quantity": item_data.quantity,
+            "notes": item_data.notes,
+            "table_number": 0,
+        })
+    
+    # Calculate totals
+    tax = subtotal * 0.16  # IVA 16%
+    total = subtotal + tax
+    
+    order.subtotal = subtotal
+    order.tax = tax
+    order.total = total
+    
+    await db.commit()
+    await db.refresh(order)
+    
+    # Send to kitchen via WebSocket
+    if kitchen_items:
+        order_notification = {
+            "order_id": str(order.id),
+            "table_number": 0,
+            "waiter_name": current_user.name,
+            "created_at": order.created_at.isoformat(),
+            "items": kitchen_items,
+            "is_cafeteria": True,
+        }
+        await ws_manager.notify_kitchen_new_order(order_notification)
+    
+    return {
+        "success": True,
+        "message": "Pedido creado y enviado a cocina",
+        "order_id": str(order.id),
+        "total": total,
+        "status": "in_progress",
+    }
+
