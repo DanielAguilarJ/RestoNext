@@ -831,6 +831,76 @@ export const analyticsApi = {
 };
 
 // ============================================
+// AI Forecast API Types
+// ============================================
+
+export interface ForecastPrediction {
+    date: string;
+    predicted_demand: number;
+    lower_bound: number;
+    upper_bound: number;
+}
+
+export interface ForecastResponse {
+    ingredient: string;
+    predictions: ForecastPrediction[];
+    error?: string;
+    model_metrics?: {
+        data_points: number;
+        forecast_days: number;
+    };
+}
+
+export interface BatchForecastResponse {
+    forecasts: ForecastResponse[];
+}
+
+// ============================================
+// AI Forecast API
+// ============================================
+
+export const forecastApi = {
+    /**
+     * Get AI-powered demand forecast for a single ingredient
+     * Uses Facebook Prophet with Mexican holiday adjustments
+     */
+    getIngredientForecast: async (ingredient: string, daysAhead: number = 7): Promise<ForecastResponse> => {
+        const params = new URLSearchParams();
+        params.append('ingredient', ingredient);
+        params.append('days_ahead', daysAhead.toString());
+
+        return apiRequest<ForecastResponse>(`/analytics/forecast?${params.toString()}`);
+    },
+
+    /**
+     * Get forecasts for multiple ingredients at once
+     */
+    getBatchForecast: async (ingredients: string[], daysAhead: number = 7): Promise<BatchForecastResponse> => {
+        const params = new URLSearchParams();
+        params.append('ingredients', ingredients.join(','));
+        params.append('days_ahead', daysAhead.toString());
+
+        return apiRequest<BatchForecastResponse>(`/analytics/forecast/batch?${params.toString()}`);
+    },
+
+    /**
+     * Get demand analysis context using Perplexity AI
+     * Analyzes events, holidays, weather that impact demand
+     */
+    getDemandContext: async (location: string, startDate: Date, endDate: Date): Promise<{
+        demand_multiplier: number;
+        analysis_summary: string;
+    }> => {
+        const params = new URLSearchParams();
+        params.append('location', location);
+        params.append('start_date', startDate.toISOString());
+        params.append('end_date', endDate.toISOString());
+
+        return apiRequest<{ demand_multiplier: number; analysis_summary: string }>(`/analytics/demand-context?${params.toString()}`);
+    }
+};
+
+// ============================================
 // Export token utilities for external use
 // ============================================
 

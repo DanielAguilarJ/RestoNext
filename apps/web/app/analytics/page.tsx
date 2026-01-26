@@ -17,6 +17,7 @@ import {
     PieChart as PieChartIcon,
     BarChart3,
     RefreshCw,
+    Sparkles,
 } from "lucide-react";
 import {
     analyticsApi,
@@ -32,6 +33,9 @@ import { CategoryPieChart } from "@/components/analytics/CategoryPieChart";
 import { HourlyHeatmap } from "@/components/analytics/HourlyHeatmap";
 import { TopDishesTable } from "@/components/analytics/TopDishesTable";
 import { DateRangePicker, getDefaultDateRange } from "@/components/analytics/DateRangePicker";
+import { AiForecastWidget } from "@/components/analytics/AiForecastWidget";
+import { AiProcurementWidget } from "@/components/dashboard/AiProcurementWidget";
+import { DashboardProvider } from "@/app/analytics/DashboardContext";
 
 interface DateRange {
     startDate: Date;
@@ -301,6 +305,29 @@ export default function AnalyticsPage() {
                         icon={<Clock className="w-6 h-6" />}
                         color="amber"
                     />
+                </div>
+
+                {/* AI Predictions Section */}
+                <div className="mb-8">
+                    <div className="flex items-center gap-3 mb-4">
+                        <div className="p-2 rounded-lg bg-purple-500/20">
+                            <Sparkles className="w-5 h-5 text-purple-400" />
+                        </div>
+                        <div>
+                            <h3 className="text-lg font-semibold text-white">
+                                Predicciones con IA
+                            </h3>
+                            <p className="text-xs text-gray-500">
+                                Análisis predictivo powered by Prophet + Perplexity AI
+                            </p>
+                        </div>
+                    </div>
+                    <DashboardProvider>
+                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                            <AiForecastWidget className="bg-white/5 border border-gray-800 backdrop-blur-xl" />
+                            <AiProcurementWidget className="bg-white/5 border border-gray-800 backdrop-blur-xl" />
+                        </div>
+                    </DashboardProvider>
                 </div>
 
                 {/* Charts Row 1 */}

@@ -252,6 +252,39 @@ export default function DashboardHome() {
                     </div>
                 </motion.div>
 
+                {/* AI Insights Banner */}
+                <motion.div
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.25 }}
+                    className="mb-10"
+                >
+                    <Link
+                        href="/analytics"
+                        className="block p-5 rounded-2xl bg-gradient-to-r from-purple-600/20 via-blue-600/20 to-purple-600/20 border border-purple-500/30 hover:border-purple-500/50 transition-all group"
+                    >
+                        <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-4">
+                                <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-purple-500 to-blue-500 flex items-center justify-center shadow-lg animate-pulse">
+                                    <Sparkles className="w-6 h-6 text-white" />
+                                </div>
+                                <div>
+                                    <h3 className="font-semibold text-white flex items-center gap-2">
+                                        Predicción IA Activada
+                                        <span className="px-2 py-0.5 bg-emerald-500/20 text-emerald-400 text-xs font-medium rounded-full">
+                                            Demanda Normal
+                                        </span>
+                                    </h3>
+                                    <p className="text-sm text-zinc-400 mt-0.5">
+                                        Prophet + Perplexity analizando tendencias de esta semana
+                                    </p>
+                                </div>
+                            </div>
+                            <ArrowRight className="w-5 h-5 text-purple-400 group-hover:translate-x-1 transition-transform" />
+                        </div>
+                    </Link>
+                </motion.div>
+
                 {/* Modules Grid */}
                 <motion.div
                     initial={{ opacity: 0, y: 20 }}
