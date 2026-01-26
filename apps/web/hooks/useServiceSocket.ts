@@ -415,7 +415,7 @@ export function useServiceSocket(options: UseServiceSocketOptions = {}): UseServ
             mountedRef.current = false;
             disconnect();
         };
-    }, [autoConnect, connect, disconnect]);
+    }, [autoConnect]); // Don't include connect/disconnect to avoid infinite loops
 
     return {
         isConnected,
