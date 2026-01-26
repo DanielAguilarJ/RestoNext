@@ -110,7 +110,8 @@ const settingsSections = [
         description: 'Tiempos de preparación y alertas',
         icon: ChefHat,
         color: 'from-orange-500 to-red-600',
-        fields: ['kds_config'],
+        href: '/settings/kitchen',
+        external: true,
     },
     {
         id: 'billing',
