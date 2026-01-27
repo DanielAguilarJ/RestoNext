@@ -179,7 +179,7 @@ export default function AnalyticsPage() {
             // ... set other states if needed, but error message might be enough to prompt a retry which would then load demo data if we adjust the catch block. 
             // However, let's keep it simple: if error, the user sees error message, but can try refresh.
             // Actually, better to clear error if we are forcing demo data.
-            setError(null);
+            setError(err instanceof Error ? err.message : "Error al cargar datos de analíticas");
         } finally {
             setLoading({
                 kpis: false,

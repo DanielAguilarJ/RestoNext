@@ -52,10 +52,10 @@ function useProcurementData() {
     // Transform data into alerts
     const alerts: ProcurementAlert[] = [];
 
-    if (lowStockQuery.data) {
+    if (Array.isArray(lowStockQuery.data)) {
         // Critical stock alerts
         lowStockQuery.data
-            .filter(item => item.stock_quantity <= item.min_stock_alert * 0.5)
+            .filter(item => item && typeof item.min_stock_alert === 'number' && item.stock_quantity <= item.min_stock_alert * 0.5)
             .slice(0, 2)
             .forEach(item => {
                 alerts.push({
@@ -70,7 +70,7 @@ function useProcurementData() {
 
         // Warning stock alerts
         lowStockQuery.data
-            .filter(item => item.stock_quantity > item.min_stock_alert * 0.5 && item.stock_quantity <= item.min_stock_alert)
+            .filter(item => item && typeof item.min_stock_alert === 'number' && item.stock_quantity > item.min_stock_alert * 0.5 && item.stock_quantity <= item.min_stock_alert)
             .slice(0, 1)
             .forEach(item => {
                 alerts.push({

@@ -46,21 +46,10 @@ export function AiForecastWidget({
         } catch (err) {
             console.error("Failed to fetch forecasts:", err);
             // Generate demo data when API fails
-            setForecasts(ingredients.map((ingredient, idx) => ({
-                ingredient,
-                predictions: Array.from({ length: 7 }, (_, i) => {
-                    const baseValue = [30, 50, 100, 40, 35][idx % 5];
-                    const dayVariation = i < 5 ? 1.0 : 1.3; // Weekend boost
-                    const predicted = Math.round(baseValue * dayVariation * (0.9 + Math.random() * 0.2));
-                    return {
-                        date: new Date(Date.now() + (i + 1) * 86400000).toISOString().split('T')[0],
-                        predicted_demand: predicted,
-                        lower_bound: Math.round(predicted * 0.8),
-                        upper_bound: Math.round(predicted * 1.2),
-                    };
-                }),
-                model_metrics: { data_points: 90, forecast_days: 7 }
-            })));
+            setError(err instanceof Error ? err.message : "Error al cargar predicciones");
+            // Only use demo data if specifically requested or in a demo env, otherwise show error
+            // internal logic: let's revert to NOT using demo data on error to debug
+            setForecasts([]);
         } finally {
             setIsLoading(false);
         }
@@ -112,6 +101,30 @@ export function AiForecastWidget({
         );
     }
 
+    if (error) {
+        return (
+            <Card className={`shadow-md border-0 bg-red-50/50 dark:bg-red-900/10 border-red-200 dark:border-red-800 ${className}`}>
+                <CardHeader>
+                    <div className="flex items-center gap-2 text-red-600 dark:text-red-400">
+                        <TrendingDown className="h-5 w-5" />
+                        <CardTitle>Error de Carga</CardTitle>
+                    </div>
+                </CardHeader>
+                <CardContent>
+                    <p className="text-sm text-red-600 dark:text-red-400 mb-4">
+                        {error}
+                    </p>
+                    <button
+                        onClick={fetchForecasts}
+                        className="px-4 py-2 text-sm font-medium text-white bg-red-500 rounded-lg hover:bg-red-600 transition-colors"
+                    >
+                        Reintentar
+                    </button>
+                </CardContent>
+            </Card>
+        );
+    }
+
     return (
         <Card className={`shadow-md border-0 bg-gradient-to-br from-white to-purple-50/50 dark:from-zinc-900 dark:to-purple-900/10 relative overflow-hidden ${className}`}>
             {/* Animated Background */}
@@ -155,8 +168,8 @@ export function AiForecastWidget({
                             >
                                 <div className="flex items-center gap-3">
                                     <div className={`w-2 h-2 rounded-full ${trend.direction === "up" ? "bg-emerald-500" :
-                                            trend.direction === "down" ? "bg-rose-500" :
-                                                "bg-gray-400"
+                                        trend.direction === "down" ? "bg-rose-500" :
+                                            "bg-gray-400"
                                         }`} />
                                     <span className="font-medium text-gray-900 dark:text-gray-100">
                                         {forecast.ingredient}
@@ -171,10 +184,10 @@ export function AiForecastWidget({
                                     <Badge
                                         variant="outline"
                                         className={`flex items-center gap-1 ${trend.direction === "up"
-                                                ? "bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-900/20 dark:text-emerald-400 dark:border-emerald-800"
-                                                : trend.direction === "down"
-                                                    ? "bg-rose-50 text-rose-700 border-rose-200 dark:bg-rose-900/20 dark:text-rose-400 dark:border-rose-800"
-                                                    : "bg-gray-50 text-gray-600 border-gray-200 dark:bg-gray-800 dark:text-gray-400"
+                                            ? "bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-900/20 dark:text-emerald-400 dark:border-emerald-800"
+                                            : trend.direction === "down"
+                                                ? "bg-rose-50 text-rose-700 border-rose-200 dark:bg-rose-900/20 dark:text-rose-400 dark:border-rose-800"
+                                                : "bg-gray-50 text-gray-600 border-gray-200 dark:bg-gray-800 dark:text-gray-400"
                                             }`}
                                     >
                                         {trend.direction === "up" && <TrendingUp className="h-3 w-3" />}
