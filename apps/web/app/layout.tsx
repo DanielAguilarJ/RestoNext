@@ -3,6 +3,7 @@ import { Inter } from "next/font/google";
 import "./globals.css";
 import { RxDBProvider } from "../lib/db-provider";
 import { TenantProvider } from "../lib/tenant-provider";
+import { ReactQueryProvider } from "../lib/react-query-provider";
 import AppShell from "@/components/layout/AppShell";
 import { ActivityTracker } from "@/components/analytics/ActivityTracker";
 
@@ -32,11 +33,13 @@ export default function RootLayout({
             <body className={inter.className}>
                 <RxDBProvider>
                     <TenantProvider>
-                        <ActivityTracker>
-                            <AppShell>
-                                {children}
-                            </AppShell>
-                        </ActivityTracker>
+                        <ReactQueryProvider>
+                            <ActivityTracker>
+                                <AppShell>
+                                    {children}
+                                </AppShell>
+                            </ActivityTracker>
+                        </ReactQueryProvider>
                     </TenantProvider>
                 </RxDBProvider>
             </body>
