@@ -33,7 +33,7 @@ export default function CashierPage() {
             // Parallel load
             const [txData, ordersData] = await Promise.all([
                 cashierApi.getTransactions(),
-                ordersApi.list({ status: "delivered" }) // Only show delivered orders ready for payment
+                ordersApi.list({ status: "delivered,ready,in_progress,open,pending_payment" }) // Show all active orders
             ]);
 
             setTransactions(txData.transactions);
@@ -51,6 +51,27 @@ export default function CashierPage() {
 
     useEffect(() => {
         loadData();
+
+        // WebSocket Integration for Real-time Updates
+        let unsubscribeNew: () => void;
+        let unsubscribeUpdate: () => void;
+
+        const handleRefresh = () => {
+            console.log('[Cashier] Refreshing data due to WebSocket event');
+            loadData();
+        };
+
+        // Dynamic import to avoid SSR issues
+        import('@/lib/api').then(({ wsClient }) => {
+            wsClient.connect(); // Ensure connected
+            unsubscribeNew = wsClient.subscribe('new_order', handleRefresh);
+            unsubscribeUpdate = wsClient.subscribe('order_update', handleRefresh);
+        });
+
+        return () => {
+            if (unsubscribeNew) unsubscribeNew();
+            if (unsubscribeUpdate) unsubscribeUpdate();
+        };
     }, []);
 
     const handleOpenShift = async () => {

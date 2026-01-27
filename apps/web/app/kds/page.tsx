@@ -18,14 +18,60 @@ export default function KDSPage() {
         // Subscribe to active orders
         const sub = db.orders.find({
             selector: {
-                status: { $in: ['pending', 'in_progress'] } // Active orders
+                status: { $in: ['pending', 'in_progress', 'ready'] } // Active orders
             },
             sort: [{ created_at: 'asc' }]
         }).$.subscribe(docs => {
             setOrders(docs.map(d => d.toJSON()) as Order[]);
         });
 
-        return () => sub.unsubscribe();
+        // WebSocket Integration
+        let unsubscribeNew: () => void;
+        let unsubscribeUpdate: () => void;
+
+        const handleNewOrder = async (payload: any) => {
+            // When new order comes, fetch full details and save to RxDB
+            // The UI will update automatically due to the subscription above
+            console.log('[KDS] New order received:', payload);
+            try {
+                // We might need to fetch the specific order if payload is partial
+                // For now, let's assuming payload implies we should sync
+                // Or better, just upsert the payload if it matches Order shape, 
+                // but usually payload is just a notification.
+                // Let's optimize: just re-fetch active orders for now to be safe and simple
+                const { ordersApi } = await import('../../lib/api');
+                const freshOrders = await ordersApi.list({ status: 'pending,in_progress,ready' });
+
+                // Bulk upsert to RxDB
+                await db.orders.bulkUpsert(freshOrders);
+            } catch (err) {
+                console.error('[KDS] Failed to sync new order', err);
+            }
+        };
+
+        const handleOrderUpdate = async (payload: any) => {
+            console.log('[KDS] Order update:', payload);
+            try {
+                const { ordersApi } = await import('../../lib/api');
+                const order = await ordersApi.get(payload.order_id);
+                await db.orders.upsert(order);
+            } catch (err) {
+                console.error('[KDS] Failed to sync order update', err);
+            }
+        }
+
+        // Dynamic import to avoid SSR issues with WS if any
+        import('../../lib/api').then(({ wsClient }) => {
+            wsClient.connect(); // Ensure connected
+            unsubscribeNew = wsClient.subscribe('new_order', handleNewOrder);
+            unsubscribeUpdate = wsClient.subscribe('order_update', handleOrderUpdate);
+        });
+
+        return () => {
+            sub.unsubscribe();
+            if (unsubscribeNew) unsubscribeNew();
+            if (unsubscribeUpdate) unsubscribeUpdate();
+        };
     }, [db]);
 
     const filteredOrders = orders.map(order => {

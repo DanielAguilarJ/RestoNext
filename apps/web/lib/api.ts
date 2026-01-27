@@ -536,6 +536,51 @@ export const kdsApi = {
 // Menu API
 // ============================================
 
+export interface CategoryCreateData {
+    name: string;
+    description?: string;
+    sort_order?: number;
+    printer_target?: string;
+}
+
+export interface CategoryUpdateData {
+    name?: string;
+    description?: string;
+    sort_order?: number;
+    is_active?: boolean;
+    printer_target?: string;
+}
+
+export interface ItemCreateData {
+    category_id: string;
+    name: string;
+    description?: string;
+    price: number;
+    image_url?: string;
+    route_to?: string;
+    modifiers_schema?: Record<string, unknown>;
+    tax_config?: Record<string, number>;
+    sort_order?: number;
+}
+
+export interface ItemUpdateData {
+    category_id?: string;
+    name?: string;
+    description?: string;
+    price?: number;
+    image_url?: string;
+    route_to?: string;
+    modifiers_schema?: Record<string, unknown>;
+    tax_config?: Record<string, number>;
+    is_available?: boolean;
+    sort_order?: number;
+}
+
+export interface AIOptimizationResponse {
+    suggested_description: string;
+    market_price_analysis: string;
+}
+
 export const menuApi = {
     /**
      * Get all categories for a restaurant
@@ -551,6 +596,35 @@ export const menuApi = {
     },
 
     /**
+     * Create a new category
+     */
+    createCategory: async (data: CategoryCreateData): Promise<MenuCategory> => {
+        return apiRequest<MenuCategory>('/menu/categories', {
+            method: 'POST',
+            body: JSON.stringify(data),
+        });
+    },
+
+    /**
+     * Update a category
+     */
+    updateCategory: async (id: string, data: CategoryUpdateData): Promise<MenuCategory> => {
+        return apiRequest<MenuCategory>(`/menu/categories/${id}`, {
+            method: 'PATCH',
+            body: JSON.stringify(data),
+        });
+    },
+
+    /**
+     * Delete a category (soft delete)
+     */
+    deleteCategory: async (id: string): Promise<void> => {
+        await apiRequest(`/menu/categories/${id}`, {
+            method: 'DELETE',
+        });
+    },
+
+    /**
      * Get menu items, optionally filtered by category
      */
     getItems: async (categoryId?: string): Promise<MenuItem[]> => {
@@ -561,8 +635,48 @@ export const menuApi = {
         const endpoint = query ? `/menu/items?${query}` : '/menu/items';
 
         return apiRequest<MenuItem[]>(endpoint);
-    }
+    },
+
+    /**
+     * Create a new menu item
+     */
+    createItem: async (data: ItemCreateData): Promise<MenuItem> => {
+        return apiRequest<MenuItem>('/menu/items', {
+            method: 'POST',
+            body: JSON.stringify(data),
+        });
+    },
+
+    /**
+     * Update a menu item
+     */
+    updateItem: async (id: string, data: ItemUpdateData): Promise<MenuItem> => {
+        return apiRequest<MenuItem>(`/menu/items/${id}`, {
+            method: 'PATCH',
+            body: JSON.stringify(data),
+        });
+    },
+
+    /**
+     * Delete a menu item (soft delete)
+     */
+    deleteItem: async (id: string): Promise<void> => {
+        await apiRequest(`/menu/items/${id}`, {
+            method: 'DELETE',
+        });
+    },
+
+    /**
+     * AI-powered menu item optimization
+     * Generates neuromarketing description and market price analysis
+     */
+    optimizeItem: async (itemId: string): Promise<AIOptimizationResponse> => {
+        return apiRequest<AIOptimizationResponse>(`/menu/${itemId}/optimize`, {
+            method: 'POST',
+        });
+    },
 };
+
 
 // ============================================
 // Tables API
@@ -626,9 +740,19 @@ export class WebSocketClient {
         this.ws.onmessage = (event) => {
             try {
                 const data = JSON.parse(event.data);
-                const handlers = this.messageHandlers.get(data.type);
+                // Backend sends 'event' field (e.g., 'kitchen:new_order')
+                // Normalize by taking the part after colon if present
+                const rawEvent = data.event || data.type || '';
+                const eventType = rawEvent.includes(':') ? rawEvent.split(':')[1] : rawEvent;
+
+                const handlers = this.messageHandlers.get(eventType);
                 if (handlers) {
                     handlers.forEach(handler => handler(data.payload));
+                }
+                // Also try with full event name for specific listeners
+                const fullHandlers = this.messageHandlers.get(rawEvent);
+                if (fullHandlers) {
+                    fullHandlers.forEach(handler => handler(data.payload));
                 }
             } catch (error) {
                 console.error('WebSocket message parse error:', error);

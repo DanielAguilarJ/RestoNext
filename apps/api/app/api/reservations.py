@@ -125,7 +125,7 @@ async def update_reservation_status(
             table_res = await db.execute(q_table)
             table = table_res.scalar_one_or_none()
             if table:
-                table.status = "occupied"
+                table.status = TableStatus.OCCUPIED
                 
     await db.commit()
     await db.refresh(reservation)

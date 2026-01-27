@@ -7,10 +7,10 @@ import {
     UtensilsCrossed, ChefHat, Receipt, QrCode,
     Sparkles, Package, BarChart3, Settings,
     Users, Calendar, CreditCard, ArrowRight, Loader2, Coffee,
-    Clock, TrendingUp, DollarSign
+    Clock, TrendingUp, DollarSign, ClipboardList
 } from "lucide-react";
 import { motion } from "framer-motion";
-import { kdsApi } from "@/lib/api";
+import { kdsApi, analyticsApi, tablesApi } from "@/lib/api";
 
 // ============================================
 // Dashboard Modules (base config)
@@ -90,6 +90,22 @@ const getModules = (kdsMode: 'restaurant' | 'cafeteria') => [
         color: "from-amber-500 to-orange-500",
         badge: "PRO",
     },
+    {
+        title: "Catering",
+        description: "Eventos y cotizaciones",
+        icon: ChefHat,
+        href: "/catering",
+        color: "from-rose-500 to-pink-500",
+        badge: "PRO",
+    },
+    {
+        title: "Administrar Menú",
+        description: "Categorías y productos",
+        icon: ClipboardList,
+        href: "/admin/menu",
+        color: "from-teal-500 to-emerald-500",
+        badge: null,
+    },
 ];
 
 // ============================================
@@ -120,6 +136,14 @@ export default function DashboardHome() {
     const [userName, setUserName] = useState<string>("");
     const [tenantName, setTenantName] = useState<string>("");
     const [kdsMode, setKdsMode] = useState<'restaurant' | 'cafeteria'>('restaurant');
+
+    // Dashboard stats state
+    const [stats, setStats] = useState({
+        salesToday: "$0.00",
+        ordersToday: "0",
+        tablesOccupied: "0 / 0",
+        stockAlerts: "0",
+    });
 
     useEffect(() => {
         // Check authentication
@@ -173,6 +197,30 @@ export default function DashboardHome() {
                     setKdsMode(kdsConfig.mode || 'restaurant');
                 } catch {
                     setKdsMode('restaurant');
+                }
+
+                // Fetch real dashboard stats
+                try {
+                    const today = new Date();
+                    today.setHours(0, 0, 0, 0);
+
+                    // Fetch KPIs for today
+                    const kpis = await analyticsApi.getKPIs(today, new Date());
+
+                    // Fetch tables data
+                    const tables = await tablesApi.list();
+                    const occupiedTables = tables.filter((t: any) => t.status === 'occupied').length;
+                    const totalTables = tables.length;
+
+                    setStats({
+                        salesToday: new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' }).format(kpis.total_sales || 0),
+                        ordersToday: (kpis.total_orders || 0).toString(),
+                        tablesOccupied: `${occupiedTables} / ${totalTables}`,
+                        stockAlerts: "0", // TODO: Connect to inventory alerts API
+                    });
+                } catch (e) {
+                    console.log("Stats fetch skipped:", e);
+                    // Keep default stats on error
                 }
             } catch (error) {
                 console.error("Auth error:", error);
@@ -256,10 +304,10 @@ export default function DashboardHome() {
                 {/* Quick Stats Grid */}
                 <motion.div variants={itemVariants} className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-12">
                     {[
-                        { label: "Ventas Hoy", value: "$0.00", icon: DollarSign, color: "text-emerald-400", bg: "bg-emerald-500/10" },
-                        { label: "Órdenes", value: "0", icon: Receipt, color: "text-blue-400", bg: "bg-blue-500/10" },
-                        { label: "Mesas", value: "0 / 0", icon: Users, color: "text-purple-400", bg: "bg-purple-500/10" },
-                        { label: "Alertas Stock", value: "0", icon: Package, color: "text-orange-400", bg: "bg-orange-500/10" },
+                        { label: "Ventas Hoy", value: stats.salesToday, icon: DollarSign, color: "text-emerald-400", bg: "bg-emerald-500/10" },
+                        { label: "Órdenes", value: stats.ordersToday, icon: Receipt, color: "text-blue-400", bg: "bg-blue-500/10" },
+                        { label: "Mesas", value: stats.tablesOccupied, icon: Users, color: "text-purple-400", bg: "bg-purple-500/10" },
+                        { label: "Alertas Stock", value: stats.stockAlerts, icon: Package, color: "text-orange-400", bg: "bg-orange-500/10" },
                     ].map((stat, idx) => (
                         <div key={idx} className="p-5 rounded-2xl bg-zinc-900/40 backdrop-blur-md border border-zinc-800/50 hover:border-zinc-700 transition-colors group">
                             <div className="flex items-start justify-between mb-4">

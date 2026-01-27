@@ -82,8 +82,9 @@ async def process_order_inventory(
     if not order:
         raise InventoryError(f"Order {order_id} not found")
     
-    # Only process delivered or paid orders
-    if order.status not in (OrderStatus.DELIVERED, OrderStatus.PAID):
+    # Only process delivered, paid, or in-progress (cafeteria) orders
+    allowed_statuses = (OrderStatus.DELIVERED, OrderStatus.PAID, OrderStatus.IN_PROGRESS)
+    if order.status not in allowed_statuses:
         logger.warning(
             f"Order {order_id} status is {order.status}, skipping inventory processing"
         )

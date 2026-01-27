@@ -24,11 +24,15 @@ import { MenuGridSkeleton } from "../ui/Skeletons";
 import { EmptyState } from "../ui/EmptyState";
 import Image from "next/image";
 
+import Link from "next/link";
+import { Receipt } from "lucide-react";
+
 interface MenuGridProps {
     isLoading: boolean;
     items: MenuItem[];
     onAddItem: (item: MenuItem) => void;
     searchQuery?: string;
+    hasCategories?: boolean;
 }
 
 // Animation variants for staggered entry
@@ -68,7 +72,7 @@ const addedPulse = {
     transition: { duration: 0.3 }
 };
 
-export function MenuGrid({ isLoading, items, onAddItem, searchQuery = '' }: MenuGridProps) {
+export function MenuGrid({ isLoading, items, onAddItem, searchQuery = '', hasCategories = true }: MenuGridProps) {
     const [pressedItem, setPressedItem] = useState<string | null>(null);
     const [addedItems, setAddedItems] = useState<Set<string>>(new Set());
 
@@ -114,6 +118,22 @@ export function MenuGrid({ isLoading, items, onAddItem, searchQuery = '' }: Menu
                             title={`No encontramos "${searchQuery}"`}
                             description="Intenta con otra búsqueda o selecciona una categoría diferente"
                             size="md"
+                        />
+                    ) : !hasCategories ? (
+                        <EmptyState
+                            key="no-config-empty"
+                            icon={Receipt}
+                            title="No hay productos configurados"
+                            description="Primero debes agregar categorías y productos desde el administrador del menú."
+                            size="md"
+                            action={
+                                <Link
+                                    href="/admin/menu"
+                                    className="px-6 py-3 bg-emerald-600 hover:bg-emerald-500 text-white font-medium rounded-xl transition-colors inline-block"
+                                >
+                                    Ir a Configurar Menú
+                                </Link>
+                            }
                         />
                     ) : (
                         <EmptyState

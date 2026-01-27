@@ -704,6 +704,7 @@ export default function POSPage() {
                         isLoading={isLoading}
                         items={menuItems}
                         onAddItem={handleAddItem}
+                        hasCategories={categories.length > 0}
                     />
                 </div>
             </div>

@@ -202,7 +202,11 @@ async def list_orders(
     ).options(selectinload(Order.items))
     
     if status:
-        query = query.where(Order.status == status)
+        status_list = status.split(',')
+        if len(status_list) > 1:
+            query = query.where(Order.status.in_(status_list))
+        else:
+            query = query.where(Order.status == status)
     
     if table_id:
         query = query.where(Order.table_id == table_id)
@@ -303,6 +307,32 @@ async def process_payment(
         table = table_result.scalar_one_or_none()
         if table:
             table.status = TableStatus.FREE
+            
+        # Trigger inventory deduction
+        try:
+            from app.services.inventory_service import process_order_inventory
+            await process_order_inventory(
+                db=db, 
+                order_id=order.id, 
+                user_id=current_user.id,
+                allow_negative_stock=True
+            )
+        except Exception as e:
+            # Don't fail the request if inventory fails, just log it
+            print(f"ERROR: Inventory deduction failed for order {order.id}: {e}")
+        
+        # Award loyalty points if customer is linked
+        if order.customer_id:
+            try:
+                from app.services.loyalty_service import LoyaltyService
+                loyalty = LoyaltyService(db=db, tenant_id=current_user.tenant_id)
+                await loyalty.add_points_from_order(
+                    customer_id=order.customer_id,
+                    order_id=order.id,
+                    amount=float(order.total or 0)
+                )
+            except Exception as e:
+                print(f"WARNING: Loyalty points failed for order {order.id}: {e}")
     
     await db.commit()
     
@@ -492,6 +522,18 @@ async def create_cafeteria_order(
             "is_cafeteria": True,
         }
         await ws_manager.notify_kitchen_new_order(order_notification)
+        
+    # Trigger inventory deduction for cafeteria (IN_PROGRESS)
+    try:
+        from app.services.inventory_service import process_order_inventory
+        await process_order_inventory(
+            db=db, 
+            order_id=order.id, 
+            user_id=current_user.id,
+            allow_negative_stock=True
+        )
+    except Exception as e:
+        print(f"ERROR: Inventory deduction failed for cafeteria order {order.id}: {e}")
     
     return {
         "success": True,
