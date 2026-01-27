@@ -132,7 +132,7 @@ export function MenuGrid({ isLoading, items, onAddItem, searchQuery = '' }: Menu
     return (
         <div className="flex-1 p-4 overflow-y-auto">
             <motion.div
-                className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4"
+                className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4 py-4"
                 variants={containerVariants}
                 initial="hidden"
                 animate="visible"
@@ -150,10 +150,7 @@ export function MenuGrid({ isLoading, items, onAddItem, searchQuery = '' }: Menu
                                 variants={itemVariants}
                                 layout
                                 animate={isAdded ? addedPulse : undefined}
-                                whileHover={{
-                                    y: -4,
-                                    transition: { type: "spring", stiffness: 400, damping: 20 }
-                                }}
+                                whileHover={{ y: -5, scale: 1.02 }}
                                 whileTap={{ scale: 0.95 }}
                                 onClick={() => handleAddItem(item)}
                                 onMouseDown={() => handlePress(item.$id)}
@@ -163,31 +160,25 @@ export function MenuGrid({ isLoading, items, onAddItem, searchQuery = '' }: Menu
                                 onTouchEnd={handleRelease}
                                 className={`
                                     relative group p-3 text-left 
-                                    bg-white/80 dark:bg-gray-800/80 backdrop-blur-sm
-                                    hover:bg-white dark:hover:bg-gray-800 
-                                    rounded-2xl transition-all duration-200 
-                                    shadow-sm hover:shadow-md
-                                    border border-gray-100 dark:border-gray-700
-                                    hover:border-brand-200 dark:hover:border-brand-800
+                                    bg-zinc-900/40 backdrop-blur-md
+                                    hover:bg-zinc-800/60
+                                    rounded-2xl transition-all duration-300
+                                    border border-zinc-800 hover:border-brand-500/30
                                     overflow-hidden
                                     touch-manipulation
-                                    
-                                    /* FAT FINGER OPTIMIZATION */
-                                    min-h-[160px]
-                                    flex flex-col
-                                    
-                                    /* Active/Press State */
-                                    ${isPressed ? 'bg-brand-50 dark:bg-brand-900/30' : ''}
-                                    ${isAdded ? 'ring-2 ring-green-500 bg-green-50 dark:bg-green-900/20' : ''}
+                                    min-h-[200px] flex flex-col
+                                    shadow-sm hover:shadow-xl hover:shadow-brand-500/10
+                                    ${isPressed ? 'bg-zinc-800/80 scale-[0.98]' : ''}
+                                    ${isAdded ? 'ring-2 ring-emerald-500 border-transparent bg-emerald-500/10' : ''}
                                 `}
                             >
                                 {/* Product Image */}
-                                <div className="relative w-full aspect-[4/3] mb-3 rounded-xl overflow-hidden bg-gray-100 dark:bg-gray-700">
+                                <div className="relative w-full aspect-[4/3] mb-4 rounded-xl overflow-hidden bg-zinc-800/50 border border-white/5">
                                     <AnimatePresence mode="wait">
                                         {isAdded ? (
                                             <motion.div
                                                 key="check"
-                                                className="absolute inset-0 z-10 flex items-center justify-center bg-green-500/20 backdrop-blur-sm"
+                                                className="absolute inset-0 z-10 flex items-center justify-center bg-emerald-500/20 backdrop-blur-sm"
                                                 initial={{ opacity: 0 }}
                                                 animate={{ opacity: 1 }}
                                                 exit={{ opacity: 0 }}
@@ -196,9 +187,9 @@ export function MenuGrid({ isLoading, items, onAddItem, searchQuery = '' }: Menu
                                                     initial={{ scale: 0, rotate: -180 }}
                                                     animate={{ scale: 1, rotate: 0 }}
                                                     transition={{ type: "spring", stiffness: 300 }}
-                                                    className="w-12 h-12 bg-white rounded-full flex items-center justify-center shadow-lg"
+                                                    className="w-12 h-12 bg-white rounded-full flex items-center justify-center shadow-lg shadow-emerald-500/20"
                                                 >
-                                                    <Check className="w-6 h-6 text-green-600" strokeWidth={3} />
+                                                    <Check className="w-6 h-6 text-emerald-600" strokeWidth={3} />
                                                 </motion.div>
                                             </motion.div>
                                         ) : null}
@@ -209,68 +200,47 @@ export function MenuGrid({ isLoading, items, onAddItem, searchQuery = '' }: Menu
                                             src={item.image_url!}
                                             alt={item.name}
                                             fill
-                                            className="object-cover transition-transform duration-500 group-hover:scale-105"
+                                            className="object-cover transition-transform duration-700 group-hover:scale-110"
                                             sizes="(max-width: 768px) 50vw, (max-width: 1200px) 33vw, 25vw"
                                         />
                                     ) : (
-                                        <div className="absolute inset-0 flex items-center justify-center text-4xl bg-gradient-to-br from-gray-100 to-gray-200 dark:from-gray-800 dark:to-gray-700">
-                                            {item.image_url || "🥘"}
+                                        <div className="absolute inset-0 flex items-center justify-center bg-gradient-to-br from-zinc-800 to-zinc-900 group-hover:from-zinc-800 group-hover:to-zinc-800 transition-colors">
+                                            <div className="p-4 rounded-full bg-white/5 group-hover:bg-white/10 transition-colors">
+                                                <span className="text-4xl grayscale group-hover:grayscale-0 transition-all duration-300">🥘</span>
+                                            </div>
                                         </div>
                                     )}
+
+                                    {/* Floating Price Tag */}
+                                    <div className="absolute top-2 right-2 px-3 py-1 bg-black/60 backdrop-blur-md rounded-lg border border-white/10">
+                                        <span className="text-white font-bold text-sm">
+                                            {formatPrice(item.price)}
+                                        </span>
+                                    </div>
                                 </div>
 
-                                {/* Product Name */}
-                                <div className="font-semibold text-sm text-gray-900 dark:text-white line-clamp-2 min-h-[40px] text-center">
-                                    {item.name}
-                                </div>
+                                {/* Product Info */}
+                                <div className="flex-1 flex flex-col justify-between">
+                                    <h3 className="font-bold text-base text-zinc-100 leading-tight mb-2 line-clamp-2 group-hover:text-brand-400 transition-colors">
+                                        {item.name}
+                                    </h3>
 
-                                {/* Price */}
-                                <motion.div
-                                    className={`
-                                        text-lg font-bold mt-2 text-center transition-colors
-                                        ${isAdded ? 'text-green-600 dark:text-green-400' : 'text-brand-600 dark:text-brand-400'}
-                                    `}
-                                    animate={isAdded ? { scale: [1, 1.15, 1] } : undefined}
-                                    transition={{ duration: 0.3 }}
-                                >
-                                    {formatPrice(item.price)}
-                                </motion.div>
+                                    {/* Action Bar */}
+                                    <div className="mt-2 flex items-center justify-between">
+                                        <span className="text-xs font-medium text-zinc-500">
+                                            {item.modifier_groups?.length ? "Personalizable" : "Directo"}
+                                        </span>
 
-                                {/* "Add" Indicator - Always visible on touch devices */}
-                                <div className={`
-                                    mt-2 flex items-center justify-center gap-1 
-                                    text-xs font-medium
-                                    transition-all duration-200
-                                    ${isAdded
-                                        ? 'text-green-600 dark:text-green-400 opacity-100'
-                                        : 'text-brand-600 dark:text-brand-400 opacity-70 group-hover:opacity-100'
-                                    }
-                                `}>
-                                    <AnimatePresence mode="wait">
-                                        {isAdded ? (
-                                            <motion.div
-                                                key="added"
-                                                initial={{ opacity: 0, y: 10 }}
-                                                animate={{ opacity: 1, y: 0 }}
-                                                exit={{ opacity: 0, y: -10 }}
-                                                className="flex items-center gap-1"
-                                            >
-                                                <Check className="w-3 h-3" />
-                                                <span>Agregado</span>
-                                            </motion.div>
-                                        ) : (
-                                            <motion.div
-                                                key="add"
-                                                initial={{ opacity: 0, y: 10 }}
-                                                animate={{ opacity: 1, y: 0 }}
-                                                exit={{ opacity: 0, y: -10 }}
-                                                className="flex items-center gap-1"
-                                            >
-                                                <Plus className="w-3 h-3" />
-                                                <span>Agregar</span>
-                                            </motion.div>
-                                        )}
-                                    </AnimatePresence>
+                                        <div className={`
+                                            w-8 h-8 rounded-full flex items-center justify-center transition-all duration-300
+                                            ${isAdded
+                                                ? 'bg-emerald-500 text-white'
+                                                : 'bg-zinc-800 text-zinc-400 group-hover:bg-brand-500 group-hover:text-white'
+                                            }
+                                        `}>
+                                            <Plus className={`w-5 h-5 transition-transform duration-300 ${isAdded ? 'rotate-45' : ''}`} />
+                                        </div>
+                                    </div>
                                 </div>
 
                                 {/* Ripple Effect */}
@@ -282,12 +252,7 @@ export function MenuGrid({ isLoading, items, onAddItem, searchQuery = '' }: Menu
                                             animate={{ opacity: 1 }}
                                             exit={{ opacity: 0 }}
                                         >
-                                            <motion.div
-                                                className="absolute inset-0 bg-brand-500/10 rounded-2xl"
-                                                initial={{ scale: 0.8 }}
-                                                animate={{ scale: 1 }}
-                                                transition={{ duration: 0.15 }}
-                                            />
+                                            <div className="absolute inset-0 bg-brand-500/10" />
                                         </motion.div>
                                     )}
                                 </AnimatePresence>

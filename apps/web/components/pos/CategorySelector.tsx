@@ -64,9 +64,9 @@ export function CategorySelector({
     }
 
     return (
-        <div className="sticky top-[72px] z-10 py-2 bg-gray-50/95 dark:bg-black/95 backdrop-blur-sm supports-[backdrop-filter]:bg-gray-50/80 dark:supports-[backdrop-filter]:bg-black/80">
+        <div className="sticky top-[72px] z-10 py-3 bg-zinc-950/80 backdrop-blur-md border-b border-zinc-800/50">
             <motion.div
-                className="flex gap-3 px-4 overflow-x-auto scrollbar-hide items-center h-16"
+                className="flex gap-3 px-4 overflow-x-auto scrollbar-hide items-center h-14"
                 style={{
                     WebkitOverflowScrolling: 'touch',
                     scrollSnapType: 'x proximity'
@@ -83,20 +83,18 @@ export function CategorySelector({
                             key={cat.$id}
                             variants={buttonVariants}
                             onClick={() => onSelectCategory(cat.$id)}
-                            whileHover={{ scale: 1.03 }}
-                            whileTap={{ scale: 0.97 }}
+                            whileHover={{ scale: 1.05 }}
+                            whileTap={{ scale: 0.95 }}
                             className={cn(
-                                // Base styles - FAT FINGER FRIENDLY
-                                "relative flex items-center gap-2 px-6 py-2.5 rounded-full transition-all duration-200",
-                                "min-h-[44px]",
-                                "select-none outline-none focus-visible:ring-2 focus-visible:ring-gray-400",
+                                // Base styles
+                                "relative flex items-center gap-2 px-5 py-2.5 rounded-full transition-all duration-300",
+                                "min-h-[40px] border",
+                                "select-none outline-none",
 
-                                // Non-selected state
-                                !isSelected && [
-                                    "bg-gray-100 dark:bg-gray-800",
-                                    "hover:bg-gray-200 dark:hover:bg-gray-700",
-                                    "active:scale-95"
-                                ]
+                                // Selected state
+                                isSelected
+                                    ? "border-brand-500/50 text-white shadow-[0_0_15px_rgba(234,88,12,0.3)]"
+                                    : "bg-zinc-900/50 border-zinc-800 text-zinc-400 hover:bg-zinc-800 hover:border-zinc-700 hover:text-white"
                             )}
                             style={{ scrollSnapAlign: 'start' }}
                         >
@@ -104,11 +102,7 @@ export function CategorySelector({
                             {isSelected && (
                                 <motion.div
                                     layoutId="category-pill"
-                                    className={cn(
-                                        "absolute inset-0 rounded-full",
-                                        "bg-gray-900 dark:bg-white",
-                                        "shadow-sm"
-                                    )}
+                                    className="absolute inset-0 rounded-full bg-gradient-to-r from-brand-600 to-brand-500"
                                     initial={false}
                                     transition={{
                                         type: "spring",
@@ -119,22 +113,16 @@ export function CategorySelector({
                             )}
 
                             {/* Content (above background) */}
-                            <span className={cn(
-                                "relative z-10 flex items-center gap-2",
-                                isSelected ? "text-white dark:text-gray-900" : "text-gray-600 dark:text-gray-400"
-                            )}>
+                            <span className="relative z-10 flex items-center gap-2">
                                 {/* Optional Category Icon/Emoji */}
                                 {(cat as any).icon && (
-                                    <span className="text-lg">
+                                    <span className="text-lg leading-none">
                                         {(cat as any).icon}
                                     </span>
                                 )}
 
                                 {/* Category Name */}
-                                <span className={cn(
-                                    "text-sm font-semibold tracking-wide",
-                                    "whitespace-nowrap"
-                                )}>
+                                <span className="text-sm font-bold tracking-wide whitespace-nowrap">
                                     {cat.name}
                                 </span>
                             </span>
