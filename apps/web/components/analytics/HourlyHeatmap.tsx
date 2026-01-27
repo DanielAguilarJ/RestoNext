@@ -24,7 +24,7 @@ export function HourlyHeatmap({ data, loading }: HourlyHeatmapProps) {
         );
     }
 
-    if (!data || data.data.length === 0) {
+    if (!data || !Array.isArray(data.data) || data.data.length === 0) {
         return (
             <div className="w-full h-64 flex items-center justify-center text-gray-500">
                 No hay datos disponibles para mostrar
@@ -34,7 +34,8 @@ export function HourlyHeatmap({ data, loading }: HourlyHeatmapProps) {
 
     // Create a grid map for quick lookup
     const salesMap = new Map<string, { sales: number; count: number }>();
-    data.data.forEach((item) => {
+    (data.data || []).forEach((item) => {
+        if (!item) return;
         const key = `${item.day_of_week}-${item.hour}`;
         salesMap.set(key, { sales: item.total_sales, count: item.order_count });
     });

@@ -29,7 +29,7 @@ export function CategoryPieChart({ data, loading }: CategoryPieChartProps) {
         );
     }
 
-    if (!data || data.categories.length === 0) {
+    if (!data || !Array.isArray(data.categories) || data.categories.length === 0) {
         return (
             <div className="w-full h-80 flex items-center justify-center text-gray-500">
                 No hay datos disponibles para mostrar
@@ -38,11 +38,11 @@ export function CategoryPieChart({ data, loading }: CategoryPieChartProps) {
     }
 
     // Transform data for chart
-    const chartData = data.categories.map((category) => ({
-        name: category.category_name,
-        value: category.total_sales,
-        percentage: category.percentage,
-        color: category.color,
+    const chartData = (data.categories || []).map((category) => ({
+        name: category?.category_name || 'Desconocido',
+        value: category?.total_sales || 0,
+        percentage: category?.percentage || 0,
+        color: category?.color || '#999',
     }));
 
     // Custom tooltip

@@ -29,7 +29,7 @@ export function TopDishesTable({ data, loading }: TopDishesTableProps) {
         );
     }
 
-    if (!data || data.dishes.length === 0) {
+    if (!data || !Array.isArray(data.dishes) || data.dishes.length === 0) {
         return (
             <div className="w-full h-64 flex items-center justify-center text-gray-500">
                 No hay datos disponibles para mostrar
@@ -38,9 +38,9 @@ export function TopDishesTable({ data, loading }: TopDishesTableProps) {
     }
 
     // Sort dishes
-    const sortedDishes = [...data.dishes].sort((a, b) => {
-        const aVal = a[sortKey];
-        const bVal = b[sortKey];
+    const sortedDishes = [...(data.dishes || [])].sort((a, b) => {
+        const aVal = a?.[sortKey] || 0;
+        const bVal = b?.[sortKey] || 0;
         const modifier = sortOrder === "asc" ? 1 : -1;
         return (aVal - bVal) * modifier;
     });

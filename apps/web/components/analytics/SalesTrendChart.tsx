@@ -31,7 +31,7 @@ export function SalesTrendChart({ data, loading }: SalesTrendChartProps) {
         );
     }
 
-    if (!data || data.current_week.length === 0) {
+    if (!data || !Array.isArray(data.current_week) || data.current_week.length === 0) {
         return (
             <div className="w-full h-80 flex items-center justify-center text-gray-500">
                 No hay datos disponibles para mostrar
@@ -40,11 +40,14 @@ export function SalesTrendChart({ data, loading }: SalesTrendChartProps) {
     }
 
     // Merge current and previous week data for chart
-    const chartData = data.current_week.map((current, index) => ({
-        day: current.day_name,
-        current: current.total_sales,
-        previous: data.previous_week[index]?.total_sales || 0,
-    }));
+    const chartData = (data.current_week || []).map((current, index) => {
+        const prevWeek = Array.isArray(data.previous_week) ? data.previous_week : [];
+        return {
+            day: current?.day_name || '',
+            current: current?.total_sales || 0,
+            previous: prevWeek[index]?.total_sales || 0,
+        };
+    });
 
     // Custom tooltip
     const CustomTooltip = ({ active, payload, label }: any) => {
