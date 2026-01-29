@@ -64,7 +64,7 @@ export function CategorySelector({
     }
 
     return (
-        <div className="sticky top-[72px] z-10 py-3 bg-zinc-950/80 backdrop-blur-md border-b border-zinc-800/50">
+        <div className="sticky top-0 z-20 py-3 bg-zinc-950/70 backdrop-blur-xl border-b border-white/5">
             <motion.div
                 className="flex gap-3 px-4 overflow-x-auto scrollbar-hide items-center h-14"
                 style={{
@@ -87,14 +87,14 @@ export function CategorySelector({
                             whileTap={{ scale: 0.95 }}
                             className={cn(
                                 // Base styles
-                                "relative flex items-center gap-2 px-5 py-2.5 rounded-full transition-all duration-300",
-                                "min-h-[40px] border",
-                                "select-none outline-none",
+                                "relative flex items-center gap-2 px-5 py-3 rounded-xl transition-all duration-300",
+                                "min-h-[48px] border backdrop-blur-md",
+                                "select-none outline-none focus:ring-2 focus:ring-brand-500/50 focus:ring-offset-2 focus:ring-offset-zinc-950",
 
                                 // Selected state
                                 isSelected
-                                    ? "border-brand-500/50 text-white shadow-[0_0_15px_rgba(234,88,12,0.3)]"
-                                    : "bg-zinc-900/50 border-zinc-800 text-zinc-400 hover:bg-zinc-800 hover:border-zinc-700 hover:text-white"
+                                    ? "border-brand-500/30 text-white shadow-lg shadow-brand-500/20"
+                                    : "bg-white/5 border-white/5 text-zinc-400 hover:bg-white/10 hover:border-white/10 hover:text-white"
                             )}
                             style={{ scrollSnapAlign: 'start' }}
                         >
@@ -102,7 +102,7 @@ export function CategorySelector({
                             {isSelected && (
                                 <motion.div
                                     layoutId="category-pill"
-                                    className="absolute inset-0 rounded-full bg-gradient-to-r from-brand-600 to-brand-500"
+                                    className="absolute inset-0 rounded-xl bg-gradient-to-r from-brand-600/90 to-brand-500/90 border border-brand-400/50"
                                     initial={false}
                                     transition={{
                                         type: "spring",

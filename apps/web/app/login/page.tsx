@@ -1,223 +1,255 @@
 "use client";
 
 /**
- * Login Page
- * Authentication with Appwrite - Premium UI
+ * Login Page 2.0
+ * Super Professional Auth with Glass UI & Zod Validation
  */
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
-import { UtensilsCrossed, Mail, Lock, Loader2, ArrowLeft, Sparkles } from "lucide-react";
+import { UtensilsCrossed, Mail, Lock, Loader2, ArrowLeft, Sparkles, CheckCircle, AlertCircle } from "lucide-react";
 import Link from "next/link";
 import { authApi } from "@/lib/api";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import * as z from "zod";
+import { GlassInput } from "@/components/ui/GlassInput";
+import { motion, AnimatePresence } from "framer-motion";
+import { cn } from "@/lib/utils";
+
+// Schema Validation
+const loginSchema = z.object({
+    email: z.string().min(1, "El correo es requerido").email("Correo electrónico inválido"),
+    password: z.string().min(6, "La contraseña debe tener al menos 6 caracteres")
+});
+
+type LoginFormData = z.infer<typeof loginSchema>;
 
 function LoginForm() {
     const searchParams = useSearchParams();
-    const [email, setEmail] = useState("");
-    const [password, setPassword] = useState("");
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    const [success, setSuccess] = useState(false);
 
-    // Auto-fill demo credentials if ?demo=true
+    const {
+        register,
+        handleSubmit,
+        setValue,
+        formState: { errors }
+    } = useForm<LoginFormData>({
+        resolver: zodResolver(loginSchema),
+        defaultValues: {
+            email: "",
+            password: ""
+        }
+    });
+
+    // Auto-fill demo credentials
     useEffect(() => {
         if (searchParams.get("demo") === "true") {
-            setEmail("admin@restonext.com");
-            setPassword("password123");
+            setValue("email", "admin@restonext.com");
+            setValue("password", "password123");
         }
-    }, [searchParams]);
+    }, [searchParams, setValue]);
 
-    const handleSubmit = async (e: React.FormEvent) => {
-        e.preventDefault();
+    const onSubmit = async (data: LoginFormData) => {
         setIsLoading(true);
         setError(null);
 
         try {
-            await authApi.login(email, password);
-            // Respect redirect param, default to dashboard
-            const redirectTo = searchParams.get('redirect') || '/dashboard';
-            // Use window.location.href instead of router.push() 
-            // This ensures the newly-set cookie is sent with the request
-            // router.push() uses client-side navigation which may not include cookies in Edge middleware
-            window.location.href = redirectTo;
+            await authApi.login(data.email, data.password);
+            setSuccess(true);
+
+            // Artificial delay for success animation
+            setTimeout(() => {
+                const redirectTo = searchParams.get('redirect') || '/dashboard';
+                window.location.href = redirectTo;
+            }, 800);
         } catch (err: any) {
-            // Robust error message extraction
-            let errorMessage = "Error al iniciar sesión. Verifica tus credenciales.";
-
-            if (err?.message) {
-                errorMessage = typeof err.message === 'string'
-                    ? err.message
-                    : JSON.stringify(err.message);
-            } else if (err?.response?.data?.detail) {
-                const detail = err.response.data.detail;
-                errorMessage = typeof detail === 'string'
-                    ? detail
-                    : JSON.stringify(detail);
+            let errorMessage = "Credenciales incorrectas. Inténtalo de nuevo.";
+            if (err?.response?.data?.detail) {
+                errorMessage = typeof err.response.data.detail === 'string'
+                    ? err.response.data.detail
+                    : JSON.stringify(err.response.data.detail);
             }
-
             setError(errorMessage);
-        } finally {
             setIsLoading(false);
         }
     };
 
-    return (
-        <div className="min-h-screen bg-mesh relative overflow-hidden flex items-center justify-center p-4">
-            {/* Animated Background Elements */}
-            <div className="orb orb-brand w-80 h-80 -top-32 -right-32 animate-float" />
-            <div className="orb orb-blue w-64 h-64 bottom-1/4 -left-32 animate-float-delayed" />
-            <div className="orb orb-purple w-48 h-48 top-1/3 -right-24 animate-float" style={{ animationDelay: '2s' }} />
+    // Particles/Orbs for background
+    const PageBackground = () => (
+        <div className="fixed inset-0 z-0 pointer-events-none">
+            {/* Deep Base */}
+            <div className="absolute inset-0 bg-zinc-950" />
 
-            {/* Floating Shapes */}
-            <div className="absolute inset-0 overflow-hidden pointer-events-none">
-                <div className="absolute top-20 left-10 w-4 h-4 bg-brand-400 rounded-full animate-bounce-soft opacity-60" />
-                <div className="absolute top-40 right-20 w-3 h-3 bg-blue-400 rounded-full animate-bounce-soft opacity-60" style={{ animationDelay: '0.5s' }} />
-                <div className="absolute bottom-32 left-1/4 w-5 h-5 bg-purple-400 rounded-full animate-bounce-soft opacity-60" style={{ animationDelay: '1s' }} />
-                <div className="absolute top-1/2 right-1/4 w-3 h-3 bg-green-400 rounded-full animate-bounce-soft opacity-60" style={{ animationDelay: '1.5s' }} />
-            </div>
+            {/* Animated Mesh Gradients */}
+            <div className="absolute top-[-20%] left-[-10%] w-[70%] h-[70%] bg-purple-900/20 rounded-full blur-[120px] animate-blob" />
+            <div className="absolute bottom-[-20%] right-[-10%] w-[70%] h-[70%] bg-indigo-900/20 rounded-full blur-[120px] animate-blob animation-delay-2000" />
+            <div className="absolute top-[30%] left-[20%] w-[60%] h-[60%] bg-brand-900/10 rounded-full blur-[100px] animate-blob animation-delay-4000" />
+
+            {/* Grid Overlay */}
+            <div className="absolute inset-0 bg-[url('/grid.svg')] bg-center [mask-image:linear-gradient(180deg,white,rgba(255,255,255,0))]" />
+            <div className="absolute inset-0 bg-grid-white/[0.02] bg-[size:32px_32px]" />
+        </div>
+    );
+
+    return (
+        <div className="min-h-screen relative flex items-center justify-center p-4 font-sans overflow-hidden">
+            <PageBackground />
 
             {/* Back Button */}
             <Link
                 href="/"
-                className="absolute top-6 left-6 p-3 glass rounded-xl text-gray-600 dark:text-gray-300 hover:text-brand-600 transition-all duration-300 hover:scale-105 z-20"
+                className="absolute top-6 left-6 p-3 glass-dark rounded-xl text-zinc-400 hover:text-white border border-white/5 hover:border-white/20 transition-all duration-300 hover:scale-105 z-20 group"
             >
-                <ArrowLeft className="w-6 h-6" />
+                <ArrowLeft className="w-6 h-6 group-hover:-translate-x-1 transition-transform" />
             </Link>
 
-            <div className="w-full max-w-md relative z-10 animate-scale-in">
-                {/* Logo */}
-                <div className="text-center mb-8">
-                    <div className="inline-flex items-center justify-center w-20 h-20 bg-gradient-to-br from-brand-500 to-brand-700 rounded-3xl shadow-2xl shadow-brand-500/40 mb-6 animate-pulse-glow">
-                        <UtensilsCrossed className="w-10 h-10 text-white" />
-                    </div>
-                    <h1 className="text-3xl font-bold text-gray-900 dark:text-white flex items-center justify-center gap-2">
-                        RestoNext MX
-                        <Sparkles className="w-6 h-6 text-brand-500" />
+            <motion.div
+                initial={{ opacity: 0, scale: 0.95, y: 20 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                transition={{ duration: 0.5, ease: "easeOut" }}
+                className="w-full max-w-md relative z-10"
+            >
+                {/* Logo Section */}
+                <div className="text-center mb-8 relative">
+                    <motion.div
+                        initial={{ y: -20, opacity: 0 }}
+                        animate={{ y: 0, opacity: 1 }}
+                        transition={{ delay: 0.2 }}
+                        className="inline-flex items-center justify-center w-24 h-24 bg-gradient-to-br from-brand-600 to-brand-800 rounded-3xl shadow-[0_0_40px_-10px_rgba(234,88,12,0.5)] mb-6 relative group"
+                    >
+                        <div className="absolute inset-0 bg-brand-500 blur-xl opacity-20 group-hover:opacity-40 transition-opacity duration-500" />
+                        <UtensilsCrossed className="w-12 h-12 text-white relative z-10" />
+                    </motion.div>
+                    <h1 className="text-4xl font-bold text-white flex items-center justify-center gap-2 mb-2 tracking-tight">
+                        RestoNext
+                        <span className="text-brand-500">MX</span>
                     </h1>
-                    <p className="text-gray-500 dark:text-gray-400 mt-2">
-                        Sistema de Gestión para Restaurantes
+                    <p className="text-zinc-400 text-sm font-medium tracking-wide uppercase opacity-80">
+                        Professional Restaurant OS
                     </p>
                 </div>
 
-                {/* Login Form Card */}
-                <div className="glass rounded-3xl shadow-2xl p-8 border border-white/30">
-                    <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-6 flex items-center gap-2">
-                        Iniciar Sesión
-                        <span className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
-                    </h2>
+                {/* Login Card */}
+                <div className="bg-zinc-950/50 backdrop-blur-2xl border border-white/10 rounded-3xl shadow-2xl p-8 relative overflow-hidden group">
+                    {/* Gloss Effect */}
+                    <div className="absolute top-0 left-0 w-full h-[1px] bg-gradient-to-r from-transparent via-white/20 to-transparent opacity-50" />
 
-                    {error && (
-                        <div className="mb-4 p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-xl text-red-600 dark:text-red-400 text-sm animate-slide-up">
-                            {error}
-                        </div>
-                    )}
+                    <div className="mb-8">
+                        <h2 className="text-xl font-bold text-white mb-1 flex items-center gap-2">
+                            Bienvenido de nuevo
+                            <span className="flex h-2 w-2 relative">
+                                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                                <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                            </span>
+                        </h2>
+                        <p className="text-zinc-400 text-sm">
+                            Ingresa tus credenciales para acceder al panel.
+                        </p>
+                    </div>
 
-                    <form onSubmit={handleSubmit} className="space-y-5">
-                        {/* Email */}
-                        <div className="animate-slide-up" style={{ animationDelay: '0.1s' }}>
-                            <label htmlFor="email" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                                Correo electrónico
-                            </label>
-                            <div className="relative group">
-                                <Mail className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400 group-focus-within:text-brand-500 transition-colors" />
-                                <input
-                                    id="email"
-                                    type="email"
-                                    value={email}
-                                    onChange={(e) => setEmail(e.target.value)}
-                                    required
-                                    className="w-full pl-12 pr-4 py-4 bg-white/50 dark:bg-gray-800/50 border-2 border-gray-200 dark:border-gray-700 rounded-xl
-                                             focus:ring-4 focus:ring-brand-500/20 focus:border-brand-500 outline-none transition-all duration-300
-                                             text-gray-900 dark:text-white placeholder-gray-400
-                                             hover:border-gray-300 dark:hover:border-gray-600"
-                                    placeholder="ejemplo@restaurante.com"
-                                />
-                            </div>
-                        </div>
-
-                        {/* Password */}
-                        <div className="animate-slide-up" style={{ animationDelay: '0.2s' }}>
-                            <label htmlFor="password" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                                Contraseña
-                            </label>
-                            <div className="relative group">
-                                <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400 group-focus-within:text-brand-500 transition-colors" />
-                                <input
-                                    id="password"
-                                    type="password"
-                                    value={password}
-                                    onChange={(e) => setPassword(e.target.value)}
-                                    required
-                                    className="w-full pl-12 pr-4 py-4 bg-white/50 dark:bg-gray-800/50 border-2 border-gray-200 dark:border-gray-700 rounded-xl
-                                             focus:ring-4 focus:ring-brand-500/20 focus:border-brand-500 outline-none transition-all duration-300
-                                             text-gray-900 dark:text-white placeholder-gray-400
-                                             hover:border-gray-300 dark:hover:border-gray-600"
-                                    placeholder="••••••••"
-                                />
-                            </div>
-                        </div>
-
-                        {/* Submit Button */}
-                        <button
-                            type="submit"
-                            disabled={isLoading}
-                            className="w-full py-4 bg-gradient-to-r from-brand-600 to-brand-700 hover:from-brand-700 hover:to-brand-800 
-                                     disabled:from-brand-400 disabled:to-brand-500 disabled:cursor-not-allowed
-                                     text-white font-bold rounded-xl transition-all duration-300
-                                     flex items-center justify-center gap-2
-                                     shadow-lg shadow-brand-500/30 hover:shadow-xl hover:shadow-brand-500/40
-                                     hover:-translate-y-0.5 active:translate-y-0 active:scale-[0.98]
-                                     animate-slide-up relative overflow-hidden group"
-                            style={{ animationDelay: '0.3s' }}
-                        >
-                            {/* Shimmer effect */}
-                            <span className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-1000" />
-
-                            {isLoading ? (
-                                <>
-                                    <Loader2 className="w-5 h-5 animate-spin" />
-                                    Iniciando sesión...
-                                </>
-                            ) : (
-                                "Iniciar Sesión"
+                    <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
+                        <AnimatePresence mode="wait">
+                            {error && (
+                                <motion.div
+                                    initial={{ opacity: 0, height: 0 }}
+                                    animate={{ opacity: 1, height: "auto" }}
+                                    exit={{ opacity: 0, height: 0 }}
+                                    className="bg-red-500/10 border border-red-500/20 rounded-xl p-4 flex items-start gap-3"
+                                >
+                                    <AlertCircle className="w-5 h-5 text-red-500 shrink-0 mt-0.5" />
+                                    <p className="text-sm text-red-400 font-medium leading-tight">{error}</p>
+                                </motion.div>
                             )}
-                        </button>
+                        </AnimatePresence>
+
+                        <div className="space-y-4">
+                            <GlassInput
+                                icon={Mail}
+                                placeholder="ejemplo@restaurante.com"
+                                type="email"
+                                label="Correo Electrónico"
+                                error={errors.email?.message}
+                                {...register("email")}
+                            />
+
+                            <GlassInput
+                                icon={Lock}
+                                placeholder="••••••••"
+                                type="password"
+                                label="Contraseña"
+                                error={errors.password?.message}
+                                {...register("password")}
+                            />
+                        </div>
+
+                        <motion.button
+                            type="submit"
+                            disabled={isLoading || success}
+                            className={cn(
+                                "w-full py-4 rounded-xl font-bold text-white relative overflow-hidden transition-all duration-300",
+                                success
+                                    ? "bg-emerald-500 hover:bg-emerald-600"
+                                    : "bg-gradient-to-r from-brand-600 to-brand-700 hover:from-brand-500 hover:to-brand-600 shadow-lg shadow-brand-900/20"
+                            )}
+                            whileHover={!isLoading && !success ? { scale: 1.02, y: -1 } : {}}
+                            whileTap={!isLoading && !success ? { scale: 0.98 } : {}}
+                        >
+                            <span className="relative z-10 flex items-center justify-center gap-2">
+                                {isLoading ? (
+                                    <>
+                                        <Loader2 className="w-5 h-5 animate-spin" />
+                                        <span>Autenticando...</span>
+                                    </>
+                                ) : success ? (
+                                    <>
+                                        <CheckCircle className="w-5 h-5 animate-bounce-soft" />
+                                        <span>¡Acceso Concedido!</span>
+                                    </>
+                                ) : (
+                                    <>
+                                        <span>Iniciar Sesión</span>
+                                        <Sparkles className="w-4 h-4 opacity-50" />
+                                    </>
+                                )}
+                            </span>
+
+                            {/* Loading Progress Bar */}
+                            {isLoading && (
+                                <div className="absolute bottom-0 left-0 h-1 bg-white/30 animate-loader w-full" />
+                            )}
+                        </motion.button>
                     </form>
 
-                    {/* Demo Credentials */}
-                    <div className="mt-6 pt-6 border-t border-gray-200/50 dark:border-gray-700/50 animate-slide-up" style={{ animationDelay: '0.4s' }}>
-                        <div className="glass-subtle rounded-xl p-4 text-center">
-                            <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">
-                                Credenciales de demostración
-                            </p>
-                            <div className="flex items-center justify-center gap-4 text-sm">
-                                <code className="px-2 py-1 bg-gray-100 dark:bg-gray-800 rounded text-gray-700 dark:text-gray-300">
-                                    admin@restonext.com
-                                </code>
-                                <code className="px-2 py-1 bg-gray-100 dark:bg-gray-800 rounded text-gray-700 dark:text-gray-300">
-                                    password123
-                                </code>
-                            </div>
-                        </div>
+                    {/* Footer Links */}
+                    <div className="mt-8 pt-6 border-t border-white/5 text-center">
+                        <p className="text-xs text-zinc-500">
+                            ¿Problemas para acceder?{" "}
+                            <a href="#" className="text-brand-400 hover:text-brand-300 transition-colors">
+                                Contactar soporte
+                            </a>
+                        </p>
                     </div>
                 </div>
 
-                {/* Footer */}
-                <p className="text-center text-sm text-gray-500 dark:text-gray-400 mt-8 animate-fade-in" style={{ animationDelay: '0.5s' }}>
-                    RestoNext MX © 2024 • Hecho para México 🇲🇽
+                <p className="text-center text-xs text-zinc-600 mt-8 font-medium">
+                    RestoNext MX © 2024 • Professional POS System
                 </p>
-            </div>
+            </motion.div>
         </div>
     );
 }
 
-// Suspense Boundary wrapper due to useSearchParams
-import { Suspense } from "react";
-
 export default function LoginPage() {
     return (
-        <Suspense fallback={<div className="min-h-screen flex items-center justify-center"><Loader2 className="w-10 h-10 animate-spin text-brand-500" /></div>}>
+        <Suspense fallback={
+            <div className="min-h-screen bg-zinc-950 flex items-center justify-center">
+                <Loader2 className="w-10 h-10 animate-spin text-brand-500" />
+            </div>
+        }>
             <LoginForm />
         </Suspense>
     );
 }
-

@@ -100,58 +100,58 @@ export function TableMap({ onTableSelect, autoRefresh = true, pendingTables = ne
         switch (status) {
             case "free":
                 return {
-                    container: "bg-gradient-to-br from-green-50 to-green-100 dark:from-green-900/30 dark:to-green-800/30 border-green-400 hover:border-green-500 shadow-green-500/20",
-                    icon: "text-green-600",
-                    text: "text-green-700 dark:text-green-400",
-                    badge: "bg-gradient-to-r from-green-500 to-emerald-500 text-white",
-                    glow: "",
+                    container: "bg-white/10 backdrop-blur-md border-white/20 shadow-lg shadow-black/5 hover:bg-white/15 hover:border-emerald-500/50 hover:shadow-emerald-500/20",
+                    icon: "text-emerald-400",
+                    text: "text-white font-medium",
+                    badge: "bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 backdrop-blur-md",
+                    glow: "after:absolute after:inset-0 after:rounded-2xl after:shadow-[0_0_30px_rgba(16,185,129,0.1)] after:pointer-events-none",
                 };
             case "occupied":
                 return {
-                    container: "bg-gradient-to-br from-red-50 to-red-100 dark:from-red-900/30 dark:to-red-800/30 border-red-400 hover:border-red-500 shadow-red-500/20",
-                    icon: "text-red-600",
-                    text: "text-red-700 dark:text-red-400",
-                    badge: "bg-gradient-to-r from-red-500 to-rose-500 text-white",
-                    glow: "",
+                    container: "bg-red-500/10 backdrop-blur-md border-red-500/30 shadow-lg shadow-red-900/20 hover:bg-red-500/20 hover:border-red-500/50",
+                    icon: "text-red-400",
+                    text: "text-red-100 font-medium",
+                    badge: "bg-red-500/20 text-red-300 border border-red-500/30 backdrop-blur-md",
+                    glow: "after:absolute after:inset-0 after:rounded-2xl after:shadow-[0_0_30px_rgba(239,68,68,0.2)] after:pointer-events-none",
                 };
             case "bill_requested":
                 return {
-                    container: "bg-gradient-to-br from-yellow-50 to-amber-100 dark:from-yellow-900/40 dark:to-amber-800/40 border-yellow-400 hover:border-yellow-500 shadow-yellow-500/30 animate-pulse-soft",
-                    icon: "text-yellow-600",
-                    text: "text-yellow-700 dark:text-yellow-400",
-                    badge: "bg-gradient-to-r from-yellow-500 to-amber-500 text-white animate-bounce-soft",
-                    glow: "ring-4 ring-yellow-400/50 ring-offset-2",
+                    container: "bg-amber-500/10 backdrop-blur-md border-amber-500/40 shadow-lg shadow-amber-900/20 animate-pulse-slow ring-1 ring-amber-500/30",
+                    icon: "text-amber-400",
+                    text: "text-amber-100 font-bold",
+                    badge: "bg-amber-500 text-black border border-amber-400 font-bold animate-bounce-soft shadow-lg shadow-amber-500/50",
+                    glow: "after:absolute after:inset-0 after:rounded-2xl after:shadow-[0_0_50px_rgba(245,158,11,0.3)] after:pointer-events-none ring-2 ring-amber-500/50 ring-offset-2 ring-offset-black/50",
                 };
             case "service_requested":
                 return {
-                    container: "bg-gradient-to-br from-blue-50 to-sky-100 dark:from-blue-900/40 dark:to-sky-800/40 border-blue-400 hover:border-blue-500 shadow-blue-500/30 animate-pulse-soft",
-                    icon: "text-blue-600",
-                    text: "text-blue-700 dark:text-blue-400",
-                    badge: "bg-gradient-to-r from-blue-500 to-sky-500 text-white animate-bounce-soft",
-                    glow: "ring-4 ring-blue-400/50 ring-offset-2",
+                    container: "bg-blue-500/10 backdrop-blur-md border-blue-500/40 shadow-lg shadow-blue-900/20 animate-pulse-slow ring-1 ring-blue-500/30",
+                    icon: "text-blue-400",
+                    text: "text-blue-100 font-bold",
+                    badge: "bg-blue-500 text-white border border-blue-400 font-bold animate-bounce-soft shadow-lg shadow-blue-500/50",
+                    glow: "after:absolute after:inset-0 after:rounded-2xl after:shadow-[0_0_50px_rgba(59,130,246,0.3)] after:pointer-events-none ring-2 ring-blue-500/50 ring-offset-2 ring-offset-black/50",
                 };
             case "reserved":
                 return {
-                    container: "bg-gradient-to-br from-purple-50 to-violet-100 dark:from-purple-900/30 dark:to-violet-800/30 border-purple-400 hover:border-purple-500 shadow-purple-500/20",
-                    icon: "text-purple-600",
-                    text: "text-purple-700 dark:text-purple-400",
-                    badge: "bg-gradient-to-r from-purple-500 to-violet-500 text-white",
+                    container: "bg-violet-500/5 backdrop-blur-md border-violet-500/20 shadow-lg shadow-black/10 grayscale-[0.5]",
+                    icon: "text-violet-400",
+                    text: "text-violet-200/70",
+                    badge: "bg-violet-500/20 text-violet-300 border border-violet-500/30",
                     glow: "",
                 };
             case "pending_sync":
                 return {
-                    container: "bg-gradient-to-br from-orange-50 to-amber-100 dark:from-orange-900/40 dark:to-amber-800/40 border-orange-400 hover:border-orange-500 shadow-orange-500/30 animate-pulse-soft",
-                    icon: "text-orange-600",
-                    text: "text-orange-700 dark:text-orange-400",
-                    badge: "bg-gradient-to-r from-orange-500 to-amber-500 text-white",
-                    glow: "ring-4 ring-orange-400/50 ring-offset-2",
+                    container: "bg-orange-500/10 backdrop-blur-md border-orange-500/30 border-dashed",
+                    icon: "text-orange-400",
+                    text: "text-orange-200",
+                    badge: "bg-orange-500/20 text-orange-300 border border-orange-500/30",
+                    glow: "",
                 };
             default:
                 return {
-                    container: "bg-gray-50 border-gray-300",
-                    icon: "text-gray-400",
-                    text: "text-gray-500",
-                    badge: "bg-gray-500 text-white",
+                    container: "bg-white/5 backdrop-blur-sm border-white/10",
+                    icon: "text-zinc-500",
+                    text: "text-zinc-500",
+                    badge: "bg-zinc-500/20 text-zinc-500",
                     glow: "",
                 };
         }

@@ -1543,6 +1543,13 @@ export const tenantApi = {
     },
 
     /**
+     * Get the publicly visible profile for the current tenant
+     */
+    get_current_tenant_profile: async (): Promise<any> => {
+        return apiRequest<any>('/tenant/me');
+    },
+
+    /**
      * Check if current tenant has access to a feature
      */
     hasFeature: async (feature: string): Promise<boolean> => {

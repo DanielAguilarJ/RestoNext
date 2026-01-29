@@ -180,20 +180,20 @@ export function MenuGrid({ isLoading, items, onAddItem, searchQuery = '', hasCat
                                 onTouchEnd={handleRelease}
                                 className={`
                                     relative group p-3 text-left 
-                                    bg-zinc-900/40 backdrop-blur-md
-                                    hover:bg-zinc-800/60
-                                    rounded-2xl transition-all duration-300
-                                    border border-zinc-800 hover:border-brand-500/30
+                                    bg-white/5 backdrop-blur-md
+                                    hover:bg-white/10
+                                    rounded-3xl transition-all duration-300
+                                    border border-white/5 hover:border-brand-500/30
                                     overflow-hidden
                                     touch-manipulation
                                     min-h-[200px] flex flex-col
-                                    shadow-sm hover:shadow-xl hover:shadow-brand-500/10
-                                    ${isPressed ? 'bg-zinc-800/80 scale-[0.98]' : ''}
+                                    shadow-lg shadow-black/20 hover:shadow-2xl hover:shadow-brand-500/10
+                                    ${isPressed ? 'bg-white/15 scale-[0.98]' : ''}
                                     ${isAdded ? 'ring-2 ring-emerald-500 border-transparent bg-emerald-500/10' : ''}
                                 `}
                             >
                                 {/* Product Image */}
-                                <div className="relative w-full aspect-[4/3] mb-4 rounded-xl overflow-hidden bg-zinc-800/50 border border-white/5">
+                                <div className="relative w-full aspect-[4/3] mb-4 rounded-2xl overflow-hidden bg-zinc-800/30 border border-white/5 shadow-inner">
                                     <AnimatePresence mode="wait">
                                         {isAdded ? (
                                             <motion.div
@@ -232,8 +232,8 @@ export function MenuGrid({ isLoading, items, onAddItem, searchQuery = '', hasCat
                                     )}
 
                                     {/* Floating Price Tag */}
-                                    <div className="absolute top-2 right-2 px-3 py-1 bg-black/60 backdrop-blur-md rounded-lg border border-white/10">
-                                        <span className="text-white font-bold text-sm">
+                                    <div className="absolute top-2 right-2 px-3 py-1.5 bg-black/40 backdrop-blur-md rounded-full border border-white/10 shadow-lg">
+                                        <span className="text-white font-bold text-sm tracking-wide">
                                             {formatPrice(item.price)}
                                         </span>
                                     </div>

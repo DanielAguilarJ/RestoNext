@@ -517,66 +517,78 @@ export default function POSPage() {
     }
 
     // ============================================
+    // Shared Background Component
+    // ============================================
+    const PageBackground = () => (
+        <div className="fixed inset-0 z-0 pointer-events-none">
+            {/* Deep Base */}
+            <div className="absolute inset-0 bg-zinc-950" />
+
+            {/* Animated Mesh Gradients */}
+            <div className="absolute top-[-20%] left-[-10%] w-[70%] h-[70%] bg-purple-900/20 rounded-full blur-[120px] animate-blob" />
+            <div className="absolute bottom-[-20%] right-[-10%] w-[70%] h-[70%] bg-indigo-900/20 rounded-full blur-[120px] animate-blob animation-delay-2000" />
+            <div className="absolute top-[30%] left-[20%] w-[60%] h-[60%] bg-brand-900/10 rounded-full blur-[100px] animate-blob animation-delay-4000" />
+
+            {/* Grid Overlay */}
+            <div className="absolute inset-0 bg-[url('/grid.svg')] bg-center [mask-image:linear-gradient(180deg,white,rgba(255,255,255,0))]" />
+            <div className="absolute inset-0 bg-grid-white/[0.02] bg-[size:32px_32px]" />
+        </div>
+    );
+
+    // ============================================
     // Table Selection View
     // ============================================
     if (!selectedTable) {
         return (
-            <div className="min-h-screen bg-zinc-950 text-white relative overflow-hidden selection:bg-brand-500/30">
-                {/* Animated Background */}
-                <div className="fixed inset-0 z-0">
-                    <div className="absolute top-0 left-0 w-full h-full bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-zinc-900 via-zinc-950 to-zinc-950" />
-                    <motion.div
-                        animate={{ opacity: [0.3, 0.5, 0.3], scale: [1, 1.1, 1] }}
-                        transition={{ duration: 8, repeat: Infinity, ease: "easeInOut" }}
-                        className="absolute top-0 left-1/4 w-[500px] h-[500px] bg-brand-900/20 rounded-full blur-[120px]"
-                    />
-                    <div className="absolute inset-0 bg-grid-white/[0.02] bg-[size:32px_32px]" />
-                </div>
+            <div className="min-h-screen relative overflow-hidden selection:bg-brand-500/30 font-sans">
+                <PageBackground />
 
-                <header className="relative z-20 glass shadow-lg p-4 flex items-center justify-between sticky top-0 backdrop-blur-xl bg-zinc-900/50 border-b border-zinc-800">
-                    <div className="flex items-center gap-4">
-                        <Link href="/dashboard" className="p-2.5 hover:bg-white/10 rounded-xl transition-all duration-300 min-w-[48px] min-h-[48px] flex items-center justify-center border border-transparent hover:border-zinc-700">
-                            <ArrowLeft className="w-5 h-5 text-zinc-300" />
-                        </Link>
-                        <div>
-                            <h1 className="text-xl font-bold flex items-center gap-2 text-white">
-                                Seleccionar Mesa
-                                <Sparkles className="w-4 h-4 text-brand-400" />
-                            </h1>
-                            <p className="text-sm text-zinc-400">Toca una mesa para comenzar</p>
-                        </div>
-                    </div>
-
-                    {/* Connection, Sync & Alert Status */}
-                    <div className="flex items-center gap-3">
-                        {/* Pending Sync Badge */}
-                        <PendingSyncBadge />
-
-                        {/* Pending Alerts Badge */}
-                        {totalAlerts > 0 && (
-                            <div className="relative">
-                                <div className="flex items-center gap-2 px-3 py-2 bg-orange-500/10 text-orange-400 rounded-xl animate-pulse border border-orange-500/20">
-                                    <Bell className="w-4 h-4" />
-                                    <span className="font-bold">{totalAlerts}</span>
-                                </div>
-                                <span className="absolute -top-1 -right-1 w-3 h-3 bg-orange-500 rounded-full animate-ping" />
+                <header className="relative z-20 container mx-auto pt-4 px-4">
+                    <div className="glass-dark rounded-2xl p-4 flex items-center justify-between shadow-2xl border border-white/5 backdrop-blur-xl">
+                        <div className="flex items-center gap-4">
+                            <Link href="/dashboard" className="p-3 hover:bg-white/10 rounded-xl transition-all duration-300 min-w-[48px] min-h-[48px] flex items-center justify-center border border-white/5 hover:border-white/10 group">
+                                <ArrowLeft className="w-5 h-5 text-zinc-400 group-hover:text-white transition-colors" />
+                            </Link>
+                            <div>
+                                <h1 className="text-xl font-bold flex items-center gap-2 text-white tracking-tight">
+                                    Seleccionar Mesa
+                                    <Sparkles className="w-4 h-4 text-brand-400 animate-pulse" />
+                                </h1>
+                                <p className="text-sm text-zinc-400 font-medium">Zona Principal • Turno Diurno</p>
                             </div>
-                        )}
+                        </div>
 
-                        {/* Connection Status */}
-                        <div className={`
-                            p-2 rounded-xl transition-colors border
-                            ${isConnected && networkOnline
-                                ? 'text-emerald-400 bg-emerald-500/10 border-emerald-500/20'
-                                : 'text-red-400 bg-red-500/10 border-red-500/20 animate-pulse'
-                            }
-                        `}>
-                            {isConnected && networkOnline ? <Wifi className="w-5 h-5" /> : <WifiOff className="w-5 h-5" />}
+                        {/* Connection, Sync & Alert Status */}
+                        <div className="flex items-center gap-3">
+                            {/* Pending Sync Badge */}
+                            <PendingSyncBadge />
+
+                            {/* Pending Alerts Badge */}
+                            {totalAlerts > 0 && (
+                                <div className="relative">
+                                    <div className="flex items-center gap-2 px-3 py-2 bg-orange-500/10 text-orange-400 rounded-xl animate-pulse border border-orange-500/20 shadow-lg shadow-orange-500/10">
+                                        <Bell className="w-4 h-4" />
+                                        <span className="font-bold">{totalAlerts}</span>
+                                    </div>
+                                    <span className="absolute -top-1 -right-1 w-3 h-3 bg-orange-500 rounded-full animate-ping" />
+                                </div>
+                            )}
+
+                            {/* Connection Status */}
+                            <div className={`
+                                p-2.5 rounded-xl transition-all border shadow-lg
+                                ${isConnected && networkOnline
+                                    ? 'text-emerald-400 bg-emerald-500/10 border-emerald-500/20 shadow-emerald-500/10'
+                                    : 'text-red-400 bg-red-500/10 border-red-500/20 animate-pulse shadow-red-500/10'
+                                }
+                            `}>
+                                {isConnected && networkOnline ? <Wifi className="w-5 h-5" /> : <WifiOff className="w-5 h-5" />}
+                            </div>
                         </div>
                     </div>
                 </header>
 
-                <div className="relative z-10 p-6">
+                <div className="relative z-10 p-6 container mx-auto">
                     <TableMap pendingTables={pendingTables} />
                 </div>
 
@@ -601,93 +613,98 @@ export default function POSPage() {
     // Order View (Table Selected)
     // ============================================
     return (
-        <div className="min-h-screen bg-zinc-950 text-white relative flex flex-col overflow-hidden selection:bg-brand-500/30">
-            {/* Animated Background */}
-            <div className="fixed inset-0 z-0 pointer-events-none">
-                <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-blue-900/10 rounded-full blur-[100px]" />
-                <div className="absolute bottom-0 left-0 w-[400px] h-[400px] bg-brand-900/10 rounded-full blur-[100px]" />
-            </div>
+        <div className="min-h-screen relative flex flex-col overflow-hidden selection:bg-brand-500/30 font-sans">
+            <PageBackground />
 
             {/* Header */}
-            <header className="relative z-30 glass shadow-lg px-4 py-3 flex items-center justify-between sticky top-0 backdrop-blur-xl bg-zinc-900/80 border-b border-zinc-800">
-                <div className="flex items-center gap-4">
-                    <button
-                        onClick={() => setSelectedTable(null)}
-                        className="p-2.5 hover:bg-white/10 rounded-xl transition-all duration-300 min-w-[48px] min-h-[48px] flex items-center justify-center border border-transparent hover:border-zinc-700"
-                    >
-                        <ArrowLeft className="w-5 h-5 text-zinc-300" />
-                    </button>
-                    <div>
-                        <h1 className="text-xl font-bold flex items-center gap-2 text-white">
-                            Mesa {selectedTable.number}
-                            <span className={`w-2 h-2 rounded-full animate-pulse ${isConnected && networkOnline ? 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]' : 'bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.5)]'
-                                }`} />
-                        </h1>
-                        <p className="text-xs font-medium text-zinc-400 bg-zinc-800/50 px-2 py-0.5 rounded-full inline-block mt-0.5">
-                            Nuevo pedido
-                        </p>
-                    </div>
-                </div>
-
-                <div className="flex items-center gap-2">
-                    {/* Offline indicator */}
-                    {!networkOnline && (
-                        <div className="px-3 py-2 bg-amber-500/10 text-amber-400 border border-amber-500/20 rounded-xl flex items-center gap-2">
-                            <CloudOff className="w-4 h-4" />
-                            <span className="text-sm font-bold hidden sm:inline">OFFLINE</span>
+            <header className="relative z-30 container mx-auto pt-4 px-4 pb-2">
+                <div className="glass-dark rounded-2xl p-3 px-4 flex items-center justify-between shadow-2xl border border-white/5 backdrop-blur-xl">
+                    {/* Left: Back + Table Info */}
+                    <div className="flex items-center gap-3">
+                        <button
+                            onClick={() => setSelectedTable(null)}
+                            className="p-2.5 hover:bg-white/10 rounded-xl transition-all duration-300 min-w-[48px] min-h-[48px] flex items-center justify-center border border-white/5 hover:border-white/10 group"
+                            aria-label="Volver a mesas"
+                        >
+                            <ArrowLeft className="w-5 h-5 text-zinc-400 group-hover:text-white transition-colors" />
+                        </button>
+                        <div>
+                            <h1 className="text-xl font-bold flex items-center gap-2 text-white tracking-tight">
+                                Mesa {selectedTable.number}
+                                <span className={`w-2.5 h-2.5 rounded-full ${isConnected && networkOnline ? 'bg-emerald-500 shadow-[0_0_10px_rgba(16,185,129,0.6)]' : 'bg-red-500 shadow-[0_0_10px_rgba(239,68,68,0.6)] animate-pulse'
+                                    }`} />
+                            </h1>
+                            <p className="text-xs font-medium text-zinc-500">
+                                Nuevo pedido
+                            </p>
                         </div>
-                    )}
+                    </div>
 
-                    {/* Advanced Features with Feature Gating */}
-                    <FeatureGate feature="bill_splitting" currentPlan={currentPlan} mode="hide">
-                        <button
-                            className="p-3 bg-purple-500/10 text-purple-400 border border-purple-500/20
-                                     rounded-xl hover:bg-purple-500/20 transition-all
-                                     min-w-[48px] min-h-[48px] flex items-center justify-center group"
-                            title="Dividir Cuenta"
-                        >
-                            <SplitSquareHorizontal className="w-5 h-5 group-hover:scale-110 transition-transform" />
-                        </button>
-                    </FeatureGate>
-
-                    <FeatureGate feature="kds_full" currentPlan={currentPlan} mode="hide">
-                        <button
-                            className="p-3 bg-blue-500/10 text-blue-400 border border-blue-500/20
-                                     rounded-xl hover:bg-blue-500/20 transition-all
-                                     min-w-[48px] min-h-[48px] flex items-center justify-center group"
-                            title="Enviar a Cocina (KDS)"
-                        >
-                            <Send className="w-5 h-5 group-hover:-translate-y-0.5 group-hover:translate-x-0.5 transition-transform" />
-                        </button>
-                    </FeatureGate>
-
-                    <button
-                        onClick={() => setShowTransferModal(true)}
-                        className="p-3 bg-amber-500/10 text-amber-400 border border-amber-500/20
-                                 rounded-xl hover:bg-amber-500/20 transition-all
-                                 min-w-[48px] min-h-[48px] flex items-center justify-center group"
-                        title="Mover Mesa"
-                    >
-                        <ArrowLeft className="w-5 h-5 rotate-180 group-hover:translate-x-1 transition-transform" />
-                    </button>
-
-                    {/* Cart Button */}
-                    <button
-                        onClick={() => setShowCart(true)}
-                        className="relative p-3 bg-gradient-to-br from-brand-600 to-brand-700 text-white rounded-xl
-                                 shadow-lg shadow-brand-500/20 hover:shadow-brand-500/40 border border-brand-500/50
-                                 transition-all duration-300 hover:-translate-y-0.5 active:scale-95
-                                 min-w-[56px] min-h-[56px] ml-2 group"
-                    >
-                        <ShoppingCart className="w-6 h-6 group-hover:scale-110 transition-transform" />
-                        {cartItemCount > 0 && (
-                            <span className="absolute -top-1.5 -right-1.5 w-6 h-6 bg-red-500 text-white
-                               rounded-full text-xs font-bold flex items-center justify-center
-                               shadow-lg border-2 border-zinc-900 animate-in zoom-in spin-in-12 duration-300">
-                                {cartItemCount}
-                            </span>
+                    {/* Right: Actions */}
+                    <div className="flex items-center gap-2">
+                        {/* Offline indicator */}
+                        {!networkOnline && (
+                            <div className="px-3 py-2 bg-amber-500/10 text-amber-400 border border-amber-500/20 rounded-xl flex items-center gap-2 shadow-lg shadow-amber-500/10">
+                                <CloudOff className="w-4 h-4" />
+                                <span className="text-sm font-bold hidden sm:inline">OFFLINE</span>
+                            </div>
                         )}
-                    </button>
+
+                        {/* Advanced Features with Feature Gating */}
+                        <FeatureGate feature="bill_splitting" currentPlan={currentPlan} mode="hide">
+                            <button
+                                className="p-3 bg-purple-500/10 text-purple-400 border border-purple-500/20
+                                         rounded-xl hover:bg-purple-500/20 transition-all
+                                         min-w-[48px] min-h-[48px] flex items-center justify-center group"
+                                title="Dividir Cuenta"
+                                aria-label="Dividir Cuenta"
+                            >
+                                <SplitSquareHorizontal className="w-5 h-5 group-hover:scale-110 transition-transform" />
+                            </button>
+                        </FeatureGate>
+
+                        <FeatureGate feature="kds_full" currentPlan={currentPlan} mode="hide">
+                            <button
+                                className="p-3 bg-blue-500/10 text-blue-400 border border-blue-500/20
+                                         rounded-xl hover:bg-blue-500/20 transition-all
+                                         min-w-[48px] min-h-[48px] flex items-center justify-center group"
+                                title="Enviar a Cocina (KDS)"
+                                aria-label="Enviar a Cocina"
+                            >
+                                <Send className="w-5 h-5 group-hover:-translate-y-0.5 group-hover:translate-x-0.5 transition-transform" />
+                            </button>
+                        </FeatureGate>
+
+                        <button
+                            onClick={() => setShowTransferModal(true)}
+                            className="p-3 bg-white/5 text-zinc-400 border border-white/5
+                                     rounded-xl hover:bg-white/10 hover:text-white hover:border-white/10 transition-all
+                                     min-w-[48px] min-h-[48px] flex items-center justify-center group"
+                            title="Mover Mesa"
+                            aria-label="Mover Mesa"
+                        >
+                            <ArrowLeft className="w-5 h-5 rotate-180 group-hover:translate-x-1 transition-transform" />
+                        </button>
+
+                        {/* Cart Button - Primary Action */}
+                        <button
+                            onClick={() => setShowCart(true)}
+                            className="relative p-3.5 bg-gradient-to-br from-brand-600 to-brand-500 text-white rounded-xl
+                                     shadow-lg shadow-brand-500/30 hover:shadow-brand-500/50 border border-brand-400/50
+                                     transition-all duration-300 hover:-translate-y-0.5 active:scale-95
+                                     min-w-[56px] min-h-[56px] ml-1 group"
+                            aria-label="Ver carrito"
+                        >
+                            <ShoppingCart className="w-6 h-6 group-hover:scale-110 transition-transform" />
+                            {cartItemCount > 0 && (
+                                <span className="absolute -top-2 -right-2 w-6 h-6 bg-red-500 text-white
+                                   rounded-full text-xs font-bold flex items-center justify-center
+                                   shadow-lg border-2 border-zinc-900 animate-in zoom-in spin-in-12 duration-300">
+                                    {cartItemCount}
+                                </span>
+                            )}
+                        </button>
+                    </div>
                 </div>
             </header>
 

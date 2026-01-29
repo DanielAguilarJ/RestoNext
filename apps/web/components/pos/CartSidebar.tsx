@@ -184,7 +184,7 @@ export function CartSidebar({
 
                     {/* Cart Panel */}
                     <motion.div
-                        className="fixed top-0 right-0 bottom-0 w-full max-w-md glass-dark z-50 flex flex-col"
+                        className="fixed top-2 right-2 bottom-2 w-full max-w-md bg-zinc-950/90 backdrop-blur-2xl border border-white/10 rounded-2xl shadow-2xl z-50 flex flex-col overflow-hidden"
                         variants={panelVariants}
                         initial="hidden"
                         animate="visible"
@@ -192,7 +192,7 @@ export function CartSidebar({
                     >
                         {/* Cart Header */}
                         <motion.div
-                            className="p-5 border-b border-white/10 flex items-center justify-between glass-subtle"
+                            className="p-5 border-b border-white/5 flex items-center justify-between bg-white/5"
                             initial={{ opacity: 0, y: -20 }}
                             animate={{ opacity: 1, y: 0 }}
                             transition={{ delay: 0.1 }}
@@ -376,7 +376,7 @@ export function CartSidebar({
                                                 variants={itemVariants}
                                                 layout
                                                 exit="exit"
-                                                className="flex items-center gap-3 bg-white/10 backdrop-blur rounded-xl p-4"
+                                                className="flex items-center gap-3 bg-white/5 hover:bg-white/10 backdrop-blur-md rounded-2xl p-4 border border-white/5 hover:border-white/10 transition-colors"
                                             >
                                                 {/* Product Icon */}
                                                 <motion.div
