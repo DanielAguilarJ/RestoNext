@@ -383,10 +383,10 @@ async def _seed_demo_data_for_tenant(db: AsyncSession, tenant_id):
     
     # Create demo categories
     categories_data = [
-        {"name": "Entradas", "display_order": 1, "color": "#10B981"},
-        {"name": "Platos Fuertes", "display_order": 2, "color": "#3B82F6"},
-        {"name": "Bebidas", "display_order": 3, "color": "#8B5CF6"},
-        {"name": "Postres", "display_order": 4, "color": "#EC4899"},
+        {"name": "Entradas", "sort_order": 1},
+        {"name": "Platos Fuertes", "sort_order": 2},
+        {"name": "Bebidas", "sort_order": 3},
+        {"name": "Postres", "sort_order": 4},
     ]
     
     category_ids = {}
@@ -395,8 +395,8 @@ async def _seed_demo_data_for_tenant(db: AsyncSession, tenant_id):
             id=uuid.uuid4(),
             tenant_id=tenant_id,
             name=cat_data["name"],
-            display_order=cat_data["display_order"],
-            color=cat_data["color"],
+            sort_order=cat_data["sort_order"],
+            # color field removed as it does not exist in MenuCategory model
             is_active=True
         )
         db.add(category)
@@ -405,14 +405,18 @@ async def _seed_demo_data_for_tenant(db: AsyncSession, tenant_id):
     await db.flush()
     
     # Create demo products
+    from app.models.models import RouteDestination
+    kitchen = RouteDestination.KITCHEN
+    bar = RouteDestination.BAR
+
     products_data = [
-        {"name": "Nachos con Guacamole", "price": 95.00, "category": "Entradas", "station": "kitchen"},
-        {"name": "Tacos al Pastor (3 pzas)", "price": 85.00, "category": "Platos Fuertes", "station": "kitchen"},
-        {"name": "Enchiladas Suizas", "price": 145.00, "category": "Platos Fuertes", "station": "kitchen"},
-        {"name": "Cerveza Artesanal", "price": 75.00, "category": "Bebidas", "station": "bar"},
-        {"name": "Margarita Clásica", "price": 120.00, "category": "Bebidas", "station": "bar"},
-        {"name": "Agua Fresca del Día", "price": 35.00, "category": "Bebidas", "station": "bar"},
-        {"name": "Flan Napolitano", "price": 65.00, "category": "Postres", "station": "kitchen"},
+        {"name": "Nachos con Guacamole", "price": 95.00, "category": "Entradas", "route_to": kitchen},
+        {"name": "Tacos al Pastor (3 pzas)", "price": 85.00, "category": "Platos Fuertes", "route_to": kitchen},
+        {"name": "Enchiladas Suizas", "price": 145.00, "category": "Platos Fuertes", "route_to": kitchen},
+        {"name": "Cerveza Artesanal", "price": 75.00, "category": "Bebidas", "route_to": bar},
+        {"name": "Margarita Clásica", "price": 120.00, "category": "Bebidas", "route_to": bar},
+        {"name": "Agua Fresca del Día", "price": 35.00, "category": "Bebidas", "route_to": bar},
+        {"name": "Flan Napolitano", "price": 65.00, "category": "Postres", "route_to": kitchen},
     ]
     
     for prod_data in products_data:
@@ -422,25 +426,29 @@ async def _seed_demo_data_for_tenant(db: AsyncSession, tenant_id):
             category_id=category_ids.get(prod_data["category"]),
             name=prod_data["name"],
             price=prod_data["price"],
-            station=prod_data["station"],
+            route_to=prod_data["route_to"],
             is_available=True
         )
         db.add(product)
     
     # Create demo tables
+    from app.models.models import TableStatus
+    
     for i in range(1, 6):
         table = Table(
             id=uuid.uuid4(),
             tenant_id=tenant_id,
             number=i,
             capacity=4,
-            zone=f"Zona {chr(64 + ((i-1) // 2) + 1)}",  # A, A, B, B, C
-            status="available",
-            is_active=True
+            status=TableStatus.FREE,
+            pos_x=i * 2, # Simple layout
+            pos_y=2,
+            self_service_enabled=True
         )
         db.add(table)
     
     await db.commit()
+
 
 
 @router.get("/onboarding/status")

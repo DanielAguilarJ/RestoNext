@@ -113,6 +113,10 @@ function HeroSection() {
 
             {/* Animated Background */}
             <div className="absolute inset-0">
+                {/* Stock Image Background */}
+                <div
+                    className="absolute inset-0 bg-[url('/hero-restaurant-bg.png')] bg-cover bg-center opacity-20 mix-blend-luminosity filter blur-sm"
+                />
                 {/* Gradient Orbs with enhanced animation */}
                 <motion.div
                     className="absolute top-20 left-10 w-72 h-72 bg-brand-600/30 rounded-full blur-[100px]"
@@ -363,6 +367,7 @@ const features = [
         description: "Toma pedidos rápidamente con una interfaz touch-friendly. Modificadores, combos y promociones automáticas.",
         color: "from-blue-500 to-cyan-500",
         gradient: "from-blue-500/20 to-cyan-500/10",
+        image: "/feature-pos.png",
     },
     {
         icon: ChefHat,
@@ -370,6 +375,7 @@ const features = [
         description: "Pantalla en cocina con tiempos de preparación, prioridades y notificaciones en tiempo real.",
         color: "from-orange-500 to-red-500",
         gradient: "from-orange-500/20 to-red-500/10",
+        image: "/feature-kds.png",
     },
     {
         icon: Package,
@@ -377,6 +383,7 @@ const features = [
         description: "Controla stock, mermas y costos. Predicción de compras con Machine Learning.",
         color: "from-emerald-500 to-teal-500",
         gradient: "from-emerald-500/20 to-teal-500/10",
+        image: "/feature-inventory.png",
     },
     {
         icon: FileText,
@@ -384,6 +391,7 @@ const features = [
         description: "Genera facturas electrónicas válidas ante el SAT con un clic. Cancelación automática.",
         color: "from-purple-500 to-pink-500",
         gradient: "from-purple-500/20 to-pink-500/10",
+        image: "/feature-cfdi.png",
     },
     {
         icon: QrCode,
@@ -391,6 +399,7 @@ const features = [
         description: "Comensales ordenan desde su celular. Sin fricciones, sin esperas.",
         color: "from-violet-500 to-purple-500",
         gradient: "from-violet-500/20 to-purple-500/10",
+        image: "/feature-qr.png",
     },
     {
         icon: BarChart3,
@@ -398,6 +407,7 @@ const features = [
         description: "Dashboards en tiempo real, reportes de ventas, productos más vendidos y predicciones.",
         color: "from-amber-500 to-orange-500",
         gradient: "from-amber-500/20 to-orange-500/10",
+        image: "/feature-analytics.png",
     },
 ];
 
@@ -448,11 +458,26 @@ function FeaturesSection() {
                             {/* Shine effect */}
                             <div className="absolute inset-0 -translate-x-full group-hover:translate-x-full transition-transform duration-1000 bg-gradient-to-r from-transparent via-white/5 to-transparent" />
 
+                            {/* Image Header */}
+                            <div className="relative h-48 -mx-6 -mt-6 mb-6 overflow-hidden group-hover:scale-105 transition-transform duration-500">
+                                <div className="absolute inset-0 bg-gradient-to-t from-zinc-900 via-transparent to-transparent z-10" />
+                                <div className={`absolute inset-0 bg-gradient-to-br ${feature.gradient} mix-blend-overlay opacity-60`} />
+                                {/* @ts-ignore */}
+                                {feature.image && (
+                                    <img
+                                        /* @ts-ignore */
+                                        src={feature.image}
+                                        alt={feature.title}
+                                        className="w-full h-full object-cover"
+                                    />
+                                )}
+                            </div>
+
                             {/* Content */}
                             <div className="relative z-10">
                                 {/* Icon */}
                                 <motion.div
-                                    className={`inline-flex p-3 rounded-xl bg-gradient-to-br ${feature.color} mb-4 shadow-lg`}
+                                    className={`absolute -top-12 right-0 inline-flex p-3 rounded-xl bg-gradient-to-br ${feature.color} mb-4 shadow-lg border-4 border-zinc-900`}
                                     whileHover={{ scale: 1.1, rotate: 5 }}
                                     transition={{ type: "spring", stiffness: 400 }}
                                 >
@@ -463,7 +488,7 @@ function FeaturesSection() {
                                 <h3 className="text-xl font-semibold text-white mb-2 group-hover:text-brand-300 transition-colors">
                                     {feature.title}
                                 </h3>
-                                <p className="text-zinc-400 leading-relaxed">
+                                <p className="text-zinc-400 leading-relaxed text-sm">
                                     {feature.description}
                                 </p>
 
@@ -546,6 +571,7 @@ function PricingSection() {
 
     return (
         <section id="pricing" className="py-24 bg-gradient-to-b from-zinc-950 via-zinc-900 to-zinc-950 relative overflow-hidden">
+            <div className="absolute inset-0 bg-[url('/pricing-bg.png')] bg-cover bg-center opacity-10 mix-blend-soft-light" />
             {/* Background gradient orbs */}
             <div className="absolute top-0 left-1/4 w-96 h-96 bg-brand-500/10 rounded-full blur-[150px]" />
             <div className="absolute bottom-0 right-1/4 w-96 h-96 bg-purple-500/10 rounded-full blur-[150px]" />
@@ -681,7 +707,7 @@ const testimonials = [
         company: "Tacos El Patrón",
         content: "RestoNext revolucionó mi negocio. Antes tardaba 2 horas en cuadrar caja, ahora 10 minutos. La facturación automática es un sueño.",
         rating: 5,
-        image: null,
+        image: "/testimonial-maria.png",
     },
     {
         name: "Roberto Hernández",
@@ -689,7 +715,7 @@ const testimonials = [
         company: "Mariscos Costa Azul",
         content: "El KDS en cocina eliminó los errores de comandas. Mis cocineros aman la pantalla y los clientes reciben su comida más rápido.",
         rating: 5,
-        image: null,
+        image: "/testimonial-roberto.png",
     },
     {
         name: "Ana Torres",
@@ -697,7 +723,7 @@ const testimonials = [
         company: "Café Central",
         content: "La predicción de inventario con IA nos ha ahorrado miles de pesos en desperdicio. Súper recomendado.",
         rating: 5,
-        image: null,
+        image: "/testimonial-ana.png",
     },
     {
         name: "Carlos Mendoza",
@@ -705,7 +731,7 @@ const testimonials = [
         company: "Pizzería Don Carlo",
         content: "El menú QR fue un éxito instantáneo. Nuestros clientes ordenan más rápido y nosotros procesamos más pedidos por hora.",
         rating: 5,
-        image: null,
+        image: "/testimonial-carlos.png",
     },
     {
         name: "Laura Jiménez",
@@ -713,7 +739,7 @@ const testimonials = [
         company: "Sushi Express",
         content: "La integración con Stripe nos simplificó los pagos. Todo automático, sin errores. Increíble servicio.",
         rating: 5,
-        image: null,
+        image: "/testimonial-laura.png",
     },
 ];
 
@@ -769,8 +795,18 @@ function TestimonialsSection() {
 
                                     {/* Author */}
                                     <div className="flex items-center gap-4 relative z-10">
-                                        <div className="w-12 h-12 rounded-full bg-gradient-to-br from-brand-500 to-orange-500 flex items-center justify-center text-white font-bold text-lg shadow-lg shadow-brand-500/30">
-                                            {testimonial.name.split(' ').map(n => n[0]).join('')}
+                                        <div className="w-12 h-12 rounded-full overflow-hidden flex-shrink-0 shadow-lg shadow-brand-500/30">
+                                            {testimonial.image ? (
+                                                <img
+                                                    src={testimonial.image}
+                                                    alt={testimonial.name}
+                                                    className="w-full h-full object-cover"
+                                                />
+                                            ) : (
+                                                <div className="w-full h-full bg-gradient-to-br from-brand-500 to-orange-500 flex items-center justify-center text-white font-bold text-lg">
+                                                    {testimonial.name.split(' ').map(n => n[0]).join('')}
+                                                </div>
+                                            )}
                                         </div>
                                         <div>
                                             <p className="font-semibold text-white">{testimonial.name}</p>
