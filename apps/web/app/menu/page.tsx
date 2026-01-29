@@ -3,61 +3,16 @@
 /**
  * Customer QR Menu Page - Premium Version
  * Client-side rendered with real API data and beautiful UI
+ * NO DEMO DATA - Shows empty state for new users to configure
  */
 
 import { useEffect, useState } from "react";
-import { UtensilsCrossed, Phone, Loader2, ArrowUp, ArrowLeft, Star, Flame, Sparkles, Clock } from "lucide-react";
+import { UtensilsCrossed, Phone, Loader2, ArrowUp, ArrowLeft, Star, Flame, Sparkles, Clock, Settings, ChefHat } from "lucide-react";
 import Link from "next/link";
-import { menuApi, wsClient } from "@/lib/api";
-import { MenuCategory, MenuItem } from "../../../../packages/shared/src/index";
+import { menuApi } from "@/lib/api";
 
 // Default tenant for demo
 const DEFAULT_TENANT_ID = "default-tenant";
-
-// Fallback menu data for when API is not available
-const FALLBACK_MENU = {
-    restaurant: {
-        name: "Taquería El Patrón",
-        description: "Auténtica cocina mexicana desde 1985",
-    },
-    categories: [
-        {
-            id: "tacos",
-            name: "🌮 Tacos",
-            items: [
-                { id: "1", name: "Tacos al Pastor", description: "Cerdo marinado con piña, cilantro y cebolla", price: 45, popular: true },
-                { id: "2", name: "Tacos de Carnitas", description: "Cerdo confitado tradicional michoacano", price: 50 },
-                { id: "3", name: "Tacos de Birria", description: "Res en consomé especiado estilo Jalisco", price: 55, popular: true },
-            ],
-        },
-        {
-            id: "platos",
-            name: "🍽️ Platos Fuertes",
-            items: [
-                { id: "4", name: "Carne Asada", description: "Arrachera premium con guarnición", price: 189, popular: true },
-                { id: "5", name: "Enchiladas Verdes", description: "Pollo, crema, queso y salsa verde", price: 125 },
-                { id: "6", name: "Mole Poblano", description: "Pollo bañado en mole tradicional", price: 145 },
-            ],
-        },
-        {
-            id: "bebidas",
-            name: "🍺 Bebidas",
-            items: [
-                { id: "7", name: "Cerveza", description: "Corona, Modelo, Pacífico", price: 45 },
-                { id: "8", name: "Agua de Horchata", description: "Bebida de arroz tradicional", price: 35, popular: true },
-                { id: "9", name: "Margarita", description: "Tequila, limón, sal", price: 95 },
-            ],
-        },
-        {
-            id: "postres",
-            name: "🍮 Postres",
-            items: [
-                { id: "10", name: "Flan Napolitano", description: "Postre de huevo con caramelo", price: 55 },
-                { id: "11", name: "Churros", description: "Con chocolate caliente", price: 45, popular: true },
-            ],
-        },
-    ],
-};
 
 function formatPrice(price: number): string {
     return new Intl.NumberFormat("es-MX", {
@@ -71,6 +26,7 @@ interface MenuItemData {
     name: string;
     description?: string;
     price: number;
+    image_url?: string;
     popular?: boolean;
 }
 
@@ -86,6 +42,7 @@ interface MenuData {
 export default function MenuPage() {
     const [menuData, setMenuData] = useState<MenuData | null>(null);
     const [isLoading, setIsLoading] = useState(true);
+    const [hasNoMenu, setHasNoMenu] = useState(false);
     const [tableNumber] = useState(5);
     const [waiterCalled, setWaiterCalled] = useState(false);
     const [showScrollTop, setShowScrollTop] = useState(false);
@@ -96,7 +53,7 @@ export default function MenuPage() {
         async function loadMenu() {
             try {
                 const timeoutPromise = new Promise<never>((_, reject) =>
-                    setTimeout(() => reject(new Error("API timeout")), 3000)
+                    setTimeout(() => reject(new Error("API timeout")), 5000)
                 );
 
                 const categories = await Promise.race([
@@ -116,6 +73,7 @@ export default function MenuPage() {
                                     name: item.name,
                                     description: item.description,
                                     price: item.price,
+                                    image_url: item.image_url,
                                 })),
                             };
                         })
@@ -123,17 +81,19 @@ export default function MenuPage() {
 
                     setMenuData({
                         restaurant: {
-                            name: "Taquería El Patrón",
-                            description: "Auténtica cocina mexicana desde 1985",
+                            name: "Mi Restaurante",
+                            description: "Bienvenido a nuestro menú digital",
                         },
                         categories: categoriesWithItems,
                     });
                 } else {
-                    setMenuData(FALLBACK_MENU);
+                    // No categories = empty menu, show setup screen
+                    setHasNoMenu(true);
                 }
             } catch (error) {
-                console.error("Failed to load menu, using fallback:", error);
-                setMenuData(FALLBACK_MENU);
+                console.error("Failed to load menu:", error);
+                // On error, show setup screen instead of demo data
+                setHasNoMenu(true);
             } finally {
                 setIsLoading(false);
             }
@@ -147,7 +107,6 @@ export default function MenuPage() {
         const handleScroll = () => {
             setShowScrollTop(window.scrollY > 400);
 
-            // Update active category based on scroll position
             const sections = document.querySelectorAll('section[id]');
             sections.forEach((section) => {
                 const rect = section.getBoundingClientRect();
@@ -170,6 +129,7 @@ export default function MenuPage() {
         window.scrollTo({ top: 0, behavior: "smooth" });
     };
 
+    // Loading state
     if (isLoading) {
         return (
             <div className="min-h-screen bg-mesh flex items-center justify-center">
@@ -184,8 +144,51 @@ export default function MenuPage() {
         );
     }
 
-    if (!menuData) return null;
+    // Empty state - No menu configured
+    if (hasNoMenu || !menuData) {
+        return (
+            <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 flex items-center justify-center p-6">
+                <div className="text-center max-w-md">
+                    {/* Icon */}
+                    <div className="w-24 h-24 bg-gradient-to-br from-emerald-500 to-teal-600 rounded-3xl flex items-center justify-center mx-auto mb-8 shadow-2xl shadow-emerald-500/30">
+                        <ChefHat className="w-12 h-12 text-white" />
+                    </div>
 
+                    {/* Title */}
+                    <h1 className="text-3xl font-bold text-white mb-4">
+                        Menú No Configurado
+                    </h1>
+
+                    {/* Description */}
+                    <p className="text-slate-400 mb-8 leading-relaxed">
+                        Este restaurante aún no ha configurado su menú digital.
+                        Si eres el administrador, configura tus categorías y productos para que tus clientes puedan ver el menú.
+                    </p>
+
+                    {/* CTA Button */}
+                    <Link
+                        href="/admin/menu"
+                        className="inline-flex items-center gap-3 px-8 py-4 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold rounded-2xl shadow-xl shadow-emerald-500/30 transition-all duration-300 hover:scale-105"
+                    >
+                        <Settings className="w-5 h-5" />
+                        Configurar Menú
+                    </Link>
+
+                    {/* Secondary link */}
+                    <div className="mt-6">
+                        <Link
+                            href="/"
+                            className="text-slate-500 hover:text-slate-300 text-sm transition-colors"
+                        >
+                            ← Volver al inicio
+                        </Link>
+                    </div>
+                </div>
+            </div>
+        );
+    }
+
+    // Menu exists - show it
     return (
         <div className="min-h-screen bg-gradient-to-b from-brand-600 via-brand-50 to-white dark:from-brand-900 dark:via-gray-900 dark:to-gray-800">
             {/* Hero Header */}
@@ -225,7 +228,7 @@ export default function MenuPage() {
                     {/* Open Hours Badge */}
                     <div className="mt-4 inline-flex items-center gap-2 px-4 py-2 bg-green-500/20 backdrop-blur rounded-full text-sm">
                         <Clock className="w-4 h-4" />
-                        Abierto ahora • Cierra 11:00 PM
+                        Abierto ahora
                     </div>
                 </div>
 
@@ -241,8 +244,8 @@ export default function MenuPage() {
                             key={category.id}
                             href={`#${category.id}`}
                             className={`px-5 py-2.5 rounded-full text-sm font-semibold whitespace-nowrap transition-all duration-300 ${activeCategory === category.id
-                                    ? "bg-gradient-to-r from-brand-500 to-brand-600 text-white shadow-lg shadow-brand-500/30"
-                                    : "bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300"
+                                ? "bg-gradient-to-r from-brand-500 to-brand-600 text-white shadow-lg shadow-brand-500/30"
+                                : "bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300"
                                 }`}
                         >
                             {category.name}
@@ -272,13 +275,17 @@ export default function MenuPage() {
                                     style={{ animationDelay: `${itemIndex * 0.05}s` }}
                                 >
                                     <div className="flex gap-4">
-                                        {/* Image placeholder */}
-                                        <div className="w-24 h-24 bg-gradient-to-br from-brand-100 to-brand-200 dark:from-brand-900/50 dark:to-brand-800/50 rounded-xl flex items-center justify-center flex-shrink-0 group-hover:scale-105 transition-transform duration-300">
-                                            <span className="text-4xl">
-                                                {category.name.includes("Tacos") ? "🌮" :
-                                                    category.name.includes("Platos") ? "🍽️" :
-                                                        category.name.includes("Bebidas") ? "🍺" : "🍮"}
-                                            </span>
+                                        {/* Image */}
+                                        <div className="w-24 h-24 bg-gradient-to-br from-brand-100 to-brand-200 dark:from-brand-900/50 dark:to-brand-800/50 rounded-xl flex items-center justify-center flex-shrink-0 group-hover:scale-105 transition-transform duration-300 overflow-hidden">
+                                            {item.image_url ? (
+                                                <img
+                                                    src={item.image_url}
+                                                    alt={item.name}
+                                                    className="w-full h-full object-cover"
+                                                />
+                                            ) : (
+                                                <span className="text-4xl">🍽️</span>
+                                            )}
                                         </div>
 
                                         {/* Content */}
@@ -287,7 +294,7 @@ export default function MenuPage() {
                                                 <div>
                                                     <h3 className="font-bold text-lg text-gray-900 dark:text-white flex items-center gap-2">
                                                         {item.name}
-                                                        {(item as any).popular && (
+                                                        {item.popular && (
                                                             <span className="px-2 py-0.5 bg-orange-100 dark:bg-orange-900/30 text-orange-600 dark:text-orange-400 text-xs font-bold rounded-full flex items-center gap-1">
                                                                 <Flame className="w-3 h-3" />
                                                                 Popular
