@@ -3,6 +3,7 @@
 /**
  * Analytics Dashboard Page
  * Business Intelligence dashboard for restaurant owners
+ * Real Data Integration
  */
 
 import { useEffect, useState } from "react";
@@ -18,6 +19,7 @@ import {
     BarChart3,
     RefreshCw,
     Sparkles,
+    AlertCircle
 } from "lucide-react";
 import {
     analyticsApi,
@@ -79,9 +81,6 @@ export default function AnalyticsPage() {
 
         try {
             // Fetch all data in parallel
-            // For DEMO: We try to fetch, but we will OVERRIDE with "Sales Pitch" data 
-            // to ensure the client sees impressive numbers.
-
             const [kpisData, comparisonData, categoriesData, hourlyData, dishesData] =
                 await Promise.all([
                     analyticsApi.getKPIs(dateRange.startDate, dateRange.endDate).catch(() => null),
@@ -91,94 +90,14 @@ export default function AnalyticsPage() {
                     analyticsApi.getTopDishes(dateRange.startDate, dateRange.endDate, 10).catch(() => null),
                 ]);
 
-            // --- DEMO MODE INJECTION ---
-            // If data is missing or low (new install), we inject high-performing demo metrics
-
-            // 1. KPIs
-            const demoTotalSales = 345250.00; // $150k - $450k range
-            setKpis((kpisData && kpisData.total_sales > 1000) ? kpisData : {
-                average_ticket: 895.50, // > $850
-                total_sales: demoTotalSales,
-                total_orders: 385,
-                food_cost_percentage: 28.5, // Perfect 28-30%
-                average_orders_per_day: 55,
-                busiest_hour: 20, // 8 PM
-                busiest_day: "Viernes",
-                start_date: dateRange.startDate.toISOString(),
-                end_date: dateRange.endDate.toISOString()
-            });
-
-            // 2. Comparison (Green Uptrend)
-            setComparison((comparisonData && comparisonData.current_week_total > 1000) ? comparisonData : {
-                current_week: [], // Chart component handles internal mock if needed, or we leave empty to show just the summary
-                previous_week: [],
-                current_week_total: demoTotalSales,
-                previous_week_total: 298500.00,
-                change_percentage: 15.6, // Green uptrend
-                current_week_start: dateRange.startDate.toISOString(),
-                current_week_end: dateRange.endDate.toISOString(),
-                previous_week_start: "",
-                previous_week_end: ""
-            });
-
-            // 3. Categories
-            setCategories((categoriesData && categoriesData.total_sales > 1000) ? categoriesData : {
-                categories: [
-                    { category_id: "1", category_name: "Cortes Premium", total_sales: 155000, order_count: 120, percentage: 45, color: "#8b5cf6" },
-                    { category_id: "2", category_name: "Vinos y Licores", total_sales: 95000, order_count: 180, percentage: 27, color: "#ec4899" },
-                    { category_id: "3", category_name: "Entradas", total_sales: 45000, order_count: 210, percentage: 13, color: "#06b6d4" },
-                    { category_id: "4", category_name: "Postres", total_sales: 35000, order_count: 150, percentage: 10, color: "#f59e0b" },
-                    { category_id: "5", category_name: "Bebidas", total_sales: 15250, order_count: 300, percentage: 5, color: "#10b981" }
-                ],
-                total_sales: demoTotalSales,
-                start_date: dateRange.startDate.toISOString(),
-                end_date: dateRange.endDate.toISOString()
-            });
-
-            // 4. Hourly (Peak at 8-9 PM)
-            setHourly((hourlyData && hourlyData.max_sales > 1000) ? hourlyData : {
-                data: [
-                    { hour: 13, day_of_week: 5, day_name: "Friday", total_sales: 15000, order_count: 10 },
-                    { hour: 14, day_of_week: 5, day_name: "Friday", total_sales: 25000, order_count: 20 },
-                    { hour: 19, day_of_week: 5, day_name: "Friday", total_sales: 45000, order_count: 35 },
-                    { hour: 20, day_of_week: 5, day_name: "Friday", total_sales: 58000, order_count: 45 },
-                    { hour: 21, day_of_week: 5, day_name: "Friday", total_sales: 52000, order_count: 40 },
-                ],
-                max_sales: 58000,
-                start_date: dateRange.startDate.toISOString(),
-                end_date: dateRange.endDate.toISOString()
-            });
-
-            // 5. Top Dishes
-            setDishes((dishesData && dishesData.dishes.length > 0) ? dishesData : {
-                dishes: [
-                    { id: "1", name: "Ribeye Angus 400g", category_name: "Cortes", sales_count: 145, revenue: 123250, cost: 35000, profit: 88250, profit_margin: 71 },
-                    { id: "2", name: "Salmón a la Parrilla", category_name: "Mariscos", sales_count: 98, revenue: 45000, cost: 9500, profit: 35500, profit_margin: 78 },
-                    { id: "3", name: "Botella Vino Tinto", category_name: "Bar", sales_count: 56, revenue: 68000, cost: 12000, profit: 56000, profit_margin: 82 },
-                    { id: "4", name: "Tostadas de Atún", category_name: "Entradas", sales_count: 210, revenue: 38000, cost: 8500, profit: 29500, profit_margin: 77 },
-                    { id: "5", name: "Pastel de Chocolate", category_name: "Postres", sales_count: 125, revenue: 18500, cost: 2500, profit: 16000, profit_margin: 86 },
-                ],
-                start_date: dateRange.startDate.toISOString(),
-                end_date: dateRange.endDate.toISOString()
-            });
+            setKpis(kpisData);
+            setComparison(comparisonData);
+            setCategories(categoriesData);
+            setHourly(hourlyData);
+            setDishes(dishesData);
 
         } catch (err) {
             console.error("Error fetching analytics:", err);
-            // Even on error, show demo data for the pitch
-            setKpis({
-                average_ticket: 895.50,
-                total_sales: 345250.00,
-                total_orders: 385,
-                food_cost_percentage: 28.5,
-                average_orders_per_day: 55,
-                busiest_hour: 20,
-                busiest_day: "Viernes",
-                start_date: dateRange.startDate.toISOString(),
-                end_date: dateRange.endDate.toISOString()
-            });
-            // ... set other states if needed, but error message might be enough to prompt a retry which would then load demo data if we adjust the catch block. 
-            // However, let's keep it simple: if error, the user sees error message, but can try refresh.
-            // Actually, better to clear error if we are forcing demo data.
             setError(err instanceof Error ? err.message : "Error al cargar datos de analíticas");
         } finally {
             setLoading({
@@ -212,6 +131,8 @@ export default function AnalyticsPage() {
         if (hour === null) return "N/A";
         return `${hour.toString().padStart(2, "0")}:00`;
     };
+
+    const hasData = kpis && (kpis.total_sales > 0 || kpis.total_orders > 0);
 
     return (
         <div className="min-h-screen bg-gradient-to-br from-gray-950 via-gray-900 to-gray-950">
@@ -257,6 +178,26 @@ export default function AnalyticsPage() {
                 {error && (
                     <div className="mb-6 p-4 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-400">
                         {error}
+                    </div>
+                )}
+
+                {/* Empty State / No Data */}
+                {!loading.kpis && !hasData && !error && (
+                    <div className="mb-8 p-12 text-center rounded-3xl bg-white/5 border border-gray-800/50 border-dashed">
+                        <div className="w-20 h-20 bg-gray-800 rounded-full flex items-center justify-center mx-auto mb-6">
+                            <BarChart3 className="w-10 h-10 text-gray-600" />
+                        </div>
+                        <h2 className="text-2xl font-bold text-white mb-2">Aún no hay datos suficientes</h2>
+                        <p className="text-gray-400 max-w-md mx-auto mb-8">
+                            Tus métricas aparecerán aquí en tiempo real una vez que comiences a procesar ventas en el sistema.
+                        </p>
+                        <Link
+                            href="/pos"
+                            className="inline-flex items-center gap-2 px-6 py-3 bg-emerald-600 hover:bg-emerald-500 text-white font-medium rounded-xl transition-all"
+                        >
+                            <DollarSign className="w-5 h-5" />
+                            Ir a Punto de Venta
+                        </Link>
                     </div>
                 )}
 
