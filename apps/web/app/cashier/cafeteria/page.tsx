@@ -295,7 +295,7 @@ export default function CafeteriaCashierPage() {
                         Primero debes agregar categorías y productos desde el administrador del menú.
                     </p>
                     <Link
-                        href="/menu"
+                        href="/admin/menu"
                         className="px-6 py-3 bg-emerald-600 hover:bg-emerald-500 text-white font-medium rounded-xl transition-colors"
                     >
                         Ir a Configurar Menú

@@ -1173,6 +1173,42 @@ export const billingApi = {
      */
     getOrderInvoices: async (orderId: string): Promise<InvoiceResponse[]> => {
         return apiRequest<InvoiceResponse[]>(`/billing/order/${orderId}/invoices`);
+    },
+
+    /**
+     * List all invoices for current tenant
+     * @param status - Optional filter: 'pending', 'stamped', 'cancelled', 'error'
+     * @param limit - Max results (default 50)
+     * @param offset - Pagination offset
+     */
+    listInvoices: async (options?: { status?: string; limit?: number; offset?: number }): Promise<InvoiceResponse[]> => {
+        const params = new URLSearchParams();
+        if (options?.status) params.append('status', options.status);
+        if (options?.limit) params.append('limit', options.limit.toString());
+        if (options?.offset) params.append('offset', options.offset.toString());
+
+        const query = params.toString();
+        return apiRequest<InvoiceResponse[]>(query ? `/billing/invoices?${query}` : '/billing/invoices');
+    },
+
+    /**
+     * Cancel a CFDI invoice
+     * @param invoiceId - Invoice UUID to cancel
+     * @param motivo - SAT cancellation reason code:
+     *   - '01': Error CON relación
+     *   - '02': Error SIN relación (default)
+     *   - '03': Operación no realizada
+     *   - '04': Operación nominativa en factura global
+     */
+    cancelInvoice: async (invoiceId: string, motivo: string = '02'): Promise<{
+        success: boolean;
+        message: string;
+        uuid: string;
+        cancel_response: any;
+    }> => {
+        return apiRequest(`/billing/invoices/${invoiceId}/cancel?motivo=${motivo}`, {
+            method: 'POST',
+        });
     }
 };
 

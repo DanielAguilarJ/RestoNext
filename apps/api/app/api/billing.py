@@ -130,14 +130,9 @@ async def create_self_invoice(
     )
     
     # Send to PAC for stamping
-    # Check billing_config for PAC provider, default to mock
-    billing_config = tenant.billing_config or {}
-    pac_provider = billing_config.get("pac_provider", "mock")
-    
-    pac_response = await stamp_cfdi_with_pac(
-        xml_content,
-        pac_provider
-    )
+    # PAC provider is determined by global settings (PAC_PROVIDER env var)
+    # Per SAT regulations, one PAC credential per business
+    pac_response = await stamp_cfdi_with_pac(xml_content)
     
     if not pac_response.success:
         # Create failed invoice record
@@ -215,3 +210,115 @@ async def get_order_invoices(
         select(Invoice).where(Invoice.order_id == order_id)
     )
     return result.scalars().all()
+
+
+@router.get("/invoices", response_model=list[InvoiceResponse])
+async def list_tenant_invoices(
+    status: str = None,
+    limit: int = 50,
+    offset: int = 0,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    List all invoices for the current tenant.
+    
+    Optional filters:
+    - status: Filter by CFDI status (pending, stamped, cancelled, error)
+    - limit: Max results (default 50)
+    - offset: Pagination offset
+    """
+    query = select(Invoice).where(
+        Invoice.tenant_id == current_user.tenant_id
+    ).order_by(Invoice.created_at.desc())
+    
+    if status:
+        try:
+            cfdi_status = CFDIStatus(status)
+            query = query.where(Invoice.status == cfdi_status)
+        except ValueError:
+            pass  # Invalid status, ignore filter
+    
+    query = query.limit(limit).offset(offset)
+    result = await db.execute(query)
+    return result.scalars().all()
+
+
+@router.post("/invoices/{invoice_id}/cancel")
+async def cancel_invoice(
+    invoice_id: UUID,
+    motivo: str = "02",  # Default: error sin relación
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Cancel a CFDI invoice.
+    
+    Motivo codes (SAT catalog):
+    - 01: Comprobante emitido con errores CON relación
+    - 02: Comprobante emitido con errores SIN relación (default)
+    - 03: No se llevó a cabo la operación
+    - 04: Operación nominativa relacionada en factura global
+    """
+    from app.services.cfdi_service import cancel_cfdi
+    
+    # Get invoice
+    result = await db.execute(
+        select(Invoice).where(Invoice.id == invoice_id)
+    )
+    invoice = result.scalar_one_or_none()
+    
+    if not invoice:
+        raise HTTPException(status_code=404, detail="Invoice not found")
+    
+    # Verify tenant ownership
+    if invoice.tenant_id != current_user.tenant_id:
+        raise HTTPException(status_code=403, detail="Not authorized")
+    
+    # Check if already cancelled
+    if invoice.status == CFDIStatus.CANCELLED:
+        raise HTTPException(status_code=400, detail="Invoice already cancelled")
+    
+    # Can only cancel stamped invoices
+    if invoice.status != CFDIStatus.STAMPED:
+        raise HTTPException(
+            status_code=400, 
+            detail="Only stamped invoices can be cancelled"
+        )
+    
+    # Get tenant for RFC
+    tenant_result = await db.execute(
+        select(Tenant).where(Tenant.id == invoice.tenant_id)
+    )
+    tenant = tenant_result.scalar_one_or_none()
+    
+    # Call PAC to cancel
+    try:
+        cancel_response = await cancel_cfdi(
+            uuid=invoice.uuid,
+            rfc_emisor=tenant.rfc,
+            rfc_receptor=invoice.receptor_rfc,
+            total=invoice.total,
+            motivo=motivo,
+        )
+        
+        # Update invoice status
+        invoice.status = CFDIStatus.CANCELLED
+        invoice.sat_response = {
+            **invoice.sat_response,
+            "cancel_response": cancel_response,
+        }
+        await db.commit()
+        
+        return {
+            "success": True,
+            "message": "Factura cancelada exitosamente",
+            "uuid": invoice.uuid,
+            "cancel_response": cancel_response,
+        }
+        
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error al cancelar factura: {str(e)}"
+        )
