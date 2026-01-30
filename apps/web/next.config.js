@@ -17,7 +17,29 @@ const nextConfig = {
 
     // Image optimization
     images: {
-        domains: ["localhost"],
+        remotePatterns: [
+            {
+                protocol: 'https',
+                hostname: 'cloud.appwrite.io',
+                pathname: '/v1/**',
+            },
+            {
+                protocol: 'https',
+                hostname: 'restonext.me',
+            },
+            {
+                protocol: 'http',
+                hostname: 'localhost',
+            }
+        ],
+        minimumCacheTTL: 60,
+    },
+
+    // Compiler options
+    compiler: {
+        removeConsole: process.env.NODE_ENV === "production" ? {
+            exclude: ["error", "warn"],
+        } : false,
     },
 
     // Transpile RxDB to handle ESM modules correctly
