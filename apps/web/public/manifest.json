@@ -1,0 +1,24 @@
+{
+  "name": "RestoNext MX",
+  "short_name": "RestoNext",
+  "description": "Cloud-Native Restaurant Management SaaS for Mexico",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0a0a0a",
+  "theme_color": "#d92d20",
+  "icons": [
+    {
+      "src": "/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ],
+  "categories": ["business", "food"],
+  "lang": "es-MX",
+  "dir": "ltr"
+}

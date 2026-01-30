@@ -12,7 +12,7 @@ from app.models.models import User, Reservation, ReservationStatus, Table, Custo
 from app.schemas.schemas import ReservationCreate, ReservationResponse, TableResponse
 from app.services.reservation_service import ReservationService
 
-router = APIRouter(prefix="/reservations", tags=["Reservations"])
+router = APIRouter(tags=["Reservations"])
 
 def get_reservation_service(
     db: AsyncSession = Depends(get_db),

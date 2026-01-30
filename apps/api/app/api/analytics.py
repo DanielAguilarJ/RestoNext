@@ -317,3 +317,75 @@ async def api_get_sales_by_category(
     
     return result
 
+
+@router.get("/demand-context")
+async def api_get_demand_context(
+    location: str = Query(..., description="Location for demand analysis (e.g., 'Ciudad de México')"),
+    start_date: datetime = Query(..., description="Start date for analysis"),
+    end_date: datetime = Query(..., description="End date for analysis"),
+    current_user: User = Depends(require_manager_or_admin),
+):
+    """
+    Get demand context analysis for a location and date range.
+    
+    Analyzes external factors that could impact restaurant demand:
+    - Local events and holidays
+    - Weather conditions
+    - Day of week patterns
+    - Seasonal trends
+    
+    Returns:
+    - **demand_multiplier**: Factor to adjust demand forecast (1.0 = baseline)
+    - **analysis_summary**: Human-readable analysis of demand factors
+    
+    Example: During a major holiday, demand_multiplier might be 1.5 (50% increase).
+    """
+    # Normalize dates
+    start_date = normalize_datetime(start_date)
+    end_date = normalize_datetime(end_date)
+    
+    # Calculate demand multiplier based on basic date factors
+    # In production, this could integrate with external APIs (weather, events, etc.)
+    demand_multiplier = 1.0
+    factors = []
+    
+    if start_date:
+        # Weekend boost
+        if start_date.weekday() >= 5:  # Saturday or Sunday
+            demand_multiplier *= 1.2
+            factors.append("fin de semana (+20%)")
+        
+        # End of month / payday boost (Mexico: 15th and last day)
+        if start_date.day == 15 or start_date.day >= 28:
+            demand_multiplier *= 1.15
+            factors.append("día de quincena (+15%)")
+        
+        # Major Mexican holidays (simplified check)
+        month_day = (start_date.month, start_date.day)
+        mexican_holidays = {
+            (1, 1): "Año Nuevo",
+            (2, 5): "Día de la Constitución",
+            (3, 21): "Natalicio de Benito Juárez",
+            (5, 1): "Día del Trabajo",
+            (5, 5): "Batalla de Puebla",
+            (5, 10): "Día de las Madres",
+            (9, 16): "Día de la Independencia",
+            (11, 2): "Día de los Muertos",
+            (12, 12): "Día de la Virgen de Guadalupe",
+            (12, 25): "Navidad",
+        }
+        
+        if month_day in mexican_holidays:
+            demand_multiplier *= 1.3
+            factors.append(f"{mexican_holidays[month_day]} (+30%)")
+    
+    # Build analysis summary
+    if factors:
+        analysis = f"Factores que afectan la demanda en {location}: " + ", ".join(factors)
+    else:
+        analysis = f"Demanda estándar para {location}. Sin eventos especiales detectados."
+    
+    return {
+        "demand_multiplier": round(demand_multiplier, 2),
+        "analysis_summary": analysis
+    }

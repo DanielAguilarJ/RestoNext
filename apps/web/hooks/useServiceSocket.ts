@@ -304,7 +304,7 @@ export function useServiceSocket(options: UseServiceSocketOptions = {}): UseServ
         setConnectionError(null);
 
         const token = tokenUtils.getToken();
-        let wsUrl = `${WS_BASE_URL}/api/ws/waiter`;
+        let wsUrl = `${WS_BASE_URL}/ws/waiter`;
         if (token) {
             wsUrl += `?token=${encodeURIComponent(token)}`;
         }

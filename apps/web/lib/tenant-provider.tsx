@@ -1,8 +1,10 @@
 "use client";
 
 import React, { createContext, useContext, useEffect, useState, ReactNode } from "react";
-import { databases, DATABASE_ID, account } from "./api";
-import { Query } from "appwrite";
+import { tokenUtils } from "./api";
+
+// API configuration
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'https://restonext.me/api';
 
 // Tenant profile interface matching backend TenantPublic
 export interface TenantProfile {
@@ -74,66 +76,55 @@ export function TenantProvider({ children }: TenantProviderProps) {
             setLoading(true);
             setError(null);
 
-            // Get current user
-            const user = await account.get();
+            // Get token from storage
+            const token = tokenUtils.getToken();
 
-            // Get user's profile to find restaurant_id
-            const profileRes = await databases.listDocuments(DATABASE_ID, "profiles", [
-                Query.equal("user_id", user.$id),
-            ]);
-
-            if (profileRes.documents.length === 0) {
+            if (!token) {
+                // No token means not authenticated, don't try to fetch
                 setTenant(null);
                 return;
             }
 
-            const profile = profileRes.documents[0];
-            const restaurantId = profile.restaurant_id;
+            // Fetch tenant profile from FastAPI backend
+            const response = await fetch(`${API_BASE_URL}/tenant/me`, {
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json',
+                },
+            });
 
-            if (!restaurantId) {
-                setTenant(null);
-                return;
-            }
-
-            // Fetch restaurant/tenant document
-            const restaurantDoc = await databases.getDocument(
-                DATABASE_ID,
-                "restaurants",
-                restaurantId
-            );
-
-            // Helper to safe parse JSON attributes (Appwrite stores them as strings)
-            const parseJson = (val: any, fallback: any) => {
-                if (!val) return fallback;
-                if (typeof val === 'object') return val; // Already an object (future proof)
-                try {
-                    return JSON.parse(val);
-                } catch (e) {
-                    console.warn("Failed to parse JSON attribute:", val);
-                    return fallback;
+            if (!response.ok) {
+                if (response.status === 401) {
+                    // Token expired or invalid
+                    tokenUtils.removeToken();
+                    setTenant(null);
+                    return;
                 }
-            };
+                throw new Error(`Failed to fetch tenant: ${response.status}`);
+            }
 
-            // Map Appwrite document to TenantProfile
+            const tenantData = await response.json();
+
+            // Map backend response to TenantProfile
             const tenantProfile: TenantProfile = {
-                id: restaurantDoc.$id,
-                name: restaurantDoc.name || "",
-                slug: restaurantDoc.slug || "",
-                legal_name: restaurantDoc.legal_name || null,
-                trade_name: restaurantDoc.trade_name || null,
-                logo_url: restaurantDoc.logo_url || null,
-                rfc: restaurantDoc.rfc || null,
-                regimen_fiscal: restaurantDoc.regimen_fiscal || null,
-                uso_cfdi_default: restaurantDoc.uso_cfdi_default || "G03",
-                fiscal_address: parseJson(restaurantDoc.fiscal_address, {}),
-                contacts: parseJson(restaurantDoc.contacts, {}),
-                ticket_config: parseJson(restaurantDoc.ticket_config, {}),
-                billing_config: parseJson(restaurantDoc.billing_config, {}),
-                timezone: restaurantDoc.timezone || "America/Mexico_City",
-                currency: restaurantDoc.currency || "MXN",
-                locale: restaurantDoc.locale || "es-MX",
-                onboarding_complete: restaurantDoc.onboarding_complete || false,
-                onboarding_step: restaurantDoc.onboarding_step || "basic",
+                id: tenantData.id,
+                name: tenantData.name || "",
+                slug: tenantData.slug || "",
+                legal_name: tenantData.legal_name || null,
+                trade_name: tenantData.trade_name || null,
+                logo_url: tenantData.logo_url || null,
+                rfc: tenantData.rfc || null,
+                regimen_fiscal: tenantData.regimen_fiscal || null,
+                uso_cfdi_default: tenantData.uso_cfdi_default || "G03",
+                fiscal_address: tenantData.fiscal_address || {},
+                contacts: tenantData.contacts || {},
+                ticket_config: tenantData.ticket_config || {},
+                billing_config: tenantData.billing_config || {},
+                timezone: tenantData.timezone || "America/Mexico_City",
+                currency: tenantData.currency || "MXN",
+                locale: tenantData.locale || "es-MX",
+                onboarding_complete: tenantData.onboarding_complete || false,
+                onboarding_step: tenantData.onboarding_step || "basic",
             };
 
             setTenant(tenantProfile);
