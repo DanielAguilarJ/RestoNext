@@ -472,7 +472,13 @@ async def get_production_list(
                     "unit": unit
                 }
                 
-    return {"event_id": str(event.id), "production_list": list(production_list.values())}
+    return {
+        "event_id": str(event.id),
+        "event_name": event.name,
+        "event_date": event.start_time.isoformat() if event.start_time else None,
+        "guest_count": event.guest_count,
+        "production_list": list(production_list.values())
+    }
 
 # ==========================================
 # Quotes & BEOs

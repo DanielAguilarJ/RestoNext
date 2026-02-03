@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 import { Search, Filter, Plus, RefreshCcw, LayoutGrid, List, Loader2 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { LeadsKanban, Lead, LeadStatusType } from "@/components/catering/LeadsKanban";
+import { CreateLeadModal } from "@/components/catering/CreateLeadModal";
 import { cateringApi } from "@/lib/api";
 
 // ============================================
@@ -47,6 +48,7 @@ export default function LeadsPage() {
     const [searchQuery, setSearchQuery] = useState("");
     const [viewMode, setViewMode] = useState<'kanban' | 'list'>('kanban');
     const [refreshing, setRefreshing] = useState(false);
+    const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
 
     // Load leads
     const loadLeads = useCallback(async () => {
@@ -110,6 +112,10 @@ export default function LeadsPage() {
         )
         : leads;
 
+    const handleCreateSuccess = (newLead: Lead) => {
+        setLeads(prev => [newLead, ...prev]);
+    };
+
     return (
         <div className="space-y-6">
             {/* Header */}
@@ -120,7 +126,10 @@ export default function LeadsPage() {
                         Gestiona clientes potenciales y oportunidades de negocio
                     </p>
                 </div>
-                <button className="flex items-center gap-2 rounded-lg bg-emerald-600 px-4 py-2.5 font-medium text-white transition hover:bg-emerald-500">
+                <button
+                    onClick={() => setIsCreateModalOpen(true)}
+                    className="flex items-center gap-2 rounded-lg bg-emerald-600 px-4 py-2.5 font-medium text-white transition hover:bg-emerald-500"
+                >
                     <Plus className="h-4 w-4" />
                     Nuevo Lead
                 </button>
@@ -307,6 +316,12 @@ export default function LeadsPage() {
                     </motion.div>
                 )}
             </AnimatePresence>
+
+            <CreateLeadModal
+                isOpen={isCreateModalOpen}
+                onClose={() => setIsCreateModalOpen(false)}
+                onSuccess={handleCreateSuccess}
+            />
         </div>
     );
 }
