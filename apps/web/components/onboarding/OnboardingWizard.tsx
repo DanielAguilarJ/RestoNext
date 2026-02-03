@@ -141,8 +141,12 @@ interface TenantData {
 
 interface OnboardingWizardProps {
     isOpen: boolean;
-    onComplete: () => void;
-    tenantName?: string;
+    onComplete: (withDemoData?: boolean) => void;
+    initialData?: {
+        tenantName?: string;
+        plan?: string;
+        billingCycle?: string;
+    };
 }
 
 // Step configuration
@@ -169,7 +173,7 @@ const serviceTypes = [
     { id: 'drive_thru', name: 'Drive-Thru', icon: <Car className="w-6 h-6" />, description: 'Servicio en auto' },
 ];
 
-export default function OnboardingWizard({ isOpen, onComplete, tenantName = 'tu restaurante' }: OnboardingWizardProps) {
+export default function OnboardingWizard({ isOpen, onComplete, initialData }: OnboardingWizardProps) {
     const router = useRouter();
     const [currentStep, setCurrentStep] = useState(0);
     const [isAnimating, setIsAnimating] = useState(false);
@@ -178,7 +182,7 @@ export default function OnboardingWizard({ isOpen, onComplete, tenantName = 'tu 
 
     // Form data
     const [formData, setFormData] = useState<TenantData>({
-        name: tenantName,
+        name: initialData?.tenantName || 'Tu Restaurante',
         logo_url: '',
         currency: 'MXN',
         service_types: ['dine_in'],
@@ -390,6 +394,15 @@ export default function OnboardingWizard({ isOpen, onComplete, tenantName = 'tu 
             <h2 className="text-4xl font-bold text-white mb-4">
                 ¡Bienvenido a <span className="text-transparent bg-clip-text bg-gradient-to-r from-violet-400 to-purple-400">RestoNext</span>!
             </h2>
+
+            {initialData?.plan && (
+                <div className="mb-6 inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-emerald-500/10 border border-emerald-500/20">
+                    <Check className="w-4 h-4 text-emerald-400" />
+                    <span className="text-emerald-400 font-medium text-sm">
+                        Plan {initialData.plan.charAt(0).toUpperCase() + initialData.plan.slice(1)} Activado
+                    </span>
+                </div>
+            )}
 
             <p className="text-xl text-slate-300 mb-8">
                 Estamos emocionados de tenerte aquí. En solo <span className="text-violet-400 font-semibold">3 minutos</span> tendrás tu restaurante listo para operar.

@@ -1,8 +1,9 @@
 "use client"
 
-import { useState } from 'react';
-import { X, User, Users, Clock, Calendar, MessageSquare, Check, XCircle, Armchair, Loader2 } from 'lucide-react';
-import { Reservation, reservationsApi } from '../../lib/api';
+import { useState, useEffect } from 'react';
+import { X, User, Users, Clock, Calendar, MessageSquare, Check, XCircle, Armchair, Loader2, Edit2, Trash2, Phone, Mail } from 'lucide-react';
+import { Reservation, reservationsApi, tablesApi } from '../../lib/api';
+import { Table } from '../../../../packages/shared/src/index';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
 
@@ -16,22 +17,53 @@ interface ReservationDetailsModalProps {
 export function ReservationDetailsModal({ isOpen, onClose, reservation, onUpdate }: ReservationDetailsModalProps) {
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    const [showTableSelector, setShowTableSelector] = useState(false);
+    const [tables, setTables] = useState<Table[]>([]);
+    const [loadingTables, setLoadingTables] = useState(false);
+    const [selectedTableId, setSelectedTableId] = useState<string | null>(null);
+
+    useEffect(() => {
+        if (showTableSelector) {
+            fetchTables();
+        }
+    }, [showTableSelector]);
+
+    const fetchTables = async () => {
+        setLoadingTables(true);
+        try {
+            const data = await tablesApi.list();
+            // Filter to only available (free) tables
+            setTables(data.filter(t => t.status === 'free'));
+        } catch (e) {
+            console.error('Error fetching tables:', e);
+        } finally {
+            setLoadingTables(false);
+        }
+    };
 
     if (!isOpen || !reservation) return null;
 
-    const handleStatusChange = async (newStatus: string) => {
+    const handleStatusChange = async (newStatus: string, tableId?: string) => {
         setLoading(true);
         setError(null);
         try {
-            await reservationsApi.updateStatus(reservation.id, newStatus);
+            await reservationsApi.updateStatus(reservation.id, newStatus, tableId);
             onUpdate();
             if (newStatus === 'cancelled') {
                 onClose();
             }
+            setShowTableSelector(false);
+            setSelectedTableId(null);
         } catch (err: any) {
             setError(err.message || 'Error al actualizar estado');
         } finally {
             setLoading(false);
+        }
+    };
+
+    const handleSeatWithTable = () => {
+        if (selectedTableId) {
+            handleStatusChange('seated', selectedTableId);
         }
     };
 
@@ -48,7 +80,7 @@ export function ReservationDetailsModal({ isOpen, onClose, reservation, onUpdate
 
     return (
         <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-            <div className="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-md shadow-2xl">
+            <div className="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-md shadow-2xl max-h-[90vh] overflow-hidden flex flex-col">
                 {/* Header */}
                 <div className="flex items-center justify-between p-4 border-b border-slate-700">
                     <h2 className="text-lg font-bold text-white">Detalles de Reservación</h2>
@@ -58,7 +90,7 @@ export function ReservationDetailsModal({ isOpen, onClose, reservation, onUpdate
                 </div>
 
                 {/* Content */}
-                <div className="p-4 space-y-4">
+                <div className="p-4 space-y-4 overflow-y-auto flex-1">
                     {error && (
                         <div className="p-3 bg-red-500/20 border border-red-500/50 rounded-lg text-red-400 text-sm">
                             {error}
@@ -113,7 +145,7 @@ export function ReservationDetailsModal({ isOpen, onClose, reservation, onUpdate
                             <div>
                                 <p className="text-xs text-slate-500">Cliente</p>
                                 <p className="text-white font-medium">
-                                    {reservation.customer_id ? `ID: ${reservation.customer_id.slice(0, 8)}...` : 'Invitado'}
+                                    {reservation.customer_name || 'Invitado'}
                                 </p>
                             </div>
                         </div>
@@ -139,8 +171,60 @@ export function ReservationDetailsModal({ isOpen, onClose, reservation, onUpdate
                         )}
                     </div>
 
+                    {/* Table Selector */}
+                    {showTableSelector && (
+                        <div className="p-4 bg-slate-800/50 rounded-xl border border-slate-700 space-y-3">
+                            <div className="flex items-center justify-between">
+                                <p className="text-sm font-medium text-white">Seleccionar Mesa</p>
+                                <button
+                                    onClick={() => setShowTableSelector(false)}
+                                    className="text-slate-400 hover:text-white"
+                                >
+                                    <X className="w-4 h-4" />
+                                </button>
+                            </div>
+
+                            {loadingTables ? (
+                                <div className="flex items-center justify-center py-4">
+                                    <Loader2 className="w-5 h-5 animate-spin text-slate-400" />
+                                </div>
+                            ) : tables.length === 0 ? (
+                                <p className="text-sm text-slate-500 text-center py-4">
+                                    No hay mesas disponibles
+                                </p>
+                            ) : (
+                                <div className="grid grid-cols-4 gap-2">
+                                    {tables.map(table => (
+                                        <button
+                                            key={table.id}
+                                            onClick={() => setSelectedTableId(table.id)}
+                                            className={`p-3 rounded-xl border transition-all text-center ${selectedTableId === table.id
+                                                ? 'bg-emerald-600 border-emerald-500 text-white'
+                                                : 'bg-slate-700 border-slate-600 text-slate-300 hover:border-emerald-500'
+                                                }`}
+                                        >
+                                            <Armchair className="w-4 h-4 mx-auto mb-1" />
+                                            <span className="text-xs font-medium">{table.number}</span>
+                                        </button>
+                                    ))}
+                                </div>
+                            )}
+
+                            {selectedTableId && (
+                                <button
+                                    onClick={handleSeatWithTable}
+                                    disabled={loading}
+                                    className="w-full py-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-medium transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+                                >
+                                    {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
+                                    Confirmar Mesa
+                                </button>
+                            )}
+                        </div>
+                    )}
+
                     {/* Actions */}
-                    {reservation.status !== 'cancelled' && reservation.status !== 'completed' && (
+                    {reservation.status !== 'cancelled' && reservation.status !== 'completed' && !showTableSelector && (
                         <div className="pt-4 border-t border-slate-700 space-y-3">
                             <p className="text-sm text-slate-400 font-medium">Acciones Rápidas</p>
                             <div className="grid grid-cols-2 gap-3">
@@ -157,11 +241,11 @@ export function ReservationDetailsModal({ isOpen, onClose, reservation, onUpdate
 
                                 {(reservation.status === 'confirmed' || reservation.status === 'pending') && (
                                     <button
-                                        onClick={() => handleStatusChange('seated')}
+                                        onClick={() => setShowTableSelector(true)}
                                         disabled={loading}
                                         className="flex items-center justify-center gap-2 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-medium transition-colors disabled:opacity-50"
                                     >
-                                        {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Armchair className="w-4 h-4" />}
+                                        <Armchair className="w-4 h-4" />
                                         Sentar
                                     </button>
                                 )}
@@ -176,6 +260,15 @@ export function ReservationDetailsModal({ isOpen, onClose, reservation, onUpdate
                                         Completar
                                     </button>
                                 )}
+
+                                <button
+                                    onClick={() => handleStatusChange('no_show')}
+                                    disabled={loading}
+                                    className="flex items-center justify-center gap-2 py-3 bg-orange-600/20 hover:bg-orange-600/30 text-orange-400 rounded-xl font-medium transition-colors disabled:opacity-50"
+                                >
+                                    {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <User className="w-4 h-4" />}
+                                    No Show
+                                </button>
 
                                 <button
                                     onClick={() => handleStatusChange('cancelled')}

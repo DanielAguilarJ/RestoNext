@@ -498,6 +498,7 @@ class ReservationCreate(BaseModel):
 class ReservationResponse(BaseModel):
     id: UUID
     customer_id: Optional[UUID]
+    customer_name: Optional[str] = None  # Resolved from customer relationship
     agent_id: Optional[UUID]
     table_id: Optional[UUID]
     reservation_time: datetime

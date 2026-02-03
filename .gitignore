@@ -45,3 +45,8 @@ Thumbs.db
 # Infrastructure
 nginx/ssl/
 !nginx/ssl/.gitkeep
+
+# Build artifacts
+*.tsbuildinfo
+.turbo/
+.vercel/

@@ -26,23 +26,57 @@ function OnboardingContent() {
     const [verificationStatus, setVerificationStatus] = useState<"pending" | "success" | "error">("pending");
     const [showWizard, setShowWizard] = useState(false);
 
+    const [initialData, setInitialData] = useState<{
+        tenantName?: string;
+        plan?: string;
+        billingCycle?: string;
+    }>({});
+
     useEffect(() => {
         async function verifySession() {
-            if (success && sessionId) {
-                // Optionally verify the session with your backend
+            if (success) {
+                // Verify session and fetch initial data
                 try {
-                    // The webhook should have already processed this
-                    // This is just for UI feedback
-                    await new Promise(resolve => setTimeout(resolve, 1500)); // Simulate loading
+                    // 1. Simulate session verification delay (or verify with backend)
+                    if (sessionId) {
+                        await new Promise(resolve => setTimeout(resolve, 1500));
+                    }
+
+                    // 2. Fetch User & Tenant Data to pre-fill wizard
+                    // specific imports should be added at top of file
+                    // We assume the token is already in localStorage from checkout
+
+                    try {
+                        // Dynamically import api to avoid server-side issues if any
+                        const { tenantApi, authApi } = await import("@/lib/api");
+
+                        // Parallel fetch for speed
+                        const [user, tenant, context] = await Promise.all([
+                            authApi.me().catch(e => null),
+                            tenantApi.get_current_tenant_profile().catch(e => null),
+                            tenantApi.getContext().catch(e => null)
+                        ]);
+
+                        setInitialData({
+                            tenantName: tenant?.trade_name || tenant?.name || "Mi Restaurante",
+                            plan: context?.plan || "professional",
+                            // Context doesn't explicitly return billing cycle in interface, 
+                            // but we can infer or default. 
+                            // Checkout sets it in backend, so it's active.
+                        });
+
+                        console.log('[Onboarding] Initial data loaded:', { tenant, context });
+                    } catch (fetchError) {
+                        console.error("Error fetching initial data:", fetchError);
+                        // Non-blocking error, user can still type details
+                    }
+
                     setVerificationStatus("success");
                     setShowWizard(true);
                 } catch (error) {
                     console.error("Session verification error:", error);
                     setVerificationStatus("error");
                 }
-            } else if (success) {
-                setVerificationStatus("success");
-                setShowWizard(true);
             } else if (canceled) {
                 setVerificationStatus("error");
             }
@@ -125,7 +159,7 @@ function OnboardingContent() {
                 <OnboardingWizard
                     isOpen={showWizard}
                     onComplete={handleWizardComplete}
-                    tenantName="Mi Restaurante"
+                    initialData={initialData}
                 />
             </>
         );

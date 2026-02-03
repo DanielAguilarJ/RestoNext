@@ -222,7 +222,7 @@ export default function ReservationsPage() {
                                                         </div>
                                                         <div>
                                                             <div className="font-semibold text-white text-lg">
-                                                                {res.customer_id ? `Cliente #${res.customer_id.slice(0, 6)}` : 'Invitado'}
+                                                                {res.customer_name || 'Invitado'}
                                                             </div>
                                                             <div className="flex items-center gap-4 text-sm text-slate-400 mt-1">
                                                                 <span className="flex items-center gap-1">

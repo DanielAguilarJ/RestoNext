@@ -4,6 +4,7 @@ import { memo, useMemo } from "react";
 import { m, type Variants } from "framer-motion";
 import { BrainCircuit, Sparkles, TrendingUp, ShoppingCart, ArrowRight, type LucideIcon } from "lucide-react";
 import Link from "next/link";
+import Image from "next/image";
 
 // ============================================
 // Types
@@ -209,10 +210,13 @@ function AiFeatureSection() {
 
                         {/* Main Visual Card */}
                         <div className="relative aspect-square rounded-2xl bg-zinc-900 border border-zinc-800 overflow-hidden shadow-2xl">
-                            {/* Background gradient instead of external image for speed */}
-                            <div
-                                className="absolute inset-0 bg-gradient-to-br from-brand-950 via-zinc-900 to-blue-950 opacity-60"
-                                aria-hidden="true"
+                            <Image
+                                src="/ai-feature-visual.png"
+                                alt="AI Dashboard Visualization"
+                                fill
+                                className="object-cover opacity-60 mix-blend-overlay"
+                                sizes="(max-width: 768px) 100vw, 50vw"
+                                priority
                             />
                             <div
                                 className="absolute inset-0 bg-gradient-to-t from-zinc-900 via-zinc-900/50 to-transparent"

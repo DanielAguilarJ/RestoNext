@@ -232,7 +232,7 @@ export default function AppShell({ children }: AppShellProps) {
                 <OnboardingWizard
                     isOpen={showOnboarding}
                     onComplete={handleOnboardingComplete}
-                    tenantName={tenantName}
+                    initialData={{ tenantName }}
                 />
             </>
         </GlobalErrorBoundary>

@@ -1376,11 +1376,15 @@ export const loyaltyApi = {
 export interface Reservation {
     id: string;
     customer_id?: string;
+    customer_name?: string;
     agent_id?: string;
     table_id?: string;
     reservation_time: string;
     party_size: number;
     status: string;
+    deposit_amount?: number;
+    payment_status?: string;
+    additional_table_ids?: string[];
     notes?: string;
     tags: string[];
 }
@@ -1395,6 +1399,10 @@ export const reservationsApi = {
         return apiRequest<Reservation[]>(query ? `/reservations?${query}` : '/reservations');
     },
 
+    getById: async (id: string): Promise<Reservation> => {
+        return apiRequest<Reservation>(`/reservations/${id}`);
+    },
+
     create: async (data: any): Promise<Reservation> => {
         return apiRequest<Reservation>('/reservations', {
             method: 'POST',
@@ -1407,6 +1415,20 @@ export const reservationsApi = {
             method: 'PUT',
             body: JSON.stringify({ status, table_id: tableId }),
         });
+    },
+
+    delete: async (id: string): Promise<void> => {
+        return apiRequest<void>(`/reservations/${id}`, {
+            method: 'DELETE',
+        });
+    },
+
+    checkAvailability: async (reservationTime: Date, partySize: number): Promise<any[]> => {
+        const params = new URLSearchParams({
+            reservation_time: reservationTime.toISOString(),
+            party_size: partySize.toString(),
+        });
+        return apiRequest<any[]>(`/reservations/check-availability?${params}`);
     },
 
     getAgents: async (): Promise<Array<{ id: string; name: string; type: string }>> => {
