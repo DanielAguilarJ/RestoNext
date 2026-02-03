@@ -4,30 +4,17 @@ import { useState, useEffect, useCallback } from "react";
 import { Search, Filter, Plus, RefreshCcw, LayoutGrid, List, Loader2 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { LeadsKanban, Lead, LeadStatusType } from "@/components/catering/LeadsKanban";
+import { cateringApi } from "@/lib/api";
 
 // ============================================
-// API Functions
+// API Functions (using centralized API client)
 // ============================================
-
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'https://restonext.me/api';
 
 async function fetchLeads(): Promise<Lead[]> {
-    const token = localStorage.getItem('token');
-    const response = await fetch(`${API_BASE}/catering/leads`, {
-        headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json'
-        }
-    });
-
-    if (!response.ok) {
-        throw new Error('Failed to fetch leads');
-    }
-
-    const data = await response.json();
+    const data = await cateringApi.getLeads();
 
     // Transform API response to Lead interface
-    return data.map((lead: any) => ({
+    return data.map((lead) => ({
         id: lead.id,
         client_name: lead.client_name,
         contact_email: lead.contact_email,
@@ -46,19 +33,7 @@ async function fetchLeads(): Promise<Lead[]> {
 }
 
 async function updateLeadStatus(leadId: string, newStatus: LeadStatusType): Promise<void> {
-    const token = localStorage.getItem('token');
-    const response = await fetch(`${API_BASE}/catering/leads/${leadId}/status`, {
-        method: 'PATCH',
-        headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ status: newStatus })
-    });
-
-    if (!response.ok) {
-        throw new Error('Failed to update lead status');
-    }
+    await cateringApi.updateLeadStatus(leadId, newStatus);
 }
 
 // ============================================
