@@ -1,10 +1,12 @@
 "use client";
 
-import { m } from "framer-motion";
+import { m, useScroll, useTransform } from "framer-motion";
 import Link from "next/link";
+import { useRef } from "react";
 import {
     UtensilsCrossed, ChefHat, Receipt, BarChart3, Package, QrCode,
-    Sparkles, ArrowRight, ChevronDown, Shield, CreditCard, Zap, Globe
+    Sparkles, ArrowRight, Play, Shield, CreditCard, Zap, Globe, Star,
+    Check, Clock
 } from "lucide-react";
 
 // ============================================
@@ -12,20 +14,20 @@ import {
 // ============================================
 function FloatingIcons() {
     const icons = [
-        { Icon: UtensilsCrossed, x: "10%", y: "20%", delay: 0 },
-        { Icon: ChefHat, x: "85%", y: "15%", delay: 1 },
-        { Icon: Receipt, x: "75%", y: "70%", delay: 2 },
-        { Icon: BarChart3, x: "15%", y: "75%", delay: 1.5 },
-        { Icon: Package, x: "90%", y: "45%", delay: 0.5 },
-        { Icon: QrCode, x: "5%", y: "50%", delay: 2.5 },
+        { Icon: UtensilsCrossed, x: "10%", y: "20%", delay: 0, size: "w-12 h-12" },
+        { Icon: ChefHat, x: "85%", y: "15%", delay: 1, size: "w-14 h-14" },
+        { Icon: Receipt, x: "75%", y: "70%", delay: 2, size: "w-10 h-10" },
+        { Icon: BarChart3, x: "15%", y: "75%", delay: 1.5, size: "w-12 h-12" },
+        { Icon: Package, x: "92%", y: "45%", delay: 0.5, size: "w-10 h-10" },
+        { Icon: QrCode, x: "5%", y: "50%", delay: 2.5, size: "w-14 h-14" },
     ];
 
     return (
         <div className="absolute inset-0 overflow-hidden pointer-events-none">
-            {icons.map(({ Icon, x, y, delay }, idx) => (
+            {icons.map(({ Icon, x, y, delay, size }, idx) => (
                 <m.div
                     key={idx}
-                    className="absolute text-white/5"
+                    className="absolute text-white/[0.03]"
                     style={{ left: x, top: y }}
                     animate={{
                         y: [0, -20, 0],
@@ -38,7 +40,7 @@ function FloatingIcons() {
                         ease: "easeInOut",
                     }}
                 >
-                    <Icon className="w-16 h-16" />
+                    <Icon className={size} />
                 </m.div>
             ))}
         </div>
@@ -46,53 +48,81 @@ function FloatingIcons() {
 }
 
 // ============================================
+// Animated Stats Counter
+// ============================================
+function LiveCounter({ value, suffix }: { value: string; suffix?: string }) {
+    return (
+        <span className="tabular-nums font-bold">
+            {value}
+            {suffix && <span className="text-zinc-500">{suffix}</span>}
+        </span>
+    );
+}
+
+// ============================================
 // Hero Section
 // ============================================
 export default function HeroSection() {
+    const containerRef = useRef<HTMLElement>(null);
+    const { scrollYProgress } = useScroll({
+        target: containerRef,
+        offset: ["start start", "end start"]
+    });
+
+    const y = useTransform(scrollYProgress, [0, 1], [0, 200]);
+    const opacity = useTransform(scrollYProgress, [0, 0.5], [1, 0]);
+
     return (
-        <section className="relative min-h-screen flex items-center justify-center overflow-hidden bg-gradient-to-br from-zinc-950 via-zinc-900 to-zinc-950">
+        <section
+            ref={containerRef}
+            className="relative min-h-screen flex items-center justify-center overflow-hidden bg-zinc-950"
+        >
             {/* Floating Icons */}
             <FloatingIcons />
 
             {/* Animated Background */}
             <div className="absolute inset-0">
                 {/* Stock Image Background */}
-                <div
-                    className="absolute inset-0 bg-[url('/hero-restaurant-bg.png')] bg-cover bg-center opacity-20 mix-blend-luminosity filter blur-sm"
-                />
-                {/* Gradient Orbs with enhanced animation */}
                 <m.div
-                    className="absolute top-20 left-10 w-72 h-72 bg-brand-600/30 rounded-full blur-[100px]"
+                    style={{ y, opacity }}
+                    className="absolute inset-0 bg-[url('/hero-restaurant-bg.png')] bg-cover bg-center opacity-15 mix-blend-luminosity"
+                />
+
+                {/* Gradient Orbs */}
+                <m.div
+                    className="absolute top-10 left-10 w-[500px] h-[500px] bg-brand-600/20 rounded-full blur-[150px]"
                     animate={{
                         scale: [1, 1.2, 1],
-                        opacity: [0.3, 0.5, 0.3],
+                        opacity: [0.2, 0.4, 0.2],
                     }}
                     transition={{ duration: 8, repeat: Infinity, ease: "easeInOut" }}
                 />
                 <m.div
-                    className="absolute bottom-20 right-10 w-96 h-96 bg-blue-600/20 rounded-full blur-[120px]"
+                    className="absolute bottom-10 right-10 w-[600px] h-[600px] bg-blue-600/15 rounded-full blur-[180px]"
                     animate={{
                         scale: [1, 1.3, 1],
-                        opacity: [0.2, 0.4, 0.2],
+                        opacity: [0.15, 0.3, 0.15],
                     }}
                     transition={{ duration: 10, repeat: Infinity, ease: "easeInOut", delay: 2 }}
                 />
                 <m.div
-                    className="absolute top-1/3 right-1/4 w-64 h-64 bg-purple-600/20 rounded-full blur-[100px]"
+                    className="absolute top-1/3 right-1/4 w-[400px] h-[400px] bg-purple-600/15 rounded-full blur-[120px]"
                     animate={{
                         scale: [1, 1.2, 1],
                         x: [0, 50, 0],
                     }}
                     transition={{ duration: 12, repeat: Infinity, ease: "easeInOut", delay: 1 }}
                 />
-                <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[800px] h-[800px] bg-gradient-radial from-brand-500/10 to-transparent rounded-full" />
 
-                {/* Animated Grid Pattern */}
+                {/* Center radial gradient */}
+                <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[1000px] h-[1000px] bg-[radial-gradient(circle,_var(--tw-gradient-stops))] from-brand-500/10 via-transparent to-transparent rounded-full" />
+
+                {/* Grid Pattern */}
                 <div
-                    className="absolute inset-0 opacity-20"
+                    className="absolute inset-0 opacity-[0.03]"
                     style={{
-                        backgroundImage: `linear-gradient(rgba(255,255,255,0.03) 1px, transparent 1px), 
-                                         linear-gradient(90deg, rgba(255,255,255,0.03) 1px, transparent 1px)`,
+                        backgroundImage: `linear-gradient(rgba(255,255,255,0.05) 1px, transparent 1px), 
+                                         linear-gradient(90deg, rgba(255,255,255,0.05) 1px, transparent 1px)`,
                         backgroundSize: '60px 60px'
                     }}
                 />
@@ -104,7 +134,7 @@ export default function HeroSection() {
                     initial={{ opacity: 0, y: 20 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ duration: 0.6 }}
-                    className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-gradient-to-r from-brand-500/20 via-purple-500/10 to-brand-500/20 border border-brand-500/30 mb-8 backdrop-blur-sm"
+                    className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-gradient-to-r from-brand-500/10 via-purple-500/10 to-brand-500/10 border border-brand-500/20 mb-8 backdrop-blur-sm"
                 >
                     <m.div
                         animate={{ rotate: 360 }}
@@ -113,31 +143,34 @@ export default function HeroSection() {
                         <Sparkles className="w-4 h-4 text-brand-400" />
                     </m.div>
                     <span className="text-sm font-medium bg-gradient-to-r from-brand-300 to-purple-300 bg-clip-text text-transparent">
-                        Potenciado con Inteligencia Artificial
+                        #1 Sistema POS con IA para Restaurantes
+                    </span>
+                    <span className="flex items-center gap-1 text-amber-400">
+                        <Star className="w-3 h-3 fill-current" />
+                        <span className="text-xs font-semibold">4.9</span>
                     </span>
                 </m.div>
 
-                {/* Main Heading with enhanced gradient */}
+                {/* Main Heading */}
                 <m.h1
                     initial={{ opacity: 0, y: 30 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ duration: 0.8, delay: 0.1 }}
-                    className="text-4xl sm:text-5xl md:text-6xl lg:text-7xl font-bold text-white leading-tight mb-6"
+                    className="text-4xl sm:text-5xl md:text-6xl lg:text-7xl font-bold text-white leading-[1.1] mb-6"
                 >
                     El Sistema{" "}
                     <span className="relative inline-block">
-                        <span className="relative z-10 bg-gradient-to-r from-brand-400 via-orange-400 to-brand-500 bg-clip-text text-transparent animate-text-gradient bg-[length:200%_auto]">
-                            POS
+                        <span className="relative z-10 bg-gradient-to-r from-brand-400 via-orange-400 to-brand-500 bg-clip-text text-transparent">
+                            Todo-en-Uno
                         </span>
                         <m.span
                             className="absolute -inset-2 bg-gradient-to-r from-brand-500/30 to-orange-500/30 blur-xl rounded-lg"
-                            animate={{ opacity: [0.5, 0.8, 0.5] }}
+                            animate={{ opacity: [0.4, 0.7, 0.4] }}
                             transition={{ duration: 2, repeat: Infinity }}
                         />
                     </span>
-                    {" "}que tu
                     <br />
-                    Restaurante Merece
+                    <span className="text-zinc-400">para tu Restaurante</span>
                 </m.h1>
 
                 {/* Subheadline */}
@@ -145,24 +178,48 @@ export default function HeroSection() {
                     initial={{ opacity: 0, y: 30 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ duration: 0.8, delay: 0.2 }}
-                    className="text-lg sm:text-xl text-zinc-400 max-w-3xl mx-auto mb-10"
+                    className="text-lg sm:text-xl text-zinc-400 max-w-3xl mx-auto mb-8"
                 >
-                    Gestiona mesas, pedidos, cocina, inventario y facturación fiscal desde una
-                    sola plataforma. <span className="text-white font-semibold">Reduce costos hasta un 30%</span> con IA predictiva.
+                    POS, Cocina, Inventario, Facturación y Reportes. Todo conectado, todo en
+                    tiempo real.{" "}
+                    <span className="text-white font-semibold">Reduce costos hasta 30%</span> con nuestra IA.
                 </m.p>
 
-                {/* CTA Buttons with glow effect */}
+                {/* Feature Pills */}
+                <m.div
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    transition={{ duration: 0.6, delay: 0.3 }}
+                    className="flex flex-wrap justify-center gap-3 mb-10"
+                >
+                    {[
+                        "POS Touch-friendly",
+                        "Kitchen Display",
+                        "Inventario IA",
+                        "CFDI 4.0",
+                        "Menú QR",
+                    ].map((feature) => (
+                        <span
+                            key={feature}
+                            className="px-3 py-1.5 text-sm text-zinc-300 bg-zinc-800/50 border border-zinc-700/50 rounded-full"
+                        >
+                            {feature}
+                        </span>
+                    ))}
+                </m.div>
+
+                {/* CTA Buttons */}
                 <m.div
                     initial={{ opacity: 0, y: 30 }}
                     animate={{ opacity: 1, y: 0 }}
-                    transition={{ duration: 0.8, delay: 0.3 }}
-                    className="flex flex-col sm:flex-row gap-4 justify-center items-center"
+                    transition={{ duration: 0.8, delay: 0.4 }}
+                    className="flex flex-col sm:flex-row gap-4 justify-center items-center mb-6"
                 >
                     <Link
                         href="/checkout?plan=starter"
-                        className="group relative inline-flex items-center gap-2 px-8 py-4 bg-gradient-to-r from-brand-600 to-brand-500 text-white font-semibold rounded-xl shadow-lg shadow-brand-500/25 hover:shadow-xl hover:shadow-brand-500/40 transition-all duration-300 hover:scale-105 overflow-hidden"
+                        className="group relative inline-flex items-center gap-2 px-8 py-4 bg-gradient-to-r from-brand-600 to-brand-500 text-white font-bold text-lg rounded-xl shadow-lg shadow-brand-500/30 hover:shadow-2xl hover:shadow-brand-500/40 transition-all duration-300 hover:scale-105 overflow-hidden"
                     >
-                        <span className="relative z-10">Comenzar Prueba Gratis</span>
+                        <span className="relative z-10">Comenzar Gratis</span>
                         <ArrowRight className="w-5 h-5 relative z-10 group-hover:translate-x-1 transition-transform" />
 
                         {/* Shine effect */}
@@ -173,84 +230,139 @@ export default function HeroSection() {
                             className="absolute inset-0 rounded-xl bg-gradient-to-r from-brand-500 to-orange-500 -z-10"
                             animate={{ opacity: [0.5, 0.8, 0.5] }}
                             transition={{ duration: 2, repeat: Infinity }}
-                            style={{ filter: 'blur(20px)' }}
+                            style={{ filter: 'blur(25px)' }}
                         />
                     </Link>
+
                     <Link
                         href="/login?demo=true"
-                        className="group inline-flex items-center gap-2 px-8 py-4 bg-white/5 text-white font-semibold rounded-xl border border-white/10 hover:bg-white/10 hover:border-white/20 transition-all duration-300 backdrop-blur-sm"
+                        className="group inline-flex items-center gap-3 px-8 py-4 bg-white/5 text-white font-semibold rounded-xl border border-white/10 hover:bg-white/10 hover:border-white/20 transition-all duration-300 backdrop-blur-sm"
                     >
-                        <span>Ver Demo</span>
-                        <ChevronDown className="w-5 h-5 group-hover:translate-y-1 transition-transform" />
+                        <Play className="w-5 h-5 text-brand-400" />
+                        <span>Ver Demo en Vivo</span>
                     </Link>
                 </m.div>
 
-                {/* Trust Badges with icons */}
+                {/* Micro-conversion Text */}
+                <m.p
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    transition={{ delay: 0.5 }}
+                    className="text-sm text-zinc-500 mb-12"
+                >
+                    <Check className="w-4 h-4 inline mr-1 text-emerald-500" />
+                    14 días gratis • Sin tarjeta requerida • Configura en 5 minutos
+                </m.p>
+
+                {/* Trust Badges */}
                 <m.div
                     initial={{ opacity: 0 }}
                     animate={{ opacity: 1 }}
-                    transition={{ duration: 0.8, delay: 0.5 }}
-                    className="mt-16 flex flex-wrap justify-center items-center gap-8 text-zinc-500"
+                    transition={{ duration: 0.8, delay: 0.6 }}
+                    className="flex flex-wrap justify-center items-center gap-4 md:gap-6"
                 >
                     {[
-                        { icon: Shield, text: "CFDI 4.0 Certificado" },
-                        { icon: CreditCard, text: "Pagos con Stripe" },
-                        { icon: Zap, text: "Setup en 5 minutos" },
-                        { icon: Globe, text: "99.9% Uptime" },
-                    ].map(({ icon: Icon, text }) => (
+                        { icon: Shield, text: "CFDI 4.0 SAT", color: "text-emerald-400" },
+                        { icon: CreditCard, text: "Pagos Seguros", color: "text-blue-400" },
+                        { icon: Clock, text: "Setup 5 min", color: "text-purple-400" },
+                        { icon: Globe, text: "99.9% Uptime", color: "text-cyan-400" },
+                    ].map(({ icon: Icon, text, color }) => (
                         <m.div
                             key={text}
-                            className="flex items-center gap-2 px-4 py-2 rounded-full bg-zinc-800/50 border border-zinc-700/50"
-                            whileHover={{ scale: 1.05, borderColor: 'rgba(217, 45, 32, 0.5)' }}
+                            className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-zinc-900/80 border border-zinc-800/80 backdrop-blur-sm"
+                            whileHover={{ scale: 1.05, borderColor: 'rgba(255,255,255,0.2)' }}
                         >
-                            <Icon className="w-4 h-4 text-brand-400" />
-                            <span className="text-sm text-zinc-400">{text}</span>
+                            <Icon className={`w-4 h-4 ${color}`} />
+                            <span className="text-sm text-zinc-300 font-medium">{text}</span>
                         </m.div>
                     ))}
                 </m.div>
             </div>
 
-            {/* 3D Floating UI Preview */}
+            {/* 3D Dashboard Preview */}
             <m.div
                 initial={{ opacity: 0, y: 100 }}
                 animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 1, delay: 0.6 }}
-                className="absolute bottom-0 left-1/2 -translate-x-1/2 w-full max-w-5xl px-4"
+                transition={{ duration: 1, delay: 0.8 }}
+                className="absolute bottom-0 left-1/2 -translate-x-1/2 w-full max-w-5xl px-4 hidden md:block"
             >
                 <m.div
                     className="relative"
-                    whileHover={{
-                        rotateX: -5,
-                        rotateY: 5,
-                        transition: { duration: 0.3 }
-                    }}
+                    initial={{ rotateX: 0 }}
+                    animate={{ rotateX: 10 }}
+                    transition={{ duration: 1, delay: 1 }}
                     style={{ perspective: 1000, transformStyle: 'preserve-3d' }}
                 >
-                    <div className="absolute inset-0 bg-gradient-to-t from-zinc-950 via-transparent to-transparent z-10" />
-                    <div className="rounded-t-2xl bg-gradient-to-b from-zinc-800 to-zinc-900 border border-zinc-700 shadow-2xl shadow-brand-500/10 p-2">
+                    {/* Gradient fade */}
+                    <div className="absolute inset-0 bg-gradient-to-t from-zinc-950 via-zinc-950/80 to-transparent z-10 pointer-events-none" />
+
+                    {/* Browser Chrome */}
+                    <div className="rounded-t-2xl bg-gradient-to-b from-zinc-800 to-zinc-900 border border-zinc-700/50 shadow-2xl shadow-brand-500/5 p-2">
                         <div className="bg-zinc-900 rounded-t-xl overflow-hidden">
-                            {/* Mock Dashboard Header */}
-                            <div className="h-12 bg-zinc-800 flex items-center px-4 gap-3">
+                            {/* Browser Header */}
+                            <div className="h-10 bg-zinc-800/80 flex items-center px-4 gap-3 border-b border-zinc-700/50">
                                 <div className="flex gap-2">
-                                    <span className="w-3 h-3 rounded-full bg-red-500" />
-                                    <span className="w-3 h-3 rounded-full bg-yellow-500" />
-                                    <span className="w-3 h-3 rounded-full bg-green-500" />
+                                    <span className="w-3 h-3 rounded-full bg-red-500/80" />
+                                    <span className="w-3 h-3 rounded-full bg-yellow-500/80" />
+                                    <span className="w-3 h-3 rounded-full bg-green-500/80" />
                                 </div>
-                                <span className="text-zinc-400 text-sm">RestoNext Dashboard</span>
+                                <div className="flex-1 flex justify-center">
+                                    <div className="px-4 py-1 bg-zinc-700/50 rounded-md text-zinc-400 text-xs">
+                                        app.restonext.me/dashboard
+                                    </div>
+                                </div>
                             </div>
-                            {/* Mock Content with animation */}
-                            <div className="h-48 bg-zinc-950 p-4">
+
+                            {/* Mock Dashboard Content */}
+                            <div className="h-56 bg-zinc-950 p-4">
                                 <div className="grid grid-cols-4 gap-4 h-full">
+                                    {/* Stats cards */}
                                     <m.div
-                                        className="col-span-3 bg-gradient-to-br from-zinc-800/50 to-zinc-900/50 rounded-lg border border-zinc-700/50"
-                                        animate={{ opacity: [0.5, 1, 0.5] }}
+                                        className="col-span-1 bg-gradient-to-br from-brand-600/20 to-brand-700/10 rounded-xl border border-brand-500/20 p-4 flex flex-col justify-between"
+                                        animate={{ opacity: [0.7, 1, 0.7] }}
                                         transition={{ duration: 3, repeat: Infinity }}
-                                    />
+                                    >
+                                        <div className="text-xs text-zinc-400">Ventas Hoy</div>
+                                        <div className="text-2xl font-bold text-white">
+                                            <LiveCounter value="$24,850" />
+                                        </div>
+                                        <div className="text-xs text-emerald-400">↑ 12% vs ayer</div>
+                                    </m.div>
+
+                                    {/* Main chart area */}
+                                    <div className="col-span-2 bg-zinc-900/50 rounded-xl border border-zinc-800 p-4">
+                                        <div className="flex justify-between items-center mb-3">
+                                            <span className="text-xs text-zinc-400">Ventas por hora</span>
+                                            <span className="text-xs text-brand-400">En vivo</span>
+                                        </div>
+                                        {/* Mini chart visualization */}
+                                        <div className="flex items-end gap-1 h-20">
+                                            {[40, 65, 45, 80, 60, 90, 75, 55, 85, 70, 95, 80].map((h, i) => (
+                                                <m.div
+                                                    key={i}
+                                                    className="flex-1 bg-gradient-to-t from-brand-600 to-brand-400 rounded-t"
+                                                    initial={{ height: 0 }}
+                                                    animate={{ height: `${h}%` }}
+                                                    transition={{ duration: 0.5, delay: i * 0.05 + 1.2 }}
+                                                />
+                                            ))}
+                                        </div>
+                                    </div>
+
+                                    {/* Alerts/Notifications */}
                                     <m.div
-                                        className="bg-gradient-to-br from-brand-500/20 to-zinc-900/50 rounded-lg border border-brand-500/20"
-                                        animate={{ opacity: [0.3, 0.7, 0.3] }}
+                                        className="col-span-1 bg-zinc-900/50 rounded-xl border border-zinc-800 p-3 space-y-2"
+                                        animate={{ opacity: [0.6, 1, 0.6] }}
                                         transition={{ duration: 2, repeat: Infinity, delay: 0.5 }}
-                                    />
+                                    >
+                                        <div className="text-xs text-zinc-400 mb-2">Alertas IA</div>
+                                        <div className="text-xs p-2 bg-amber-500/10 border border-amber-500/20 rounded text-amber-300">
+                                            ⚠️ Stock bajo: Cilantro
+                                        </div>
+                                        <div className="text-xs p-2 bg-emerald-500/10 border border-emerald-500/20 rounded text-emerald-300">
+                                            ✓ Predicción: +25% tacos
+                                        </div>
+                                    </m.div>
                                 </div>
                             </div>
                         </div>
