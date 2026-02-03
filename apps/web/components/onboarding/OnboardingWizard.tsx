@@ -39,6 +39,9 @@ import {
     Store,
     CreditCard,
     Zap,
+    Coffee,
+    UtensilsCrossed,
+    LayoutGrid,
 } from 'lucide-react';
 
 // API Configuration
@@ -132,6 +135,8 @@ interface TenantData {
     logo_url: string;
     currency: string;
     service_types: string[];
+    business_type: 'restaurant' | 'cafeteria';
+    table_count: number;
 }
 
 interface OnboardingWizardProps {
@@ -142,6 +147,7 @@ interface OnboardingWizardProps {
 
 // Step configuration
 const steps = [
+    { id: 'business_type', title: 'Tu Negocio', icon: <Store className="w-6 h-6" /> },
     { id: 'welcome', title: 'Bienvenido', icon: <Sparkles className="w-6 h-6" /> },
     { id: 'identity', title: 'Identidad', icon: <Building2 className="w-6 h-6" /> },
     { id: 'config', title: 'Configuración', icon: <Palette className="w-6 h-6" /> },
@@ -176,6 +182,8 @@ export default function OnboardingWizard({ isOpen, onComplete, tenantName = 'tu 
         logo_url: '',
         currency: 'MXN',
         service_types: ['dine_in'],
+        business_type: 'restaurant',
+        table_count: 8,
     });
 
     // Logo preview
@@ -238,6 +246,8 @@ export default function OnboardingWizard({ isOpen, onComplete, tenantName = 'tu 
                     currency: formData.currency,
                     service_types: formData.service_types,
                     seed_demo_data: withDemoData,
+                    business_type: formData.business_type,
+                    table_count: formData.table_count,
                 }),
             });
 
@@ -258,6 +268,113 @@ export default function OnboardingWizard({ isOpen, onComplete, tenantName = 'tu 
     if (!isOpen) return null;
 
     // Step renderers
+    const renderBusinessTypeStep = () => (
+        <div className="text-center max-w-2xl mx-auto">
+            {/* Header */}
+            <div className="relative mb-8">
+                <div className="w-24 h-24 mx-auto bg-gradient-to-br from-violet-500 to-purple-600 rounded-3xl flex items-center justify-center shadow-2xl shadow-violet-500/30">
+                    <Store className="w-12 h-12 text-white" />
+                </div>
+            </div>
+
+            <h2 className="text-4xl font-bold text-white mb-4">
+                ¿Qué tipo de negocio tienes?
+            </h2>
+
+            <p className="text-xl text-slate-300 mb-10">
+                Personalizaremos tu experiencia según tu tipo de operación
+            </p>
+
+            {/* Business Type Cards */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+                {/* Restaurant Option */}
+                <button
+                    onClick={() => setFormData(prev => ({ ...prev, business_type: 'restaurant' }))}
+                    className={`group relative p-8 rounded-3xl border-2 transition-all duration-300 text-left overflow-hidden ${formData.business_type === 'restaurant'
+                        ? 'bg-gradient-to-br from-violet-500/20 to-purple-600/20 border-violet-500 shadow-xl shadow-violet-500/20'
+                        : 'bg-slate-800/50 border-slate-700 hover:border-slate-500 hover:bg-slate-800/80'
+                        }`}
+                >
+                    {/* Glow Effect */}
+                    {formData.business_type === 'restaurant' && (
+                        <div className="absolute inset-0 bg-gradient-to-br from-violet-500/10 to-transparent pointer-events-none" />
+                    )}
+
+                    <div className="relative z-10">
+                        <div className={`w-16 h-16 rounded-2xl flex items-center justify-center mb-4 transition-all ${formData.business_type === 'restaurant'
+                            ? 'bg-gradient-to-br from-violet-500 to-purple-600'
+                            : 'bg-slate-700 group-hover:bg-slate-600'
+                            }`}>
+                            <UtensilsCrossed className="w-8 h-8 text-white" />
+                        </div>
+
+                        <h3 className={`text-2xl font-bold mb-2 ${formData.business_type === 'restaurant' ? 'text-white' : 'text-slate-200'
+                            }`}>
+                            Restaurante
+                        </h3>
+
+                        <p className="text-slate-400 text-sm leading-relaxed">
+                            Servicio en mesas, meseros asignan comandas, cocina prepara y entrega
+                        </p>
+
+                        {/* Check indicator */}
+                        {formData.business_type === 'restaurant' && (
+                            <div className="absolute top-4 right-4 w-8 h-8 bg-violet-500 rounded-full flex items-center justify-center">
+                                <Check className="w-5 h-5 text-white" />
+                            </div>
+                        )}
+                    </div>
+                </button>
+
+                {/* Cafeteria Option */}
+                <button
+                    onClick={() => setFormData(prev => ({ ...prev, business_type: 'cafeteria' }))}
+                    className={`group relative p-8 rounded-3xl border-2 transition-all duration-300 text-left overflow-hidden ${formData.business_type === 'cafeteria'
+                        ? 'bg-gradient-to-br from-amber-500/20 to-orange-600/20 border-amber-500 shadow-xl shadow-amber-500/20'
+                        : 'bg-slate-800/50 border-slate-700 hover:border-slate-500 hover:bg-slate-800/80'
+                        }`}
+                >
+                    {/* Glow Effect */}
+                    {formData.business_type === 'cafeteria' && (
+                        <div className="absolute inset-0 bg-gradient-to-br from-amber-500/10 to-transparent pointer-events-none" />
+                    )}
+
+                    <div className="relative z-10">
+                        <div className={`w-16 h-16 rounded-2xl flex items-center justify-center mb-4 transition-all ${formData.business_type === 'cafeteria'
+                            ? 'bg-gradient-to-br from-amber-500 to-orange-600'
+                            : 'bg-slate-700 group-hover:bg-slate-600'
+                            }`}>
+                            <Coffee className="w-8 h-8 text-white" />
+                        </div>
+
+                        <h3 className={`text-2xl font-bold mb-2 ${formData.business_type === 'cafeteria' ? 'text-white' : 'text-slate-200'
+                            }`}>
+                            Cafetería
+                        </h3>
+
+                        <p className="text-slate-400 text-sm leading-relaxed">
+                            Pago en caja primero, luego se prepara el pedido y se entrega al cliente
+                        </p>
+
+                        {/* Check indicator */}
+                        {formData.business_type === 'cafeteria' && (
+                            <div className="absolute top-4 right-4 w-8 h-8 bg-amber-500 rounded-full flex items-center justify-center">
+                                <Check className="w-5 h-5 text-white" />
+                            </div>
+                        )}
+                    </div>
+                </button>
+            </div>
+
+            {/* Info Note */}
+            <div className="p-4 bg-slate-800/50 rounded-xl border border-slate-700/50 text-left">
+                <p className="text-slate-400 text-sm">
+                    <span className="text-violet-400 font-medium">💡 Tip:</span> Puedes cambiar esto después en Configuración &gt; KDS
+                </p>
+            </div>
+        </div>
+    );
+
     const renderWelcomeStep = () => (
         <div className="text-center max-w-2xl mx-auto">
             {/* Animated Logo */}
@@ -463,6 +580,67 @@ export default function OnboardingWizard({ isOpen, onComplete, tenantName = 'tu 
                 </div>
             </div>
 
+            {/* Table Count - Only show if dine_in is selected */}
+            {formData.service_types.includes('dine_in') && (
+                <div className="mb-8">
+                    <label className="block text-slate-300 font-medium mb-3 flex items-center gap-2">
+                        <LayoutGrid className="w-5 h-5 text-slate-400" />
+                        Número de Mesas
+                    </label>
+
+                    {/* Quick presets */}
+                    <div className="grid grid-cols-6 gap-2 mb-4">
+                        {[4, 6, 8, 10, 15, 20].map((count) => (
+                            <button
+                                key={count}
+                                onClick={() => setFormData(prev => ({ ...prev, table_count: count }))}
+                                className={`py-3 rounded-lg font-bold transition-all ${formData.table_count === count
+                                    ? 'bg-amber-500 text-black'
+                                    : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
+                                    }`}
+                            >
+                                {count}
+                            </button>
+                        ))}
+                    </div>
+
+                    {/* Custom slider */}
+                    <div className="flex items-center gap-4">
+                        <input
+                            type="range"
+                            min={1}
+                            max={50}
+                            value={formData.table_count}
+                            onChange={(e) => setFormData(prev => ({ ...prev, table_count: parseInt(e.target.value) }))}
+                            className="flex-1 h-2 bg-slate-700 rounded-full appearance-none cursor-pointer accent-amber-500"
+                        />
+                        <div className="w-16 px-3 py-2 rounded-lg bg-slate-800 text-center">
+                            <span className="text-xl font-bold text-amber-400">{formData.table_count}</span>
+                        </div>
+                    </div>
+
+                    {/* Visual preview */}
+                    <div className="mt-4 p-4 bg-slate-800/50 rounded-xl border border-slate-700/50">
+                        <p className="text-slate-500 text-sm mb-3">Vista previa del layout:</p>
+                        <div className="grid grid-cols-10 gap-1.5">
+                            {Array.from({ length: Math.min(formData.table_count, 30) }).map((_, i) => (
+                                <div
+                                    key={i}
+                                    className="aspect-square rounded bg-amber-500/30 flex items-center justify-center text-xs text-amber-300 font-medium"
+                                >
+                                    {i + 1}
+                                </div>
+                            ))}
+                            {formData.table_count > 30 && (
+                                <div className="col-span-2 aspect-[2/1] rounded bg-slate-700 flex items-center justify-center text-xs text-slate-400">
+                                    +{formData.table_count - 30} más
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                </div>
+            )}
+
             {/* Summary */}
             <div className="p-4 bg-slate-800/30 rounded-xl border border-slate-700/50">
                 <p className="text-slate-400 text-sm">Configuración seleccionada:</p>
@@ -472,6 +650,12 @@ export default function OnboardingWizard({ isOpen, onComplete, tenantName = 'tu 
                     <span className="text-emerald-400">
                         {formData.service_types.map(t => serviceTypes.find(st => st.id === t)?.name).join(', ')}
                     </span>
+                    {formData.service_types.includes('dine_in') && (
+                        <>
+                            {' • '}
+                            <span className="text-amber-400">{formData.table_count} mesas</span>
+                        </>
+                    )}
                 </p>
             </div>
         </div>
@@ -574,10 +758,11 @@ export default function OnboardingWizard({ isOpen, onComplete, tenantName = 'tu 
     // Render current step content
     const renderStepContent = () => {
         switch (currentStep) {
-            case 0: return renderWelcomeStep();
-            case 1: return renderIdentityStep();
-            case 2: return renderConfigStep();
-            case 3: return renderCompleteStep();
+            case 0: return renderBusinessTypeStep();
+            case 1: return renderWelcomeStep();
+            case 2: return renderIdentityStep();
+            case 3: return renderConfigStep();
+            case 4: return renderCompleteStep();
             default: return null;
         }
     };
@@ -642,7 +827,7 @@ export default function OnboardingWizard({ isOpen, onComplete, tenantName = 'tu 
                 {/* Navigation Footer */}
                 <div className="p-8 border-t border-slate-800">
                     <div className="max-w-2xl mx-auto flex items-center justify-between">
-                        {currentStep > 0 && currentStep < 3 ? (
+                        {currentStep > 0 && currentStep < 4 ? (
                             <button
                                 onClick={() => goToStep(currentStep - 1)}
                                 className="flex items-center gap-2 px-6 py-3 text-slate-400 hover:text-white transition-colors"
@@ -654,12 +839,12 @@ export default function OnboardingWizard({ isOpen, onComplete, tenantName = 'tu 
                             <div />
                         )}
 
-                        {currentStep < 3 && (
+                        {currentStep < 4 && (
                             <button
                                 onClick={() => goToStep(currentStep + 1)}
                                 className="flex items-center gap-2 px-8 py-4 bg-gradient-to-r from-violet-500 to-purple-600 hover:from-violet-400 hover:to-purple-500 text-white font-semibold rounded-xl transition-all"
                             >
-                                {currentStep === 0 ? 'Comenzar' : 'Siguiente'}
+                                {currentStep === 0 ? 'Continuar' : currentStep === 1 ? 'Comenzar' : 'Siguiente'}
                                 <ArrowRight className="w-5 h-5" />
                             </button>
                         )}

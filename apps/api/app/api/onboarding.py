@@ -265,6 +265,8 @@ class QuickOnboardingRequest(BaseModel):
     currency: str = "MXN"
     service_types: List[str] = ["dine_in"]
     seed_demo_data: bool = False
+    business_type: str = "restaurant"  # 'restaurant' or 'cafeteria'
+    table_count: int = 5  # Number of tables to create (1-50)
 
 
 class QuickOnboardingResponse(BaseModel):
@@ -312,6 +314,15 @@ async def quick_complete_onboarding(
     current_features = dict(tenant.features_config) if tenant.features_config else {}
     current_features["service_types"] = data.service_types
     
+    # Set KDS mode based on business type selection
+    current_features["kds"] = {
+        "mode": data.business_type,  # 'restaurant' or 'cafeteria'
+        "warning_minutes": 5,
+        "critical_minutes": 10,
+        "audio_alerts": True,
+        "shake_animation": True,
+    }
+    
     if data.logo_url:
         # Check if logo is a huge Base64 string
         if len(data.logo_url) > 255:
@@ -346,8 +357,15 @@ async def quick_complete_onboarding(
         )
     
     demo_seeded = False
+    tables_created = 0
     
-    # Optionally seed demo data
+    # Always create tables based on user configuration
+    try:
+        tables_created = await _create_tables_for_tenant(db, tenant.id, data.table_count)
+    except Exception as e:
+        print(f"Warning: Failed to create tables: {e}")
+    
+    # Optionally seed demo data (menu items, categories, etc.)
     if data.seed_demo_data:
         try:
             await _seed_demo_data_for_tenant(db, tenant.id)
@@ -363,7 +381,7 @@ async def quick_complete_onboarding(
     
     return QuickOnboardingResponse(
         success=True,
-        message="Onboarding completado exitosamente",
+        message=f"Onboarding completado exitosamente. {tables_created} mesas creadas.",
         tenant_name=tenant.trade_name or tenant.name,
         demo_data_seeded=demo_seeded
     )
@@ -376,7 +394,8 @@ async def _seed_demo_data_for_tenant(db: AsyncSession, tenant_id):
     Creates:
     - Sample menu categories
     - Sample products
-    - Sample tables
+    
+    Note: Tables are created separately via _create_tables_for_tenant
     """
     import uuid
     from app.models.models import MenuCategory, MenuItem, Table
@@ -431,23 +450,50 @@ async def _seed_demo_data_for_tenant(db: AsyncSession, tenant_id):
         )
         db.add(product)
     
-    # Create demo tables
-    from app.models.models import TableStatus
+    # Note: Tables are now created separately via _create_tables_for_tenant
     
-    for i in range(1, 6):
+    await db.commit()
+
+
+async def _create_tables_for_tenant(db: AsyncSession, tenant_id, table_count: int) -> int:
+    """
+    Create tables for a new tenant based on their configuration.
+    
+    Args:
+        db: Database session
+        tenant_id: The tenant ID
+        table_count: Number of tables to create (clamped to 1-50)
+        
+    Returns:
+        Number of tables created
+    """
+    import uuid
+    from app.models.models import Table, TableStatus
+    
+    # Clamp table count to reasonable limits
+    table_count = max(1, min(50, table_count))
+    
+    # Calculate a simple grid layout
+    cols = 5  # 5 tables per row
+    
+    for i in range(1, table_count + 1):
+        row = (i - 1) // cols
+        col = (i - 1) % cols
+        
         table = Table(
             id=uuid.uuid4(),
             tenant_id=tenant_id,
             number=i,
-            capacity=4,
+            capacity=4,  # Default capacity
             status=TableStatus.FREE,
-            pos_x=i * 2, # Simple layout
-            pos_y=2,
+            pos_x=col * 2 + 1,  # Position in grid
+            pos_y=row * 2 + 1,
             self_service_enabled=True
         )
         db.add(table)
     
     await db.commit()
+    return table_count
 
 
 
