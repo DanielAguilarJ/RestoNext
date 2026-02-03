@@ -6,8 +6,9 @@ import os
 
 from fastapi import APIRouter, Depends, HTTPException, status, Request, BackgroundTasks
 from fastapi.responses import StreamingResponse
-from sqlalchemy.orm import Session, joinedload
-from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import joinedload, selectinload
+from sqlalchemy import select, delete
 from pydantic import BaseModel
 import io
 
@@ -106,9 +107,9 @@ class ProductionSheetResponse(BaseModel):
 # ==========================================
 
 @router.post("/leads", response_model=EventLeadResponse)
-def create_lead(
+async def create_lead(
     lead_in: EventLeadCreate,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
     lead = EventLead(
@@ -116,37 +117,41 @@ def create_lead(
         tenant_id=current_user.tenant_id
     )
     db.add(lead)
-    db.commit()
-    db.refresh(lead)
+    await db.commit()
+    await db.refresh(lead)
     return lead
 
 @router.get("/leads", response_model=List[EventLeadResponse])
-def get_leads(
+async def get_leads(
     skip: int = 0,
     limit: int = 100,
     status: Optional[str] = None,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
     query = select(EventLead).where(EventLead.tenant_id == current_user.tenant_id)
     if status:
         query = query.where(EventLead.status == status)
     
-    leads = db.execute(query.offset(skip).limit(limit)).scalars().all()
+    result = await db.execute(query.offset(skip).limit(limit))
+    leads = result.scalars().all()
     return leads
 
 
 @router.get("/leads/{lead_id}", response_model=EventLeadResponse)
-def get_lead(
+async def get_lead(
     lead_id: uuid.UUID,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
     """Get a specific lead by ID."""
-    lead = db.query(EventLead).filter(
-        EventLead.id == lead_id, 
-        EventLead.tenant_id == current_user.tenant_id
-    ).first()
+    result = await db.execute(
+        select(EventLead).where(
+            EventLead.id == lead_id, 
+            EventLead.tenant_id == current_user.tenant_id
+        )
+    )
+    lead = result.scalar_one_or_none()
     
     if not lead:
         raise HTTPException(status_code=404, detail="Lead not found")
@@ -155,20 +160,23 @@ def get_lead(
 
 
 @router.patch("/leads/{lead_id}/status", response_model=EventLeadResponse)
-def update_lead_status(
+async def update_lead_status(
     lead_id: uuid.UUID,
     status_update: dict,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
     """
     Update lead status (for Kanban drag-and-drop).
     Valid statuses: new, contacted, proposal_sent, negotiation, quoting, won, lost
     """
-    lead = db.query(EventLead).filter(
-        EventLead.id == lead_id, 
-        EventLead.tenant_id == current_user.tenant_id
-    ).first()
+    result = await db.execute(
+        select(EventLead).where(
+            EventLead.id == lead_id, 
+            EventLead.tenant_id == current_user.tenant_id
+        )
+    )
+    lead = result.scalar_one_or_none()
     
     if not lead:
         raise HTTPException(status_code=404, detail="Lead not found")
@@ -186,22 +194,25 @@ def update_lead_status(
         )
     
     lead.status = new_status
-    db.commit()
-    db.refresh(lead)
+    await db.commit()
+    await db.refresh(lead)
     
     return lead
 
 
 @router.post("/leads/{lead_id}/convert", response_model=EventResponse)
-def convert_lead_to_event(
+async def convert_lead_to_event(
     lead_id: uuid.UUID,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    lead = db.query(EventLead).filter(
-        EventLead.id == lead_id, 
-        EventLead.tenant_id == current_user.tenant_id
-    ).first()
+    result = await db.execute(
+        select(EventLead).where(
+            EventLead.id == lead_id, 
+            EventLead.tenant_id == current_user.tenant_id
+        )
+    )
+    lead = result.scalar_one_or_none()
     
     if not lead:
         raise HTTPException(status_code=404, detail="Lead not found")
@@ -221,8 +232,8 @@ def convert_lead_to_event(
     
     lead.status = LeadStatus.WON
     db.add(event)
-    db.commit()
-    db.refresh(event)
+    await db.commit()
+    await db.refresh(event)
     return event
 
 # ==========================================
@@ -230,9 +241,9 @@ def convert_lead_to_event(
 # ==========================================
 
 @router.post("/events", response_model=EventResponse)
-def create_event(
+async def create_event(
     event_in: EventCreate,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
     event = Event(
@@ -241,36 +252,38 @@ def create_event(
         status=EventStatus.DRAFT
     )
     db.add(event)
-    db.commit()
-    db.refresh(event)
+    await db.commit()
+    await db.refresh(event)
     return event
 
 @router.get("/events", response_model=List[EventResponse])
-def get_events(
+async def get_events(
     skip: int = 0,
     limit: int = 100,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    events = db.execute(
+    result = await db.execute(
         select(Event)
         .where(Event.tenant_id == current_user.tenant_id)
-        .options(joinedload(Event.menu_selections))
+        .options(selectinload(Event.menu_selections))
         .offset(skip).limit(limit)
-    ).unique().scalars().all()
+    )
+    events = result.unique().scalars().all()
     return events
 
 @router.get("/events/{event_id}", response_model=EventResponse)
-def get_event(
+async def get_event(
     event_id: uuid.UUID,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    event = db.execute(
+    result = await db.execute(
         select(Event)
         .where(Event.id == event_id, Event.tenant_id == current_user.tenant_id)
-        .options(joinedload(Event.menu_selections))
-    ).unique().scalar_one_or_none()
+        .options(selectinload(Event.menu_selections))
+    )
+    event = result.unique().scalar_one_or_none()
     
     if not event:
         raise HTTPException(status_code=404, detail="Event not found")
@@ -278,17 +291,20 @@ def get_event(
 
 
 @router.patch("/events/{event_id}", response_model=EventResponse)
-def update_event(
+async def update_event(
     event_id: uuid.UUID,
     event_in: EventUpdate,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
     """Update an existing event."""
-    event = db.query(Event).filter(
-        Event.id == event_id, 
-        Event.tenant_id == current_user.tenant_id
-    ).first()
+    result = await db.execute(
+        select(Event).where(
+            Event.id == event_id, 
+            Event.tenant_id == current_user.tenant_id
+        )
+    )
+    event = result.scalar_one_or_none()
     
     if not event:
         raise HTTPException(status_code=404, detail="Event not found")
@@ -297,23 +313,26 @@ def update_event(
     for field, value in update_data.items():
         setattr(event, field, value)
     
-    db.commit()
-    db.refresh(event)
-    return get_event(event_id, db, current_user)
+    await db.commit()
+    await db.refresh(event)
+    return await get_event(event_id, db, current_user)
 
 
 @router.patch("/events/{event_id}/status", response_model=EventResponse)
-def update_event_status(
+async def update_event_status(
     event_id: uuid.UUID,
     status_update: dict,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
     """Update event status (draft, confirmed, cancelled, completed)."""
-    event = db.query(Event).filter(
-        Event.id == event_id, 
-        Event.tenant_id == current_user.tenant_id
-    ).first()
+    result = await db.execute(
+        select(Event).where(
+            Event.id == event_id, 
+            Event.tenant_id == current_user.tenant_id
+        )
+    )
+    event = result.scalar_one_or_none()
     
     if not event:
         raise HTTPException(status_code=404, detail="Event not found")
@@ -327,33 +346,36 @@ def update_event_status(
         raise HTTPException(status_code=400, detail=f"Invalid status. Must be one of: {valid_statuses}")
     
     event.status = new_status
-    db.commit()
-    db.refresh(event)
-    return get_event(event_id, db, current_user)
+    await db.commit()
+    await db.refresh(event)
+    return await get_event(event_id, db, current_user)
 
 
 @router.delete("/events/{event_id}")
-def delete_event(
+async def delete_event(
     event_id: uuid.UUID,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
     """Delete an event and all its related data."""
-    event = db.query(Event).filter(
-        Event.id == event_id, 
-        Event.tenant_id == current_user.tenant_id
-    ).first()
+    result = await db.execute(
+        select(Event).where(
+            Event.id == event_id, 
+            Event.tenant_id == current_user.tenant_id
+        )
+    )
+    event = result.scalar_one_or_none()
     
     if not event:
         raise HTTPException(status_code=404, detail="Event not found")
     
     # Delete related data first (menu selections, BEO, quote, etc.)
-    db.query(EventMenuSelection).filter(EventMenuSelection.event_id == event_id).delete()
-    db.query(BEO).filter(BEO.event_id == event_id).delete()
-    db.query(CateringQuote).filter(CateringQuote.event_id == event_id).delete()
+    await db.execute(delete(EventMenuSelection).where(EventMenuSelection.event_id == event_id))
+    await db.execute(delete(BEO).where(BEO.event_id == event_id))
+    await db.execute(delete(CateringQuote).where(CateringQuote.event_id == event_id))
     
-    db.delete(event)
-    db.commit()
+    await db.delete(event)
+    await db.commit()
     
     return {"message": "Event deleted successfully", "id": str(event_id)}
 
@@ -364,21 +386,27 @@ def delete_event(
 
 
 @router.post("/events/{event_id}/items", response_model=EventResponse)
-def add_menu_item_to_event(
+async def add_menu_item_to_event(
     event_id: uuid.UUID,
     selection_in: EventMenuSelectionCreate,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    event = db.query(Event).filter(
-        Event.id == event_id, 
-        Event.tenant_id == current_user.tenant_id
-    ).first()
+    result = await db.execute(
+        select(Event).where(
+            Event.id == event_id, 
+            Event.tenant_id == current_user.tenant_id
+        )
+    )
+    event = result.scalar_one_or_none()
     
     if not event:
         raise HTTPException(status_code=404, detail="Event not found")
-        
-    menu_item = db.query(MenuItem).filter(MenuItem.id == selection_in.menu_item_id).first()
+    
+    menu_result = await db.execute(
+        select(MenuItem).where(MenuItem.id == selection_in.menu_item_id)
+    )
+    menu_item = menu_result.scalar_one_or_none()
     if not menu_item:
         raise HTTPException(status_code=404, detail="Menu Item not found")
         
@@ -394,28 +422,32 @@ def add_menu_item_to_event(
     event.total_amount += (menu_item.price * selection_in.quantity)
     
     db.add(selection)
-    db.commit()
-    db.refresh(event)
+    await db.commit()
+    await db.refresh(event)
     # Re-fetch with relationships
-    return get_event(event_id, db, current_user)
+    return await get_event(event_id, db, current_user)
 
 @router.get("/events/{event_id}/production-list")
-def get_production_list(
+async def get_production_list(
     event_id: uuid.UUID,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
     """
     Calculates total ingredient requirements for the event.
     Multiplies (EventMenuSelection.quantity * Recipe.quantity).
     """
-    event = db.execute(
+    result = await db.execute(
         select(Event)
         .where(Event.id == event_id, Event.tenant_id == current_user.tenant_id)
         .options(
-            joinedload(Event.menu_selections).joinedload(EventMenuSelection.menu_item).joinedload(MenuItem.recipes).joinedload(Recipe.ingredient)
+            selectinload(Event.menu_selections)
+            .selectinload(EventMenuSelection.menu_item)
+            .selectinload(MenuItem.recipes)
+            .selectinload(Recipe.ingredient)
         )
-    ).unique().scalar_one_or_none()
+    )
+    event = result.unique().scalar_one_or_none()
     
     if not event:
         raise HTTPException(status_code=404, detail="Event not found")
@@ -447,17 +479,23 @@ def get_production_list(
 # ==========================================
 
 @router.post("/events/{event_id}/beo", response_model=BEOResponse)
-def create_or_update_beo(
+async def create_or_update_beo(
     event_id: uuid.UUID,
     beo_in: BEOCreate,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    event = db.query(Event).filter(Event.id == event_id, Event.tenant_id == current_user.tenant_id).first()
+    result = await db.execute(
+        select(Event).where(Event.id == event_id, Event.tenant_id == current_user.tenant_id)
+    )
+    event = result.scalar_one_or_none()
     if not event:
         raise HTTPException(status_code=404, detail="Event not found")
-        
-    beo = db.query(BEO).filter(BEO.event_id == event_id).first()
+    
+    beo_result = await db.execute(
+        select(BEO).where(BEO.event_id == event_id)
+    )
+    beo = beo_result.scalar_one_or_none()
     
     if beo:
         beo.schedule = beo_in.schedule
@@ -474,18 +512,21 @@ def create_or_update_beo(
         )
         db.add(beo)
         
-    db.commit()
-    db.refresh(beo)
+    await db.commit()
+    await db.refresh(beo)
     return beo
 
 @router.post("/events/{event_id}/quote", response_model=CateringQuoteResponse)
-def generate_quote(
+async def generate_quote(
     event_id: uuid.UUID,
     quote_in: CateringQuoteCreate,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    event = db.query(Event).filter(Event.id == event_id, Event.tenant_id == current_user.tenant_id).first()
+    result = await db.execute(
+        select(Event).where(Event.id == event_id, Event.tenant_id == current_user.tenant_id)
+    )
+    event = result.scalar_one_or_none()
     if not event:
         raise HTTPException(status_code=404, detail="Event not found")
     
@@ -505,15 +546,15 @@ def generate_quote(
     )
     
     db.add(quote)
-    db.commit()
-    db.refresh(quote)
+    await db.commit()
+    await db.refresh(quote)
     return quote
 
 
 @router.post("/events/ai-proposal", response_model=AICateringProposalResponse)
 async def generate_ai_catering_proposal(
     request: AICateringProposalRequest,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
     """
@@ -521,13 +562,16 @@ async def generate_ai_catering_proposal(
     Analyzes trends and proposes a menu using current inventory items.
     """
     # 1. Fetch Tenant Location
-    tenant = db.query(Tenant).filter(Tenant.id == current_user.tenant_id).first()
+    tenant_result = await db.execute(
+        select(Tenant).where(Tenant.id == current_user.tenant_id)
+    )
+    tenant = tenant_result.scalar_one_or_none()
     location = "Mexico, CDMX"
     if tenant and tenant.fiscal_address and isinstance(tenant.fiscal_address, dict):
         location = f"{tenant.fiscal_address.get('city', '')}, {tenant.fiscal_address.get('state', '')}"
 
     # 2. Get Current Menu Items for Context
-    menu_items_res = db.execute(
+    menu_items_res = await db.execute(
         select(MenuItem.name).where(MenuItem.tenant_id == current_user.tenant_id, MenuItem.is_available == True)
     )
     available_items = [r[0] for r in menu_items_res.all()]
@@ -551,9 +595,9 @@ async def generate_ai_catering_proposal(
 # ==========================================
 
 @router.get("/events/{event_id}/proposal/pdf")
-def generate_proposal_pdf(
+async def generate_proposal_pdf(
     event_id: uuid.UUID,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
     """
@@ -561,26 +605,33 @@ def generate_proposal_pdf(
     Returns the PDF as a downloadable file.
     """
     # Fetch event with relationships
-    event = db.execute(
+    result = await db.execute(
         select(Event)
         .where(Event.id == event_id, Event.tenant_id == current_user.tenant_id)
         .options(
-            joinedload(Event.menu_selections),
-            joinedload(Event.lead),
-            joinedload(Event.quotes)
+            selectinload(Event.menu_selections),
+            selectinload(Event.lead),
+            selectinload(Event.quotes)
         )
-    ).unique().scalar_one_or_none()
+    )
+    event = result.unique().scalar_one_or_none()
     
     if not event:
         raise HTTPException(status_code=404, detail="Event not found")
     
     # Get tenant data
-    tenant = db.query(Tenant).filter(Tenant.id == current_user.tenant_id).first()
+    tenant_result = await db.execute(
+        select(Tenant).where(Tenant.id == current_user.tenant_id)
+    )
+    tenant = tenant_result.scalar_one_or_none()
     
     # Get the latest quote for this event
-    quote = db.query(CateringQuote).filter(
-        CateringQuote.event_id == event_id
-    ).order_by(CateringQuote.created_at.desc()).first()
+    quote_result = await db.execute(
+        select(CateringQuote)
+        .where(CateringQuote.event_id == event_id)
+        .order_by(CateringQuote.created_at.desc())
+    )
+    quote = quote_result.scalars().first()
     
     if not quote:
         raise HTTPException(
@@ -654,7 +705,7 @@ def generate_proposal_pdf(
     # Update quote status to SENT
     if quote.status == QuoteStatus.DRAFT:
         quote.status = QuoteStatus.SENT
-        db.commit()
+        await db.commit()
     
     # Return as downloadable PDF
     filename = f"propuesta_{event.name.replace(' ', '_')[:30]}_{str(event_id)[:8]}.pdf"
@@ -669,9 +720,9 @@ def generate_proposal_pdf(
 
 
 @router.get("/events/{event_id}/production-sheet/pdf")
-def generate_production_sheet_pdf(
+async def generate_production_sheet_pdf(
     event_id: uuid.UUID,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
     """
@@ -679,22 +730,26 @@ def generate_production_sheet_pdf(
     Includes all ingredients needed for the event.
     """
     # Get event with full production data
-    event = db.execute(
+    result = await db.execute(
         select(Event)
         .where(Event.id == event_id, Event.tenant_id == current_user.tenant_id)
         .options(
-            joinedload(Event.menu_selections)
-            .joinedload(EventMenuSelection.menu_item)
-            .joinedload(MenuItem.recipes)
-            .joinedload(Recipe.ingredient)
+            selectinload(Event.menu_selections)
+            .selectinload(EventMenuSelection.menu_item)
+            .selectinload(MenuItem.recipes)
+            .selectinload(Recipe.ingredient)
         )
-    ).unique().scalar_one_or_none()
+    )
+    event = result.unique().scalar_one_or_none()
     
     if not event:
         raise HTTPException(status_code=404, detail="Event not found")
     
     # Get tenant
-    tenant = db.query(Tenant).filter(Tenant.id == current_user.tenant_id).first()
+    tenant_result = await db.execute(
+        select(Tenant).where(Tenant.id == current_user.tenant_id)
+    )
+    tenant = tenant_result.scalar_one_or_none()
     
     # Calculate production list
     production_list = {}
@@ -757,18 +812,19 @@ def generate_production_sheet_pdf(
 # ==========================================
 
 @router.get("/proposals/{token}", response_model=PublicProposalResponse)
-def get_public_proposal(
+async def get_public_proposal(
     token: str,
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_db)
 ):
     """
     Get proposal details by public token.
     This is a PUBLIC endpoint for the client portal.
     """
     # Find quote by token
-    quote = db.query(CateringQuote).filter(
-        CateringQuote.public_token == token
-    ).first()
+    quote_result = await db.execute(
+        select(CateringQuote).where(CateringQuote.public_token == token)
+    )
+    quote = quote_result.scalar_one_or_none()
     
     if not quote:
         raise HTTPException(status_code=404, detail="Proposal not found")
@@ -776,28 +832,32 @@ def get_public_proposal(
     # Check if expired
     if quote.valid_until < datetime.utcnow():
         quote.status = QuoteStatus.EXPIRED
-        db.commit()
+        await db.commit()
     
     # Get event with relationships
-    event = db.execute(
+    event_result = await db.execute(
         select(Event)
         .where(Event.id == quote.event_id)
         .options(
-            joinedload(Event.menu_selections),
-            joinedload(Event.lead)
+            selectinload(Event.menu_selections),
+            selectinload(Event.lead)
         )
-    ).unique().scalar_one_or_none()
+    )
+    event = event_result.unique().scalar_one_or_none()
     
     if not event:
         raise HTTPException(status_code=404, detail="Event not found")
     
     # Get tenant info
-    tenant = db.query(Tenant).filter(Tenant.id == quote.tenant_id).first()
+    tenant_result = await db.execute(
+        select(Tenant).where(Tenant.id == quote.tenant_id)
+    )
+    tenant = tenant_result.scalar_one_or_none()
     
     # Update status to VIEWED if it was SENT
     if quote.status == QuoteStatus.SENT:
         quote.status = QuoteStatus.VIEWED
-        db.commit()
+        await db.commit()
     
     # Prepare menu items
     menu_items = [
@@ -835,37 +895,42 @@ def get_public_proposal(
 
 
 @router.get("/proposals/{token}/pdf")
-def get_public_proposal_pdf(
+async def get_public_proposal_pdf(
     token: str,
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_db)
 ):
     """
     Get the proposal PDF by public token.
     This is a PUBLIC endpoint for the client portal.
     """
     # Find quote and verify
-    quote = db.query(CateringQuote).filter(
-        CateringQuote.public_token == token
-    ).first()
+    quote_result = await db.execute(
+        select(CateringQuote).where(CateringQuote.public_token == token)
+    )
+    quote = quote_result.scalar_one_or_none()
     
     if not quote:
         raise HTTPException(status_code=404, detail="Proposal not found")
     
     # Get event with all relationships
-    event = db.execute(
+    event_result = await db.execute(
         select(Event)
         .where(Event.id == quote.event_id)
         .options(
-            joinedload(Event.menu_selections),
-            joinedload(Event.lead)
+            selectinload(Event.menu_selections),
+            selectinload(Event.lead)
         )
-    ).unique().scalar_one_or_none()
+    )
+    event = event_result.unique().scalar_one_or_none()
     
     if not event:
         raise HTTPException(status_code=404, detail="Event not found")
     
     # Get tenant
-    tenant = db.query(Tenant).filter(Tenant.id == quote.tenant_id).first()
+    tenant_result = await db.execute(
+        select(Tenant).where(Tenant.id == quote.tenant_id)
+    )
+    tenant = tenant_result.scalar_one_or_none()
     
     # Prepare data (same as authenticated endpoint)
     tenant_data = {
@@ -940,11 +1005,11 @@ def get_public_proposal_pdf(
 
 
 @router.post("/proposals/{token}/sign", response_model=ProposalSignResponse)
-def sign_proposal(
+async def sign_proposal(
     token: str,
     sign_data: ProposalSignRequest,
     request: Request,
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_db)
 ):
     """
     Sign a proposal and confirm the event.
@@ -953,9 +1018,10 @@ def sign_proposal(
     The signature is stored as base64 and the event status is updated to CONFIRMED.
     """
     # Find quote
-    quote = db.query(CateringQuote).filter(
-        CateringQuote.public_token == token
-    ).first()
+    quote_result = await db.execute(
+        select(CateringQuote).where(CateringQuote.public_token == token)
+    )
+    quote = quote_result.scalar_one_or_none()
     
     if not quote:
         raise HTTPException(status_code=404, detail="Proposal not found")
@@ -970,7 +1036,7 @@ def sign_proposal(
     # Check if expired
     if quote.valid_until < datetime.utcnow():
         quote.status = QuoteStatus.EXPIRED
-        db.commit()
+        await db.commit()
         raise HTTPException(
             status_code=400,
             detail="This proposal has expired. Please contact us for a new quote."
@@ -984,17 +1050,21 @@ def sign_proposal(
         )
     
     # Get event with lead
-    event = db.execute(
+    event_result = await db.execute(
         select(Event)
         .where(Event.id == quote.event_id)
-        .options(joinedload(Event.lead))
-    ).unique().scalar_one_or_none()
+        .options(selectinload(Event.lead))
+    )
+    event = event_result.unique().scalar_one_or_none()
     
     if not event:
         raise HTTPException(status_code=404, detail="Event not found")
     
     # Get tenant for email
-    tenant = db.query(Tenant).filter(Tenant.id == quote.tenant_id).first()
+    tenant_result = await db.execute(
+        select(Tenant).where(Tenant.id == quote.tenant_id)
+    )
+    tenant = tenant_result.scalar_one_or_none()
     
     # Get client IP
     client_ip = request.headers.get(
@@ -1030,11 +1100,14 @@ def sign_proposal(
     
     # Update lead status if exists
     if event.lead_id:
-        lead = db.query(EventLead).filter(EventLead.id == event.lead_id).first()
+        lead_result = await db.execute(
+            select(EventLead).where(EventLead.id == event.lead_id)
+        )
+        lead = lead_result.scalar_one_or_none()
         if lead:
             lead.status = LeadStatus.WON
     
-    db.commit()
+    await db.commit()
     
     # ==== AUTOMATED EMAIL NOTIFICATIONS ====
     # Send emails in background to not block response
@@ -1108,10 +1181,10 @@ def sign_proposal(
 # ==========================================
 
 @router.get("/calendar/events")
-def get_calendar_events(
+async def get_calendar_events(
     start_date: Optional[datetime] = None,
     end_date: Optional[datetime] = None,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
     """
@@ -1126,9 +1199,10 @@ def get_calendar_events(
     if end_date:
         query = query.where(Event.end_time <= end_date)
     
-    events = db.execute(
-        query.options(joinedload(Event.lead))
-    ).unique().scalars().all()
+    result = await db.execute(
+        query.options(selectinload(Event.lead))
+    )
+    events = result.unique().scalars().all()
     
     # Status to color mapping
     status_colors = {
@@ -1201,9 +1275,9 @@ class ConfirmPaymentResponse(BaseModel):
 
 
 @router.post("/proposals/{token}/pay-deposit", response_model=DepositPaymentResponse)
-def create_deposit_payment_intent(
+async def create_deposit_payment_intent(
     token: str,
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_db)
 ):
     """
     Create a Stripe PaymentIntent for the deposit amount.
@@ -1218,9 +1292,10 @@ def create_deposit_payment_intent(
         )
     
     # Find quote
-    quote = db.query(CateringQuote).filter(
-        CateringQuote.public_token == token
-    ).first()
+    quote_result = await db.execute(
+        select(CateringQuote).where(CateringQuote.public_token == token)
+    )
+    quote = quote_result.scalar_one_or_none()
     
     if not quote:
         raise HTTPException(status_code=404, detail="Proposal not found")
@@ -1244,11 +1319,17 @@ def create_deposit_payment_intent(
     amount_centavos = int(deposit_amount * 100)
     
     # Get event name for description
-    event = db.query(Event).filter(Event.id == quote.event_id).first()
+    event_result = await db.execute(
+        select(Event).where(Event.id == quote.event_id)
+    )
+    event = event_result.scalar_one_or_none()
     event_name = event.name if event else "Catering Event"
     
     # Get tenant for Stripe account (if using Connect)
-    tenant = db.query(Tenant).filter(Tenant.id == quote.tenant_id).first()
+    tenant_result = await db.execute(
+        select(Tenant).where(Tenant.id == quote.tenant_id)
+    )
+    tenant = tenant_result.scalar_one_or_none()
     
     try:
         # Create PaymentIntent
@@ -1267,7 +1348,7 @@ def create_deposit_payment_intent(
         
         # Store payment intent ID
         quote.stripe_payment_intent_id = payment_intent.id
-        db.commit()
+        await db.commit()
         
         return DepositPaymentResponse(
             client_secret=payment_intent.client_secret,
@@ -1285,10 +1366,10 @@ def create_deposit_payment_intent(
 
 
 @router.post("/proposals/{token}/confirm-payment", response_model=ConfirmPaymentResponse)
-def confirm_deposit_payment(
+async def confirm_deposit_payment(
     token: str,
     payment_data: ConfirmPaymentRequest,
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_db)
 ):
     """
     Confirm that payment was successful and update event status to BOOKED.
@@ -1297,9 +1378,10 @@ def confirm_deposit_payment(
     if not STRIPE_ENABLED:
         raise HTTPException(status_code=503, detail="Payment not configured")
     
-    quote = db.query(CateringQuote).filter(
-        CateringQuote.public_token == token
-    ).first()
+    quote_result = await db.execute(
+        select(CateringQuote).where(CateringQuote.public_token == token)
+    )
+    quote = quote_result.scalar_one_or_none()
     
     if not quote:
         raise HTTPException(status_code=404, detail="Proposal not found")
@@ -1323,11 +1405,14 @@ def confirm_deposit_payment(
         quote.paid_at = datetime.utcnow()
         
         # Update event status to BOOKED
-        event = db.query(Event).filter(Event.id == quote.event_id).first()
+        event_result = await db.execute(
+            select(Event).where(Event.id == quote.event_id)
+        )
+        event = event_result.scalar_one_or_none()
         if event:
             event.status = EventStatus.BOOKED
         
-        db.commit()
+        await db.commit()
         
         return ConfirmPaymentResponse(
             success=True,
@@ -1374,9 +1459,9 @@ class ApplyPackageRequest(BaseModel):
 
 
 @router.get("/packages", response_model=List[CateringPackageResponse])
-def list_packages(
+async def list_packages(
     category: Optional[str] = None,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
     """List all active catering packages for this tenant."""
@@ -1388,7 +1473,8 @@ def list_packages(
     if category:
         query = query.where(CateringPackage.category == category)
     
-    packages = db.execute(query).scalars().all()
+    result = await db.execute(query)
+    packages = result.scalars().all()
     
     return [
         CateringPackageResponse(
@@ -1407,9 +1493,9 @@ def list_packages(
 
 
 @router.post("/packages", response_model=CateringPackageResponse)
-def create_package(
+async def create_package(
     package_in: CateringPackageCreate,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
     """Create a new catering package."""
@@ -1425,8 +1511,8 @@ def create_package(
     )
     
     db.add(package)
-    db.commit()
-    db.refresh(package)
+    await db.commit()
+    await db.refresh(package)
     
     return CateringPackageResponse(
         id=str(package.id),
@@ -1442,28 +1528,34 @@ def create_package(
 
 
 @router.post("/events/{event_id}/apply-package", response_model=EventResponse)
-def apply_package_to_event(
+async def apply_package_to_event(
     event_id: uuid.UUID,
     package_request: ApplyPackageRequest,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
     """
     Apply a catering package to an event.
     This adds all package items to the event's menu selections at once.
     """
-    event = db.query(Event).filter(
-        Event.id == event_id,
-        Event.tenant_id == current_user.tenant_id
-    ).first()
+    result = await db.execute(
+        select(Event).where(
+            Event.id == event_id,
+            Event.tenant_id == current_user.tenant_id
+        )
+    )
+    event = result.scalar_one_or_none()
     
     if not event:
         raise HTTPException(status_code=404, detail="Event not found")
     
-    package = db.query(CateringPackage).filter(
-        CateringPackage.id == package_request.package_id,
-        CateringPackage.tenant_id == current_user.tenant_id
-    ).first()
+    pkg_result = await db.execute(
+        select(CateringPackage).where(
+            CateringPackage.id == package_request.package_id,
+            CateringPackage.tenant_id == current_user.tenant_id
+        )
+    )
+    package = pkg_result.scalar_one_or_none()
     
     if not package:
         raise HTTPException(status_code=404, detail="Package not found")
@@ -1501,72 +1593,10 @@ def apply_package_to_event(
         total_added += 1
         db.add(selection)
     
-    db.commit()
-    db.refresh(event)
+    await db.commit()
+    await db.refresh(event)
     
-    return get_event(event_id, db, current_user)
+    return await get_event(event_id, db, current_user)
 
 
-# ==========================================
-# Lead Status Update (for Kanban)
-# ==========================================
-
-class LeadStatusUpdate(BaseModel):
-    """Update lead status"""
-    status: str  # new, contacted, proposal_sent, negotiation, quoting, won, lost
-
-
-@router.patch("/leads/{lead_id}/status", response_model=EventLeadResponse)
-def update_lead_status(
-    lead_id: uuid.UUID,
-    status_update: LeadStatusUpdate,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
-):
-    """
-    Update a lead's status.
-    Used by Kanban drag-and-drop to move leads between columns.
-    """
-    lead = db.query(EventLead).filter(
-        EventLead.id == lead_id,
-        EventLead.tenant_id == current_user.tenant_id
-    ).first()
-    
-    if not lead:
-        raise HTTPException(status_code=404, detail="Lead not found")
-    
-    # Validate status
-    try:
-        new_status = LeadStatus(status_update.status)
-    except ValueError:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Invalid status. Must be one of: {[s.value for s in LeadStatus]}"
-        )
-    
-    lead.status = new_status
-    lead.updated_at = datetime.utcnow()
-    
-    db.commit()
-    db.refresh(lead)
-    
-    return lead
-
-
-@router.get("/leads/{lead_id}", response_model=EventLeadResponse)
-def get_lead(
-    lead_id: uuid.UUID,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
-):
-    """Get a single lead by ID."""
-    lead = db.query(EventLead).filter(
-        EventLead.id == lead_id,
-        EventLead.tenant_id == current_user.tenant_id
-    ).first()
-    
-    if not lead:
-        raise HTTPException(status_code=404, detail="Lead not found")
-    
-    return lead
 
