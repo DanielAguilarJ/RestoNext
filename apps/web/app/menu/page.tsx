@@ -7,7 +7,7 @@
  */
 
 import { useEffect, useState } from "react";
-import { useSearchParams } from "next/navigation";
+import { useSearchParams, useRouter } from "next/navigation";
 import {
     UtensilsCrossed,
     Phone,
@@ -92,6 +92,7 @@ function getCategoryEmoji(name: string): string {
 
 export default function MenuPage() {
     const searchParams = useSearchParams();
+    const router = useRouter();
     const tableParam = searchParams.get("mesa") || searchParams.get("table");
 
     // Data state
@@ -354,12 +355,12 @@ export default function MenuPage() {
                     </div>
 
                     {/* Back Button */}
-                    <Link
-                        href="/"
+                    <button
+                        onClick={() => router.back()}
                         className="absolute top-4 left-4 p-3 bg-white/10 hover:bg-white/20 backdrop-blur rounded-xl transition-all text-white hover:scale-105 z-10"
                     >
                         <ArrowLeft className="w-5 h-5" />
-                    </Link>
+                    </button>
 
                     {/* Table Badge */}
                     <div className="absolute top-4 right-4 bg-white/20 backdrop-blur-md px-4 py-2 rounded-full text-sm font-medium flex items-center gap-2 z-10">

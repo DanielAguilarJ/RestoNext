@@ -302,7 +302,7 @@ export default function POSPage() {
 
         // No modifiers - add directly to cart
         addToCart({
-            menu_item_id: item.$id,
+            menu_item_id: item.id,
             menu_item_name: item.name,
             price: item.price,
             quantity: 1,
@@ -337,7 +337,7 @@ export default function POSPage() {
         }));
 
         addToCart({
-            menu_item_id: item.$id,
+            menu_item_id: item.id,
             menu_item_name: displayName,
             price: priceWithModifiers,
             quantity: quantity,

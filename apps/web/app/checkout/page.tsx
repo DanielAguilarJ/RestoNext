@@ -235,13 +235,13 @@ function CheckoutContent() {
             </header>
 
             <main className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
-                <Link
-                    href="/#pricing"
+                <button
+                    onClick={() => router.back()}
                     className="inline-flex items-center gap-2 text-zinc-400 hover:text-white mb-8 transition-colors"
                 >
                     <ArrowLeft className="w-4 h-4" />
                     <span>Volver a planes</span>
-                </Link>
+                </button>
 
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-12">
                     {/* Left Column: Form */}

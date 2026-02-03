@@ -182,7 +182,7 @@ export default function AdminDashboardPage() {
             localStorage.setItem('original_token', getToken() || '');
             localStorage.setItem('access_token', response.token);
 
-            router.push(response.redirect_url || '/');
+            router.push(response.redirect_url || '/dashboard');
         } catch (err: any) {
             console.error('Impersonation failed:', err);
             alert('Error al iniciar impersonación: ' + (err.message || 'Error desconocido'));

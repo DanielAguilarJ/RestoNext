@@ -77,7 +77,7 @@ export default function AcceptTermsPage() {
 
                     // If already accepted, redirect to dashboard
                     if (!status.requires_acceptance) {
-                        router.push('/');
+                        router.push('/dashboard');
                     }
                 }
             } catch (err) {
@@ -129,7 +129,7 @@ export default function AcceptTermsPage() {
             await Promise.all(promises);
 
             // Redirect to dashboard after acceptance
-            router.push('/');
+            router.push('/dashboard');
             router.refresh();
         } catch (err: any) {
             setError(err.message || 'Error al procesar la aceptación');
