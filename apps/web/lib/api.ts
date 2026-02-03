@@ -1879,6 +1879,42 @@ export const cateringApi = {
     },
 
     /**
+     * Update an existing event
+     */
+    updateEvent: async (eventId: string, data: {
+        name?: string;
+        start_time?: string;
+        end_time?: string;
+        guest_count?: number;
+        location?: string;
+        status?: string;
+    }): Promise<CateringEvent> => {
+        return apiRequest<CateringEvent>(`/catering/events/${eventId}`, {
+            method: 'PATCH',
+            body: JSON.stringify(data),
+        });
+    },
+
+    /**
+     * Update event status
+     */
+    updateEventStatus: async (eventId: string, status: string): Promise<CateringEvent> => {
+        return apiRequest<CateringEvent>(`/catering/events/${eventId}/status`, {
+            method: 'PATCH',
+            body: JSON.stringify({ status }),
+        });
+    },
+
+    /**
+     * Delete an event
+     */
+    deleteEvent: async (eventId: string): Promise<{ message: string; id: string }> => {
+        return apiRequest<{ message: string; id: string }>(`/catering/events/${eventId}`, {
+            method: 'DELETE',
+        });
+    },
+
+    /**
      * Add menu item to event
      */
     addMenuItem: async (eventId: string, data: {
@@ -1891,6 +1927,7 @@ export const cateringApi = {
             body: JSON.stringify(data),
         });
     },
+
 
     /**
      * Get production list for event

@@ -135,6 +135,63 @@ def get_leads(
     leads = db.execute(query.offset(skip).limit(limit)).scalars().all()
     return leads
 
+
+@router.get("/leads/{lead_id}", response_model=EventLeadResponse)
+def get_lead(
+    lead_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Get a specific lead by ID."""
+    lead = db.query(EventLead).filter(
+        EventLead.id == lead_id, 
+        EventLead.tenant_id == current_user.tenant_id
+    ).first()
+    
+    if not lead:
+        raise HTTPException(status_code=404, detail="Lead not found")
+        
+    return lead
+
+
+@router.patch("/leads/{lead_id}/status", response_model=EventLeadResponse)
+def update_lead_status(
+    lead_id: uuid.UUID,
+    status_update: dict,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Update lead status (for Kanban drag-and-drop).
+    Valid statuses: new, contacted, proposal_sent, negotiation, quoting, won, lost
+    """
+    lead = db.query(EventLead).filter(
+        EventLead.id == lead_id, 
+        EventLead.tenant_id == current_user.tenant_id
+    ).first()
+    
+    if not lead:
+        raise HTTPException(status_code=404, detail="Lead not found")
+    
+    new_status = status_update.get("status")
+    if not new_status:
+        raise HTTPException(status_code=400, detail="Status is required")
+    
+    # Validate status against LeadStatus enum
+    valid_statuses = ["new", "contacted", "proposal_sent", "negotiation", "quoting", "won", "lost"]
+    if new_status not in valid_statuses:
+        raise HTTPException(
+            status_code=400, 
+            detail=f"Invalid status. Must be one of: {valid_statuses}"
+        )
+    
+    lead.status = new_status
+    db.commit()
+    db.refresh(lead)
+    
+    return lead
+
+
 @router.post("/leads/{lead_id}/convert", response_model=EventResponse)
 def convert_lead_to_event(
     lead_id: uuid.UUID,
@@ -219,9 +276,92 @@ def get_event(
         raise HTTPException(status_code=404, detail="Event not found")
     return event
 
+
+@router.patch("/events/{event_id}", response_model=EventResponse)
+def update_event(
+    event_id: uuid.UUID,
+    event_in: EventUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Update an existing event."""
+    event = db.query(Event).filter(
+        Event.id == event_id, 
+        Event.tenant_id == current_user.tenant_id
+    ).first()
+    
+    if not event:
+        raise HTTPException(status_code=404, detail="Event not found")
+    
+    update_data = event_in.model_dump(exclude_unset=True)
+    for field, value in update_data.items():
+        setattr(event, field, value)
+    
+    db.commit()
+    db.refresh(event)
+    return get_event(event_id, db, current_user)
+
+
+@router.patch("/events/{event_id}/status", response_model=EventResponse)
+def update_event_status(
+    event_id: uuid.UUID,
+    status_update: dict,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Update event status (draft, confirmed, cancelled, completed)."""
+    event = db.query(Event).filter(
+        Event.id == event_id, 
+        Event.tenant_id == current_user.tenant_id
+    ).first()
+    
+    if not event:
+        raise HTTPException(status_code=404, detail="Event not found")
+    
+    new_status = status_update.get("status")
+    if not new_status:
+        raise HTTPException(status_code=400, detail="Status is required")
+    
+    valid_statuses = ["draft", "confirmed", "cancelled", "completed"]
+    if new_status not in valid_statuses:
+        raise HTTPException(status_code=400, detail=f"Invalid status. Must be one of: {valid_statuses}")
+    
+    event.status = new_status
+    db.commit()
+    db.refresh(event)
+    return get_event(event_id, db, current_user)
+
+
+@router.delete("/events/{event_id}")
+def delete_event(
+    event_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Delete an event and all its related data."""
+    event = db.query(Event).filter(
+        Event.id == event_id, 
+        Event.tenant_id == current_user.tenant_id
+    ).first()
+    
+    if not event:
+        raise HTTPException(status_code=404, detail="Event not found")
+    
+    # Delete related data first (menu selections, BEO, quote, etc.)
+    db.query(EventMenuSelection).filter(EventMenuSelection.event_id == event_id).delete()
+    db.query(BEO).filter(BEO.event_id == event_id).delete()
+    db.query(CateringQuote).filter(CateringQuote.event_id == event_id).delete()
+    
+    db.delete(event)
+    db.commit()
+    
+    return {"message": "Event deleted successfully", "id": str(event_id)}
+
+
 # ==========================================
 # Event Menu & Logic
 # ==========================================
+
 
 @router.post("/events/{event_id}/items", response_model=EventResponse)
 def add_menu_item_to_event(
