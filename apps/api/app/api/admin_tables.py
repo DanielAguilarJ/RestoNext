@@ -87,7 +87,7 @@ async def require_manager(user: User = Depends(get_current_user)) -> User:
 
 @router.get("", response_model=TableListResponse)
 async def list_tables_with_qr(
-    user: User = Depends(require_manager),
+    user: User = Depends(get_current_user),  # Allow any authenticated user to view QR codes
     db: AsyncSession = Depends(get_db)
 ):
     """
