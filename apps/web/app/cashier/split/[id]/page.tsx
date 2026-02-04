@@ -5,7 +5,7 @@ import { SplitCheck } from "@/components/cashier/SplitCheck";
 import { ArrowLeft, Receipt, Sparkles } from "lucide-react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
-import { ordersApi } from "@/lib/api";
+import { ordersApi, cashierApi } from "@/lib/api";
 
 export default function SplitCheckPage() {
     const params = useParams();
@@ -61,12 +61,23 @@ export default function SplitCheckPage() {
 
     const handlePay = async (amount: number, method: "cash" | "card") => {
         // Record payment for the order
-        // Note: For partial splits, we might need a specific endpoint or handle it as partial payment.
-        // For now, if it's the full amount or final split, it closes the order.
         await ordersApi.pay(orderId, {
             amount,
             payment_method: method,
         });
+
+        // Also record to the active cashier shift (if any)
+        try {
+            await cashierApi.recordSale({
+                order_id: orderId,
+                amount,
+                tip_amount: 0, // Tips are handled at full payment, not split
+                payment_method: method,
+            });
+        } catch (err) {
+            // Ignore if no shift is open - flexible mode
+            console.log("[SplitCheck] No active shift to record sale");
+        }
     };
 
     return (

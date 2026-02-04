@@ -10,6 +10,7 @@ import Link from "next/link";
 import { cashierApi, ordersApi, CashShift, CashTransaction } from "@/lib/api";
 import { formatPrice } from "@/lib/utils";
 import { CashClosureModal } from "@/components/cashier/CashClosureModal";
+import { XReportModal } from "@/components/cashier/XReportModal";
 
 export default function CashierPage() {
     const toast = (msg: { title: string, description: string, variant?: string }) => {
@@ -21,6 +22,7 @@ export default function CashierPage() {
     const [pendingOrders, setPendingOrders] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
     const [showCloseModal, setShowCloseModal] = useState(false);
+    const [showXReportModal, setShowXReportModal] = useState(false);
     const [openingAmount, setOpeningAmount] = useState<string>("500");
     const [isProcessing, setIsProcessing] = useState(false);
 
@@ -291,7 +293,10 @@ export default function CashierPage() {
                                     <Plus className="w-5 h-5" />
                                     Registrar Retiro
                                 </button>
-                                <button className="flex items-center gap-2 px-6 py-3 bg-blue-500 hover:bg-blue-600 rounded-xl font-bold transition-all shadow-lg shadow-blue-500/30">
+                                <button
+                                    onClick={() => setShowXReportModal(true)}
+                                    className="flex items-center gap-2 px-6 py-3 bg-blue-500 hover:bg-blue-600 rounded-xl font-bold transition-all shadow-lg shadow-blue-500/30"
+                                >
                                     <ClipboardList className="w-5 h-5" />
                                     Ver Resumen X
                                 </button>
@@ -323,19 +328,40 @@ export default function CashierPage() {
                                     <div key={tx.id} className="flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-800/50 rounded-2xl transition-all">
                                         <div className="flex items-center gap-4">
                                             <div className={tx.type === "sale" ? "text-emerald-500" : "text-red-500"}>
-                                                {tx.type === "sale" ? <Banknote className="w-6 h-6" /> : <ArrowDownRight className="w-6 h-6" />}
+                                                {tx.type === "sale" ? (
+                                                    tx.payment_method === "card" ? <CreditCard className="w-6 h-6" /> :
+                                                        tx.payment_method === "transfer" ? <Wallet className="w-6 h-6" /> :
+                                                            <Banknote className="w-6 h-6" />
+                                                ) : <ArrowDownRight className="w-6 h-6" />}
                                             </div>
                                             <div>
                                                 <p className="font-bold text-gray-900 dark:text-white capitalize">
-                                                    {tx.type === "sale" ? (tx.payment_method === "card" ? "Venta con Tarjeta" : "Venta en Efectivo") : "Retiro (Sangría)"}
+                                                    {tx.type === "sale" ? (
+                                                        tx.payment_method === "card" ? "Venta con Tarjeta" :
+                                                            tx.payment_method === "transfer" ? "Venta con Transferencia" :
+                                                                "Venta en Efectivo"
+                                                    ) : "Retiro (Sangría)"}
                                                 </p>
                                                 <p className="text-xs text-gray-500">
-                                                    {new Date(tx.created_at).toLocaleTimeString()} {tx.notes ? `• ${tx.notes}` : ""}
+                                                    {new Date(tx.created_at).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' })}
+                                                    {tx.notes ? ` • ${tx.notes}` : ""}
                                                 </p>
+                                                {tx.tip_amount > 0 && (
+                                                    <p className="text-xs text-amber-500 font-medium">
+                                                        + {formatPrice(tx.tip_amount)} propina
+                                                    </p>
+                                                )}
                                             </div>
                                         </div>
-                                        <div className={tx.type === "sale" ? "text-emerald-600 font-bold" : "text-red-600 font-bold"}>
-                                            {tx.type === "sale" ? "+" : "-"}{formatPrice(tx.amount)}
+                                        <div className="text-right">
+                                            <div className={tx.type === "sale" ? "text-emerald-600 font-bold" : "text-red-600 font-bold"}>
+                                                {tx.type === "sale" ? "+" : "-"}{formatPrice(tx.amount)}
+                                            </div>
+                                            {tx.tip_amount > 0 && (
+                                                <div className="text-xs text-amber-500 font-medium">
+                                                    (Total: {formatPrice(tx.amount + tx.tip_amount)})
+                                                </div>
+                                            )}
                                         </div>
                                     </div>
                                 ))
@@ -384,6 +410,12 @@ export default function CashierPage() {
                     }}
                 />
             )}
+
+            {/* X Report Modal */}
+            <XReportModal
+                isOpen={showXReportModal}
+                onClose={() => setShowXReportModal(false)}
+            />
         </div>
     );
 }

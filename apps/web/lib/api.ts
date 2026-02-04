@@ -367,13 +367,20 @@ export const tableTransferApi = {
 // Orders API
 // ============================================
 
+export interface SelectedModifier {
+    group_name: string;
+    option_id: string;
+    option_name: string;
+    price_delta: number;
+}
+
 export interface CreateOrderRequest {
     table_id: string;
     items: Array<{
         menu_item_id: string;
         quantity: number;
         notes?: string;
-        modifiers?: string[];
+        selected_modifiers?: SelectedModifier[];
     }>;
     notes?: string;
 }
@@ -384,6 +391,27 @@ export interface PaymentRequest {
     tip?: number;
     reference?: string;
 }
+
+// ============================================
+// Bill Split Types
+// ============================================
+
+export interface SplitDetail {
+    split_number: number;
+    item_ids: string[];
+    amount: number;
+    paid: boolean;
+    payment_method?: string;
+}
+
+export interface BillSplitResponse {
+    id: string;
+    order_id: string;
+    split_type: string;
+    splits: SplitDetail[];
+    created_at: string;
+}
+
 
 export const ordersApi = {
     /**
@@ -448,6 +476,41 @@ export const ordersApi = {
         return apiRequest<Order>(`/orders/${orderId}/pay`, {
             method: 'POST',
             body: payment ? JSON.stringify(payment) : undefined,
+        });
+    },
+
+    /**
+     * Get saved bill split configuration for an order
+     */
+    getSplits: async (orderId: string): Promise<BillSplitResponse | null> => {
+        try {
+            return await apiRequest<BillSplitResponse>(`/orders/${orderId}/splits`);
+        } catch {
+            // No splits saved yet - return null
+            return null;
+        }
+    },
+
+    /**
+     * Save or update bill split configuration for an order
+     */
+    saveSplits: async (orderId: string, splits: SplitDetail[]): Promise<BillSplitResponse> => {
+        return apiRequest<BillSplitResponse>(`/orders/${orderId}/splits`, {
+            method: 'POST',
+            body: JSON.stringify({
+                order_id: orderId,
+                split_type: 'custom',
+                splits: splits
+            }),
+        });
+    },
+
+    /**
+     * Delete bill split configuration for an order
+     */
+    deleteSplits: async (orderId: string): Promise<void> => {
+        await apiRequest(`/orders/${orderId}/splits`, {
+            method: 'DELETE',
         });
     }
 };
@@ -1282,13 +1345,39 @@ export const cashierApi = {
         tip_amount?: number;
         payment_method: 'cash' | 'card' | 'transfer';
         reference?: string;
-    }): Promise<CashTransaction> => {
-        return apiRequest<CashTransaction>('/shift/sale', {
+    }): Promise<{ message: string; transaction_id: string | null; shift_active: boolean }> => {
+        return apiRequest('/shift/sale', {
             method: 'POST',
             body: JSON.stringify(data),
         });
+    },
+
+    /**
+     * Get X Report - mid-shift summary without closing
+     */
+    getXReport: async (): Promise<XReportResponse> => {
+        return apiRequest<XReportResponse>('/shift/x-report');
     }
 };
+
+export interface XReportResponse {
+    shift_id: string;
+    opened_at: string;
+    duration_hours: number;
+    cashier: string;
+    register_id?: string;
+    opening_amount: number;
+    total_sales: number;
+    cash_sales: number;
+    card_sales: number;
+    transfer_sales: number;
+    total_tips: number;
+    total_drops: number;
+    drops_count: number;
+    expected_cash: number;
+    sales_count: number;
+    transactions_count: number;
+}
 
 // ============================================
 // Customers & CRM API
@@ -1793,6 +1882,7 @@ export interface CalendarEvent {
         location: string | null;
         client_name: string;
         total_amount: number;
+        menu_items_count: number;
     };
 }
 

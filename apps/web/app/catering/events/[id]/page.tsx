@@ -17,6 +17,7 @@ import {
     ExternalLink,
     Plus,
     Trash2,
+    ClipboardList,
 } from "lucide-react";
 import Link from "next/link";
 import { cateringApi, type CateringEvent, menuApi } from "@/lib/api";
@@ -328,6 +329,13 @@ export default function EventDetailsPage() {
                                     >
                                         <ChefHat className="h-4 w-4" />
                                         Hoja de Producción
+                                    </button>
+                                    <button
+                                        onClick={() => router.push(`/catering/production?eventId=${event.id}`)}
+                                        className="flex w-full items-center gap-3 rounded-lg bg-neutral-800 px-3 py-2 text-sm text-neutral-300 hover:bg-neutral-700 hover:text-white"
+                                    >
+                                        <ClipboardList className="h-4 w-4" />
+                                        Ver Lista de Producción
                                     </button>
                                 </div>
                             </div>

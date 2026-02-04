@@ -1206,7 +1206,10 @@ async def get_calendar_events(
         query = query.where(Event.end_time <= end_date)
     
     result = await db.execute(
-        query.options(selectinload(Event.lead))
+        query.options(
+            selectinload(Event.lead),
+            selectinload(Event.menu_selections)
+        )
     )
     events = result.unique().scalars().all()
     
@@ -1243,6 +1246,7 @@ async def get_calendar_events(
                 'location': event.location,
                 'client_name': client_name,
                 'total_amount': event.total_amount,
+                'menu_items_count': len(event.menu_selections),
             }
         })
     

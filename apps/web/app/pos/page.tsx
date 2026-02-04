@@ -54,8 +54,18 @@ interface PendingSyncInfo {
 
 export default function POSPage() {
     const router = useRouter();
-    const { selectedTable, setSelectedTable, cart, addToCart, removeFromCart, incrementCartItem, clearCart, updateTableStatus } =
-        usePOSStore();
+    const {
+        selectedTable,
+        setSelectedTable,
+        cart,
+        addToCart,
+        removeFromCart,
+        incrementCartItem,
+        decrementCartItem,
+        updateCartItemNotes,
+        clearCart,
+        updateTableStatus
+    } = usePOSStore();
     const [categories, setCategories] = useState<MenuCategory[]>([]);
     const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
     const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
@@ -383,21 +393,35 @@ export default function POSPage() {
         if (!selectedTable) return;
         setIsSending(true);
 
+        // Convert cart items to the format expected by the backend
+        const orderItems = cart.map(item => ({
+            menu_item_id: item.menu_item_id,
+            quantity: item.quantity,
+            notes: item.notes,
+            // Convert modifiers to the SelectedModifierSchema format expected by backend
+            selected_modifiers: item.selected_modifiers?.map(m => ({
+                group_name: m.group || m.group_name || '',
+                option_id: m.option_id || '',
+                option_name: m.option || m.option_name || '',
+                price_delta: m.price_delta || 0,
+            })) || [],
+        }));
+
         const orderData: PendingOrderData = {
             table_id: selectedTable.id,
-            items: cart.map(item => ({
+            items: orderItems.map(item => ({
                 menu_item_id: item.menu_item_id,
                 quantity: item.quantity,
-                notes: undefined,
-                modifiers: item.selected_modifiers?.map(m => m.option) || [],
+                notes: item.notes,
+                modifiers: item.selected_modifiers?.map(m => m.option_name) || [],
             })),
         };
 
         try {
-            // Attempt online submission first
+            // Attempt online submission first with the full modifier structure
             const result = await ordersApi.create({
                 table_id: selectedTable.id,
-                items: orderData.items,
+                items: orderItems,
             });
 
             // Check if it was an offline optimistic response
@@ -733,6 +757,8 @@ export default function POSPage() {
                 cartTotal={cartTotal}
                 onIncrementItem={incrementCartItem}
                 onRemoveItem={removeFromCart}
+                onUpdateItemNotes={updateCartItemNotes}
+                onClearCart={clearCart}
                 onSendOrder={handleSendOrder}
                 isSending={isSending}
             />

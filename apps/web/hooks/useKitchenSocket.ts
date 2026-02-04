@@ -121,7 +121,16 @@ export function useKitchenSocket(options: UseKitchenSocketOptions = {}): UseKitc
                 return;
             }
 
-            const message: KitchenMessage = JSON.parse(event.data);
+            const rawMessage = JSON.parse(event.data);
+
+            // Normalize message format (Backend sends 'event', frontend expects 'type')
+            const rawEvent = rawMessage.event || rawMessage.type || '';
+            const normalizedType = rawEvent.includes(':') ? rawEvent.split(':')[1] : rawEvent;
+
+            const message: KitchenMessage = {
+                ...rawMessage,
+                type: normalizedType as KitchenMessage['type']
+            };
 
             switch (message.type) {
                 case 'new_order':

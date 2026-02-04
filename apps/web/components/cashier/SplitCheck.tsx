@@ -7,7 +7,8 @@
  * Uses @dnd-kit for accessible, mobile-friendly drag and drop.
  */
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect, useCallback } from "react";
+import { ordersApi, SplitDetail } from "@/lib/api";
 import {
     DndContext,
     DragEndEvent,
@@ -214,6 +215,63 @@ export function SplitCheck({ orderId, orderItems, onComplete, onPay }: SplitChec
 
     const [activeId, setActiveId] = useState<string | null>(null);
     const [showCelebration, setShowCelebration] = useState(false);
+    const [isLoaded, setIsLoaded] = useState(false);
+
+    // Calculate totals (moved up for use in save function)
+    const itemsById = useMemo(() => {
+        return new Map(orderItems.map((item) => [item.id, item]));
+    }, [orderItems]);
+
+    const getSplitTotal = useCallback((split: Split) => {
+        return split.itemIds.reduce((sum, itemId) => {
+            const item = itemsById.get(itemId);
+            return sum + (item ? item.price * item.quantity : 0);
+        }, 0);
+    }, [itemsById]);
+
+    // Load saved splits on mount
+    useEffect(() => {
+        const loadSavedSplits = async () => {
+            try {
+                const savedSplits = await ordersApi.getSplits(orderId);
+                if (savedSplits && savedSplits.splits.length > 0) {
+                    // Convert backend format to component format
+                    const loadedSplits: Split[] = savedSplits.splits.map((s, idx) => ({
+                        id: `split-${s.split_number}`,
+                        label: `Persona ${s.split_number}`,
+                        itemIds: s.item_ids,
+                        paid: s.paid,
+                        paymentMethod: s.payment_method as Split['paymentMethod'],
+                    }));
+                    setSplits(loadedSplits);
+                }
+            } catch {
+                // No saved splits - use default
+            } finally {
+                setIsLoaded(true);
+            }
+        };
+        loadSavedSplits();
+    }, [orderId]);
+
+    // Save splits to backend (debounced)
+    const saveSplits = useCallback(async (currentSplits: Split[]) => {
+        if (!isLoaded) return; // Don't save before initial load
+
+        const splitDetails: SplitDetail[] = currentSplits.map((split, idx) => ({
+            split_number: idx + 1,
+            item_ids: split.itemIds,
+            amount: getSplitTotal(split),
+            paid: split.paid,
+            payment_method: split.paymentMethod,
+        }));
+
+        try {
+            await ordersApi.saveSplits(orderId, splitDetails);
+        } catch (err) {
+            console.error('[SplitCheck] Failed to save splits:', err);
+        }
+    }, [orderId, isLoaded, getSplitTotal]);
 
     const sensors = useSensors(
         useSensor(PointerSensor, {
@@ -226,17 +284,7 @@ export function SplitCheck({ orderId, orderItems, onComplete, onPay }: SplitChec
         })
     );
 
-    // Calculate totals
-    const itemsById = useMemo(() => {
-        return new Map(orderItems.map((item) => [item.id, item]));
-    }, [orderItems]);
-
-    const getSplitTotal = (split: Split) => {
-        return split.itemIds.reduce((sum, itemId) => {
-            const item = itemsById.get(itemId);
-            return sum + (item ? item.price * item.quantity : 0);
-        }, 0);
-    };
+    // getSplitItems helper (getSplitTotal moved to top for persistence hooks)
 
     const getSplitItems = (split: Split) => {
         return split.itemIds
@@ -267,23 +315,25 @@ export function SplitCheck({ orderId, orderItems, onComplete, onPay }: SplitChec
 
         if (!sourceSplit || !destSplit || sourceSplit.id === destSplit.id) return;
 
-        setSplits((prev) =>
-            prev.map((split) => {
-                if (split.id === sourceSplit.id) {
-                    return {
-                        ...split,
-                        itemIds: split.itemIds.filter((id) => id !== activeItemId),
-                    };
-                }
-                if (split.id === destSplit!.id) {
-                    return {
-                        ...split,
-                        itemIds: [...split.itemIds, activeItemId],
-                    };
-                }
-                return split;
-            })
-        );
+        const newSplits = splits.map((split) => {
+            if (split.id === sourceSplit.id) {
+                return {
+                    ...split,
+                    itemIds: split.itemIds.filter((id) => id !== activeItemId),
+                };
+            }
+            if (split.id === destSplit!.id) {
+                return {
+                    ...split,
+                    itemIds: [...split.itemIds, activeItemId],
+                };
+            }
+            return split;
+        });
+
+        setSplits(newSplits);
+        // Auto-save after drag
+        saveSplits(newSplits);
     };
 
     // Add/Remove split
@@ -294,7 +344,9 @@ export function SplitCheck({ orderId, orderItems, onComplete, onPay }: SplitChec
             itemIds: [],
             paid: false,
         };
-        setSplits([...splits, newSplit]);
+        const newSplits = [...splits, newSplit];
+        setSplits(newSplits);
+        saveSplits(newSplits);
     };
 
     const removeSplit = (splitId: string) => {
@@ -303,14 +355,13 @@ export function SplitCheck({ orderId, orderItems, onComplete, onPay }: SplitChec
         const splitToRemove = splits.find((s) => s.id === splitId);
         if (!splitToRemove) return;
 
-        setSplits((prev) => {
-            const remaining = prev.filter((s) => s.id !== splitId);
-            remaining[0].itemIds = [
-                ...remaining[0].itemIds,
-                ...splitToRemove.itemIds,
-            ];
-            return remaining;
-        });
+        const remaining = splits.filter((s) => s.id !== splitId);
+        remaining[0].itemIds = [
+            ...remaining[0].itemIds,
+            ...splitToRemove.itemIds,
+        ];
+        setSplits(remaining);
+        saveSplits(remaining);
     };
 
     // Pay split
@@ -326,16 +377,16 @@ export function SplitCheck({ orderId, orderItems, onComplete, onPay }: SplitChec
             }
         }
 
-        setSplits((prev) =>
-            prev.map((split) =>
-                split.id === splitId
-                    ? { ...split, paid: true, paymentMethod: method }
-                    : split
-            )
+        const updatedSplits = splits.map((split) =>
+            split.id === splitId
+                ? { ...split, paid: true, paymentMethod: method }
+                : split
         );
+        setSplits(updatedSplits);
+        saveSplits(updatedSplits);
 
         // Check if all splits are paid
-        const allPaid = splits.every((s) => s.id === splitId || s.paid);
+        const allPaid = updatedSplits.every((s) => s.paid || s.itemIds.length === 0);
         if (allPaid) {
             setShowCelebration(true);
             setTimeout(() => {

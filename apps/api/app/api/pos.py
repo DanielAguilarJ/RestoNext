@@ -15,8 +15,8 @@ from app.core.database import get_db
 from app.core.security import get_current_user, require_waiter, require_cashier, require_onboarding_complete
 from app.core.websocket_manager import ws_manager
 from app.models.models import (
-    User, Order, OrderItem, MenuItem, Table, 
-    OrderStatus, OrderItemStatus, TableStatus
+    User, Order, OrderItem, MenuItem, Table, BillSplit,
+    OrderStatus, OrderItemStatus, TableStatus, SplitType
 )
 from app.schemas.schemas import (
     OrderCreate, OrderResponse, OrderItemResponse,
@@ -542,4 +542,101 @@ async def create_cafeteria_order(
         "total": total,
         "status": "in_progress",
     }
+
+
+# ============================================
+# Bill Split Endpoints (Persistent Splits)
+# ============================================
+
+@router.get("/{order_id}/splits", response_model=BillSplitResponse)
+async def get_order_splits(
+    order_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Get the current bill split configuration for an order.
+    Returns 404 if no splits have been saved yet.
+    """
+    result = await db.execute(
+        select(BillSplit).where(BillSplit.order_id == order_id)
+    )
+    bill_split = result.scalar_one_or_none()
+    
+    if not bill_split:
+        raise HTTPException(
+            status_code=404, 
+            detail="No splits configured for this order"
+        )
+    
+    return bill_split
+
+
+@router.post("/{order_id}/splits", response_model=BillSplitResponse)
+async def save_order_splits(
+    order_id: UUID,
+    split_data: BillSplitCreate,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Save or update the bill split configuration for an order.
+    If a split already exists, it will be updated (upsert behavior).
+    """
+    # Verify order exists
+    order_result = await db.execute(
+        select(Order).where(Order.id == order_id)
+    )
+    order = order_result.scalar_one_or_none()
+    
+    if not order:
+        raise HTTPException(status_code=404, detail="Order not found")
+    
+    # Check for existing split
+    result = await db.execute(
+        select(BillSplit).where(BillSplit.order_id == order_id)
+    )
+    bill_split = result.scalar_one_or_none()
+    
+    # Convert splits to dict format for JSONB
+    splits_data = [s.model_dump() for s in split_data.splits]
+    
+    if bill_split:
+        # Update existing split
+        bill_split.split_type = SplitType(split_data.split_type)
+        bill_split.splits = splits_data
+    else:
+        # Create new split
+        bill_split = BillSplit(
+            order_id=order_id,
+            split_type=SplitType(split_data.split_type),
+            splits=splits_data
+        )
+        db.add(bill_split)
+    
+    await db.commit()
+    await db.refresh(bill_split)
+    
+    return bill_split
+
+
+@router.delete("/{order_id}/splits")
+async def delete_order_splits(
+    order_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Delete the bill split configuration for an order."""
+    result = await db.execute(
+        select(BillSplit).where(BillSplit.order_id == order_id)
+    )
+    bill_split = result.scalar_one_or_none()
+    
+    if not bill_split:
+        raise HTTPException(status_code=404, detail="No splits found")
+    
+    await db.delete(bill_split)
+    await db.commit()
+    
+    return {"status": "deleted"}
 

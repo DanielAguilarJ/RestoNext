@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import {
     ChefHat,
     Calendar,
@@ -76,6 +76,9 @@ export default function ProductionListsPage() {
         return { startDate, endDate };
     }, [dateFilter]);
 
+    const searchParams = useSearchParams();
+    const eventIdParam = searchParams.get('eventId');
+
     // Cargar eventos
     const fetchEvents = useCallback(async () => {
         try {
@@ -90,23 +93,47 @@ export default function ProductionListsPage() {
                 (event) => event.status === 'confirmed' || event.status === 'draft'
             );
 
-            setEvents(
-                confirmedEvents.map((event) => ({
-                    event,
-                    loading: false,
-                }))
-            );
+            const mappedEvents = confirmedEvents.map((event) => ({
+                event,
+                loading: false,
+            }));
+
+            setEvents(mappedEvents);
+
+            // Auto-select event if param exists
+            if (eventIdParam) {
+                const target = mappedEvents.find(e => e.event.id === eventIdParam);
+                if (target) {
+                    // We need to trigger loadProductionSheet but we can't call it easily inside mapping
+                    // So we just set it as selected and let the effect below handle it or call it here
+                    // But `loadProductionSheet` depends on `setEvents` state... 
+                    // Let's simpler: just set state here? No, loadProductionSheet is async.
+                    // Proper way:
+                }
+            }
+
         } catch (err: any) {
             console.error('Error fetching events:', err);
             setError(err.message || 'Error al cargar los eventos');
         } finally {
             setLoading(false);
         }
-    }, [getFilterDates]);
+    }, [getFilterDates, eventIdParam]);
 
     useEffect(() => {
         fetchEvents();
     }, [fetchEvents]);
+
+    // Effect to handle deep linking once events are loaded
+    useEffect(() => {
+        if (eventIdParam && events.length > 0 && !selectedEvent) {
+            const target = events.find(e => e.event.id === eventIdParam);
+            if (target) {
+                setSelectedEvent(target);
+                loadProductionSheet(target.event.id);
+            }
+        }
+    }, [eventIdParam, events]);
 
     // Cargar lista de producción para un evento
     const loadProductionSheet = async (eventId: string) => {
@@ -235,8 +262,8 @@ export default function ProductionListsPage() {
                             key={filter.value}
                             onClick={() => setDateFilter(filter.value as typeof dateFilter)}
                             className={`px-4 py-2 rounded-lg text-sm font-medium transition ${dateFilter === filter.value
-                                    ? 'bg-amber-500/20 text-amber-500 border border-amber-500/30'
-                                    : 'bg-neutral-800 text-neutral-400 border border-neutral-700 hover:text-white'
+                                ? 'bg-amber-500/20 text-amber-500 border border-amber-500/30'
+                                : 'bg-neutral-800 text-neutral-400 border border-neutral-700 hover:text-white'
                                 }`}
                         >
                             {filter.label}
@@ -297,8 +324,8 @@ export default function ProductionListsPage() {
                                     }
                                 }}
                                 className={`rounded-xl border bg-neutral-900 p-5 cursor-pointer transition ${selectedEvent?.event.id === item.event.id
-                                        ? 'border-amber-500/50 bg-amber-500/5'
-                                        : 'border-neutral-800 hover:border-amber-500/30'
+                                    ? 'border-amber-500/50 bg-amber-500/5'
+                                    : 'border-neutral-800 hover:border-amber-500/30'
                                     }`}
                             >
                                 <div className="flex items-start justify-between">
@@ -309,8 +336,8 @@ export default function ProductionListsPage() {
                                             </h3>
                                             <span
                                                 className={`px-2 py-0.5 rounded-full text-xs font-medium ${item.event.status === 'confirmed'
-                                                        ? 'bg-emerald-500/10 text-emerald-500'
-                                                        : 'bg-amber-500/10 text-amber-500'
+                                                    ? 'bg-emerald-500/10 text-emerald-500'
+                                                    : 'bg-amber-500/10 text-amber-500'
                                                     }`}
                                             >
                                                 {item.event.status === 'confirmed' ? 'Confirmado' : 'Borrador'}
@@ -454,6 +481,14 @@ export default function ProductionListsPage() {
                                                                 </span>
                                                             </div>
                                                         ))}
+                                                    </div>
+                                                ) : selectedEvent.event.extendedProps.menu_items_count > 0 ? (
+                                                    <div className="flex flex-col items-center gap-2 text-center py-4">
+                                                        <AlertCircle className="w-8 h-8 text-amber-500 mb-2" />
+                                                        <span className="text-amber-500 font-medium">Atención: Recetas no configuradas</span>
+                                                        <p className="text-neutral-400 max-w-xs">
+                                                            Este evento tiene {selectedEvent.event.extendedProps.menu_items_count} platillos, pero ninguno tiene ingredientes definidos en sus recetas.
+                                                        </p>
                                                     </div>
                                                 ) : (
                                                     <p className="text-neutral-500 text-sm py-4 text-center">

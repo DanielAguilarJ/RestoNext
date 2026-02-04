@@ -44,8 +44,10 @@ interface POSState {
     cart: CartItem[];
     addToCart: (item: CartItem) => void;
     updateCartItem: (index: number, updates: Partial<CartItem>) => void;
+    updateCartItemNotes: (index: number, notes: string) => void;
     removeFromCart: (index: number) => void;
     incrementCartItem: (index: number) => void;
+    decrementCartItem: (index: number) => void;
     clearCart: () => void;
 
     // Orders
@@ -91,6 +93,13 @@ export const usePOSStore = create<POSState>((set) => ({
             ),
         })),
 
+    updateCartItemNotes: (index, notes) =>
+        set((state) => ({
+            cart: state.cart.map((item, i) =>
+                i === index ? { ...item, notes } : item
+            ),
+        })),
+
     removeFromCart: (index) =>
         set((state) => ({
             cart: state.cart.filter((_, i) => i !== index),
@@ -102,6 +111,23 @@ export const usePOSStore = create<POSState>((set) => ({
                 i === index ? { ...item, quantity: item.quantity + 1 } : item
             ),
         })),
+
+    decrementCartItem: (index) =>
+        set((state) => {
+            const item = state.cart[index];
+            if (!item) return state;
+
+            if (item.quantity <= 1) {
+                // Remove item if quantity would go to 0
+                return { cart: state.cart.filter((_, i) => i !== index) };
+            }
+
+            return {
+                cart: state.cart.map((itm, i) =>
+                    i === index ? { ...itm, quantity: itm.quantity - 1 } : itm
+                )
+            };
+        }),
 
     clearCart: () => set({ cart: [] }),
 

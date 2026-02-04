@@ -98,8 +98,9 @@ async def list_tables_with_qr(
     tables = await service.get_all_tables_with_qr_info(user.tenant_id)
     
     # Build base URL for QR codes
-    # In production, this should come from environment/config
-    base_url = "https://app.restonext.com/dine"
+    from app.core.config import get_settings
+    settings = get_settings()
+    base_url = f"{settings.frontend_url}/dine"
     
     return TableListResponse(
         tables=[
@@ -143,7 +144,9 @@ async def rotate_table_token(
             detail=str(e)
         )
     
-    base_url = "https://app.restonext.com/dine"
+    from app.core.config import get_settings
+    settings = get_settings()
+    base_url = f"{settings.frontend_url}/dine"
     
     return RotateTokenResponse(
         table_id=str(table.id),

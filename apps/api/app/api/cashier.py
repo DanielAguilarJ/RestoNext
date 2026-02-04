@@ -116,7 +116,45 @@ class CurrentShiftResponse(BaseModel):
     cash_sales: float
     card_sales: float
     total_drops: float
+    total_tips: float = 0.0
     expected_cash: float
+    transactions_count: int
+
+
+class SaleRequest(BaseModel):
+    """Request body for recording a sale"""
+    order_id: str = Field(..., description="Order UUID")
+    amount: float = Field(..., gt=0, description="Sale amount")
+    tip_amount: float = Field(0.0, ge=0, description="Tip amount")
+    payment_method: str = Field(..., description="Payment method: cash, card, or transfer")
+    reference: Optional[str] = Field(None, description="Payment reference")
+
+
+class XReportResponse(BaseModel):
+    """X Report - Mid-shift summary without closing"""
+    shift_id: str
+    opened_at: datetime
+    duration_hours: float
+    cashier: str
+    register_id: Optional[str]
+    
+    # Financial summary
+    opening_amount: float
+    total_sales: float
+    cash_sales: float
+    card_sales: float
+    transfer_sales: float
+    total_tips: float
+    
+    # Cash movements
+    total_drops: float
+    drops_count: int
+    
+    # Expected cash
+    expected_cash: float
+    
+    # Transaction counts
+    sales_count: int
     transactions_count: int
 
 
@@ -124,6 +162,7 @@ class TransactionDetail(BaseModel):
     id: str
     type: str
     amount: float
+    tip_amount: float = 0.0
     payment_method: Optional[str]
     order_id: Optional[str]
     notes: Optional[str]
@@ -230,6 +269,7 @@ async def get_current_shift(
         cash_sales=shift.cash_sales,
         card_sales=shift.card_sales,
         total_drops=shift.total_drops,
+        total_tips=shift.total_tips,
         expected_cash=shift.calculate_expected_cash(),
         transactions_count=len(transactions)
     )
@@ -381,17 +421,78 @@ async def close_shift(
     )
 
 
-@router.post("/record-sale")
+@router.post("/sale")
 async def record_sale(
-    order_id: UUID,
-    amount: float,
-    payment_method: str,
+    request: SaleRequest,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
     """
     Record a sale transaction in the current shift.
     Called when an order is paid.
+    
+    Returns success even if no shift is open (flexible mode).
+    """
+    shift = await get_open_shift(
+        current_user.id, current_user.tenant_id, db
+    )
+    
+    if not shift:
+        # Flexible mode: allow payment but don't track in shift
+        return {
+            "message": "Payment processed (no active shift)",
+            "transaction_id": None,
+            "shift_active": False
+        }
+    
+    # Map payment method
+    pm = PaymentMethod.CASH
+    if request.payment_method == "card":
+        pm = PaymentMethod.CARD
+    elif request.payment_method == "transfer":
+        pm = PaymentMethod.TRANSFER
+    
+    # Create transaction with tip
+    transaction = CashTransaction(
+        shift_id=shift.id,
+        transaction_type=CashTransactionType.SALE,
+        amount=request.amount,
+        tip_amount=request.tip_amount,
+        payment_method=pm,
+        order_id=UUID(request.order_id),
+        notes=request.reference,
+        created_by=current_user.id,
+    )
+    db.add(transaction)
+    
+    # Update shift totals (amount WITHOUT tip for sales totals)
+    shift.total_sales += request.amount
+    shift.total_tips += request.tip_amount
+    
+    if pm == PaymentMethod.CASH:
+        shift.cash_sales += request.amount + request.tip_amount  # Cash includes tip
+    elif pm == PaymentMethod.CARD:
+        shift.card_sales += request.amount + request.tip_amount
+    elif pm == PaymentMethod.TRANSFER:
+        shift.transfer_sales += request.amount + request.tip_amount
+    
+    await db.commit()
+    
+    return {
+        "message": "Sale recorded",
+        "transaction_id": str(transaction.id),
+        "shift_active": True
+    }
+
+
+@router.get("/x-report", response_model=XReportResponse)
+async def get_x_report(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Get X Report - mid-shift summary without closing.
+    Shows current totals for quick review.
     """
     shift = await get_open_shift(
         current_user.id, current_user.tenant_id, db
@@ -403,36 +504,36 @@ async def record_sale(
             detail="No open shift found"
         )
     
-    # Map payment method
-    pm = PaymentMethod.CASH
-    if payment_method == "card":
-        pm = PaymentMethod.CARD
-    elif payment_method == "transfer":
-        pm = PaymentMethod.TRANSFER
-    
-    # Create transaction
-    transaction = CashTransaction(
-        shift_id=shift.id,
-        transaction_type=CashTransactionType.SALE,
-        amount=amount,
-        payment_method=pm,
-        order_id=order_id,
-        created_by=current_user.id,
+    # Get transaction counts
+    tx_result = await db.execute(
+        select(CashTransaction).where(CashTransaction.shift_id == shift.id)
     )
-    db.add(transaction)
+    transactions = tx_result.scalars().all()
     
-    # Update shift totals
-    shift.total_sales += amount
-    if pm == PaymentMethod.CASH:
-        shift.cash_sales += amount
-    elif pm == PaymentMethod.CARD:
-        shift.card_sales += amount
-    elif pm == PaymentMethod.TRANSFER:
-        shift.transfer_sales += amount
+    sales_count = len([t for t in transactions if t.transaction_type == CashTransactionType.SALE])
+    drops_count = len([t for t in transactions if t.transaction_type == CashTransactionType.DROP])
     
-    await db.commit()
+    # Calculate duration
+    duration = (datetime.utcnow() - shift.opened_at).total_seconds() / 3600
     
-    return {"message": "Sale recorded", "transaction_id": str(transaction.id)}
+    return XReportResponse(
+        shift_id=str(shift.id),
+        opened_at=shift.opened_at,
+        duration_hours=round(duration, 2),
+        cashier=current_user.name,
+        register_id=shift.register_id,
+        opening_amount=shift.opening_amount,
+        total_sales=shift.total_sales,
+        cash_sales=shift.cash_sales,
+        card_sales=shift.card_sales,
+        transfer_sales=shift.transfer_sales,
+        total_tips=shift.total_tips,
+        total_drops=shift.total_drops,
+        drops_count=drops_count,
+        expected_cash=shift.calculate_expected_cash(),
+        sales_count=sales_count,
+        transactions_count=len(transactions)
+    )
 
 
 @router.get("/transactions", response_model=TransactionListResponse)
@@ -464,6 +565,7 @@ async def list_transactions(
                 id=str(t.id),
                 type=t.transaction_type.value,
                 amount=t.amount,
+                tip_amount=t.tip_amount,
                 payment_method=t.payment_method.value if t.payment_method else None,
                 order_id=str(t.order_id) if t.order_id else None,
                 notes=t.notes,
