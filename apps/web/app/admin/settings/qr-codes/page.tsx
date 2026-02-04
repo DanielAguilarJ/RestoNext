@@ -1,4 +1,5 @@
 'use client';
+import { useRouter } from 'next/navigation';
 
 /**
  * QR Code Management Page
@@ -20,7 +21,8 @@ import {
     Loader2,
     RotateCcw,
     TableProperties,
-    Shield
+    Shield,
+    ArrowLeft
 } from 'lucide-react';
 
 // Types
@@ -312,6 +314,7 @@ function PrintableQRCard({ table, restaurantName }: { table: TableQRInfo; restau
 
 // Main Page Component
 export default function QRCodesPage() {
+    const router = useRouter();
     const [tables, setTables] = useState<TableQRInfo[]>([]);
     const [baseUrl, setBaseUrl] = useState('');
     const [restaurantName, setRestaurantName] = useState('RestoNext');
@@ -479,6 +482,15 @@ export default function QRCodesPage() {
                     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
                         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
                             <div>
+                                <button
+                                    onClick={() => router.back()}
+                                    className="flex items-center gap-2 text-gray-500 hover:text-gray-900 transition-colors mb-4 group"
+                                >
+                                    <div className="p-1 rounded-lg group-hover:bg-gray-100 transition-colors">
+                                        <ArrowLeft className="w-5 h-5" />
+                                    </div>
+                                    <span className="text-sm font-medium">Volver a Configuración</span>
+                                </button>
                                 <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-3">
                                     <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-orange-500 to-amber-500 flex items-center justify-center">
                                         <QrCode className="w-5 h-5 text-white" />

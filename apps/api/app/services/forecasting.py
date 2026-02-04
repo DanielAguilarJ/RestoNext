@@ -168,45 +168,54 @@ def forecast_ingredient_demand(
     )
     
     # Initialize Prophet model
-    # Initialize Prophet model
-    model = _Prophet(
-        yearly_seasonality=True,
-        weekly_seasonality=True,
-        daily_seasonality=False,  # Restaurant data is usually daily aggregated
-        holidays=holidays,
-        changepoint_prior_scale=0.05,  # More conservative trend changes
-        seasonality_prior_scale=10,
-    )
-    
-    # Add Mexican-specific seasonality (paydays: 15th and end of month)
-    model.add_seasonality(
-        name='payday',
-        period=15,
-        fourier_order=3,
-    )
-    
-    # Fit model
-    model.fit(df)
-    
-    # Create future dataframe
-    future = model.make_future_dataframe(periods=days_ahead)
-    
-    # Make predictions
-    forecast = model.predict(future)
-    
-    # Extract only future predictions
-    future_mask = forecast['ds'] > df['ds'].max()
-    future_forecast = forecast[future_mask][['ds', 'yhat', 'yhat_lower', 'yhat_upper']]
-    
-    # Format results
-    predictions = []
-    for _, row in future_forecast.iterrows():
-        predictions.append({
-            "date": row['ds'].strftime('%Y-%m-%d'),
-            "predicted_demand": max(0, round(row['yhat'], 2)),  # No negative demand
-            "lower_bound": max(0, round(row['yhat_lower'], 2)),
-            "upper_bound": max(0, round(row['yhat_upper'], 2)),
-        })
+    try:
+        # Initialize Prophet model
+        model = _Prophet(
+            yearly_seasonality=True,
+            weekly_seasonality=True,
+            daily_seasonality=False,  # Restaurant data is usually daily aggregated
+            holidays=holidays,
+            changepoint_prior_scale=0.05,  # More conservative trend changes
+            seasonality_prior_scale=10,
+        )
+        
+        # Add Mexican-specific seasonality (paydays: 15th and end of month)
+        model.add_seasonality(
+            name='payday',
+            period=15,
+            fourier_order=3,
+        )
+        
+        # Fit model
+        model.fit(df)
+        
+        # Create future dataframe
+        future = model.make_future_dataframe(periods=days_ahead)
+        
+        # Make predictions
+        forecast = model.predict(future)
+        
+        # Extract only future predictions
+        future_mask = forecast['ds'] > df['ds'].max()
+        future_forecast = forecast[future_mask][['ds', 'yhat', 'yhat_lower', 'yhat_upper']]
+        
+        # Format results
+        predictions = []
+        for _, row in future_forecast.iterrows():
+            predictions.append({
+                "date": row['ds'].strftime('%Y-%m-%d'),
+                "predicted_demand": max(0, round(row['yhat'], 2)),  # No negative demand
+                "lower_bound": max(0, round(row['yhat_lower'], 2)),
+                "upper_bound": max(0, round(row['yhat_upper'], 2)),
+            })
+            
+    except Exception as e:
+        print(f"ERROR:    Prophet execution failed: {e}")
+        return {
+            "ingredient": ingredient_name,
+            "error": f"Error calculating forecast: {str(e)}",
+            "predictions": [],
+        }
     
     return {
         "ingredient": ingredient_name,
