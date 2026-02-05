@@ -18,7 +18,11 @@ import {
     Loader2,
     CheckCircle2,
     AlertTriangle,
-    RefreshCw
+    RefreshCw,
+    Users,
+    Edit3,
+    Check,
+    X
 } from 'lucide-react';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'https://restonext.me/api';
@@ -73,6 +77,22 @@ async function setTableCount(targetCount: number): Promise<TableCountResponse> {
     return res.json();
 }
 
+async function updateTableCapacity(tableId: string, capacity: number): Promise<void> {
+    const token = await getToken();
+    const res = await fetch(`${API_BASE}/admin/tables/${tableId}`, {
+        method: 'PATCH',
+        headers: {
+            Authorization: `Bearer ${token}`,
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ capacity })
+    });
+    if (!res.ok) {
+        const error = await res.json();
+        throw new Error(error.detail || 'Failed to update table');
+    }
+}
+
 export default function TableSettingsPage() {
     const router = useRouter();
     const [loading, setLoading] = useState(true);
@@ -82,6 +102,10 @@ export default function TableSettingsPage() {
     const [error, setError] = useState<string | null>(null);
     const [success, setSuccess] = useState<string | null>(null);
     const [warnings, setWarnings] = useState<string[]>([]);
+    const [tables, setTables] = useState<Array<{ id: string; number: number; capacity: number; status: string }>>([]);
+    const [editingTable, setEditingTable] = useState<string | null>(null);
+    const [editCapacity, setEditCapacity] = useState(4);
+    const [savingCapacity, setSavingCapacity] = useState(false);
 
     useEffect(() => {
         loadTables();
@@ -92,6 +116,7 @@ export default function TableSettingsPage() {
             setLoading(true);
             setError(null);
             const data = await fetchTables();
+            setTables(data.tables.sort((a, b) => a.number - b.number));
             setCurrentCount(data.tables.length);
             setTargetCount(data.tables.length);
         } catch (err) {
@@ -99,6 +124,33 @@ export default function TableSettingsPage() {
         } finally {
             setLoading(false);
         }
+    };
+
+    const handleEditCapacity = (table: { id: string; capacity: number }) => {
+        setEditingTable(table.id);
+        setEditCapacity(table.capacity);
+    };
+
+    const handleSaveCapacity = async (tableId: string) => {
+        try {
+            setSavingCapacity(true);
+            setError(null);
+            await updateTableCapacity(tableId, editCapacity);
+            setTables(prev => prev.map(t =>
+                t.id === tableId ? { ...t, capacity: editCapacity } : t
+            ));
+            setEditingTable(null);
+            setSuccess('Capacidad actualizada');
+            setTimeout(() => setSuccess(null), 3000);
+        } catch (err) {
+            setError(err instanceof Error ? err.message : 'Error updating capacity');
+        } finally {
+            setSavingCapacity(false);
+        }
+    };
+
+    const handleCancelEdit = () => {
+        setEditingTable(null);
     };
 
     const handleSave = async () => {
@@ -336,6 +388,100 @@ export default function TableSettingsPage() {
                     </div>
                 </div>
 
+                {/* Tables List */}
+                {tables.length > 0 && (
+                    <div className="mt-6 bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
+                        <div className="p-4 border-b border-gray-100 bg-gradient-to-r from-teal-50 to-cyan-50">
+                            <h3 className="font-semibold text-gray-900 flex items-center gap-2">
+                                <Users className="w-5 h-5 text-teal-500" />
+                                Capacidad por Mesa
+                            </h3>
+                            <p className="text-sm text-gray-500 mt-1">
+                                Configura el número de personas para cada mesa
+                            </p>
+                        </div>
+                        <div className="divide-y divide-gray-100">
+                            {tables.map((table) => (
+                                <div
+                                    key={table.id}
+                                    className="flex items-center justify-between p-4 hover:bg-gray-50 transition-colors"
+                                >
+                                    <div className="flex items-center gap-3">
+                                        <div className="w-10 h-10 rounded-lg bg-teal-100 flex items-center justify-center">
+                                            <span className="font-bold text-teal-700">{table.number}</span>
+                                        </div>
+                                        <div>
+                                            <p className="font-medium text-gray-900">Mesa {table.number}</p>
+                                            <p className="text-xs text-gray-500 capitalize">
+                                                {table.status === 'free' ? 'Libre' : table.status === 'occupied' ? 'Ocupada' : table.status}
+                                            </p>
+                                        </div>
+                                    </div>
+
+                                    {editingTable === table.id ? (
+                                        <div className="flex items-center gap-2">
+                                            <div className="flex items-center gap-1 bg-gray-100 rounded-lg p-1">
+                                                <button
+                                                    onClick={() => setEditCapacity(prev => Math.max(1, prev - 1))}
+                                                    className="w-8 h-8 rounded flex items-center justify-center hover:bg-gray-200 transition-colors"
+                                                >
+                                                    <Minus className="w-4 h-4" />
+                                                </button>
+                                                <input
+                                                    type="number"
+                                                    min="1"
+                                                    max="20"
+                                                    value={editCapacity}
+                                                    onChange={(e) => setEditCapacity(Math.max(1, Math.min(20, parseInt(e.target.value) || 1)))}
+                                                    className="w-12 text-center font-semibold bg-white border border-gray-200 rounded py-1"
+                                                />
+                                                <button
+                                                    onClick={() => setEditCapacity(prev => Math.min(20, prev + 1))}
+                                                    className="w-8 h-8 rounded flex items-center justify-center hover:bg-gray-200 transition-colors"
+                                                >
+                                                    <Plus className="w-4 h-4" />
+                                                </button>
+                                            </div>
+                                            <button
+                                                onClick={() => handleSaveCapacity(table.id)}
+                                                disabled={savingCapacity}
+                                                className="w-8 h-8 rounded-lg bg-emerald-500 hover:bg-emerald-600 text-white flex items-center justify-center transition-colors disabled:opacity-50"
+                                            >
+                                                {savingCapacity ? (
+                                                    <Loader2 className="w-4 h-4 animate-spin" />
+                                                ) : (
+                                                    <Check className="w-4 h-4" />
+                                                )}
+                                            </button>
+                                            <button
+                                                onClick={handleCancelEdit}
+                                                className="w-8 h-8 rounded-lg bg-gray-200 hover:bg-gray-300 text-gray-600 flex items-center justify-center transition-colors"
+                                            >
+                                                <X className="w-4 h-4" />
+                                            </button>
+                                        </div>
+                                    ) : (
+                                        <div className="flex items-center gap-3">
+                                            <div className="flex items-center gap-1 text-gray-600">
+                                                <Users className="w-4 h-4" />
+                                                <span className="font-medium">{table.capacity}</span>
+                                                <span className="text-xs text-gray-400">personas</span>
+                                            </div>
+                                            <button
+                                                onClick={() => handleEditCapacity(table)}
+                                                className="p-2 rounded-lg hover:bg-gray-200 text-gray-500 hover:text-gray-700 transition-colors"
+                                                title="Editar capacidad"
+                                            >
+                                                <Edit3 className="w-4 h-4" />
+                                            </button>
+                                        </div>
+                                    )}
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                )}
+
                 {/* Info Card */}
                 <div className="mt-6 bg-blue-50 border border-blue-100 rounded-xl p-4">
                     <div className="flex items-start gap-3">
@@ -344,7 +490,7 @@ export default function TableSettingsPage() {
                             <h4 className="font-medium text-blue-900">Información</h4>
                             <ul className="mt-1 text-sm text-blue-700 list-disc list-inside space-y-1">
                                 <li>Las nuevas mesas se crean con capacidad de 4 personas</li>
-                                <li>Puedes editar la capacidad individual desde el POS</li>
+                                <li>Haz clic en el ícono de editar para cambiar la capacidad</li>
                                 <li>Los códigos QR se generan automáticamente</li>
                                 <li>Solo se eliminan mesas libres (las de número más alto primero)</li>
                             </ul>
