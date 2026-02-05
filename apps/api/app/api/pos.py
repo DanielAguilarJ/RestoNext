@@ -41,8 +41,15 @@ async def create_order(
     """
     from uuid import UUID as PyUUID
     
-    # Get table - handle string or UUID
-    table_id = order_data.table_uuid
+    # Get table - handle string or UUID with proper error handling
+    try:
+        table_id = order_data.table_uuid
+    except (ValueError, AttributeError) as e:
+        raise HTTPException(
+            status_code=400, 
+            detail=f"Invalid table_id format: {order_data.table_id}"
+        )
+    
     if not table_id:
         raise HTTPException(status_code=400, detail="table_id is required")
     
@@ -72,7 +79,13 @@ async def create_order(
     
     for item_data in order_data.items:
         # Get menu item - convert string to UUID if needed
-        menu_item_id = item_data.menu_item_uuid
+        try:
+            menu_item_id = item_data.menu_item_uuid
+        except (ValueError, AttributeError):
+            raise HTTPException(
+                status_code=400,
+                detail=f"Invalid menu_item_id format: {item_data.menu_item_id}"
+            )
         
         menu_result = await db.execute(
             select(MenuItem).where(MenuItem.id == menu_item_id)
