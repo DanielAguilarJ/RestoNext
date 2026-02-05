@@ -137,6 +137,11 @@ interface TenantData {
     service_types: string[];
     business_type: 'restaurant' | 'cafeteria';
     table_count: number;
+    // Location data for AI analytics
+    address: string;
+    city: string;
+    state: string;
+    cuisine_type: string;
 }
 
 interface OnboardingWizardProps {
@@ -155,6 +160,7 @@ const steps = [
     { id: 'welcome', title: 'Bienvenido', icon: <Sparkles className="w-6 h-6" /> },
     { id: 'identity', title: 'Identidad', icon: <Building2 className="w-6 h-6" /> },
     { id: 'config', title: 'Configuración', icon: <Palette className="w-6 h-6" /> },
+    { id: 'location', title: 'Ubicación', icon: <Globe className="w-6 h-6" /> },
     { id: 'complete', title: '¡Listo!', icon: <Rocket className="w-6 h-6" /> },
 ];
 
@@ -173,6 +179,23 @@ const serviceTypes = [
     { id: 'drive_thru', name: 'Drive-Thru', icon: <Car className="w-6 h-6" />, description: 'Servicio en auto' },
 ];
 
+// Cuisine types for AI analytics
+const cuisineTypes = [
+    'Mexicana', 'Italiana', 'Mariscos', 'Japonesa', 'China',
+    'Americana', 'Tacos', 'Pizza', 'Café', 'Postres',
+    'Carnes', 'Vegetariana', 'Fusion', 'Internacional', 'Otra'
+];
+
+// Mexican states
+const mexicanStates = [
+    'Aguascalientes', 'Baja California', 'Baja California Sur', 'Campeche',
+    'Chiapas', 'Chihuahua', 'Ciudad de México', 'Coahuila', 'Colima',
+    'Durango', 'Estado de México', 'Guanajuato', 'Guerrero', 'Hidalgo',
+    'Jalisco', 'Michoacán', 'Morelos', 'Nayarit', 'Nuevo León', 'Oaxaca',
+    'Puebla', 'Querétaro', 'Quintana Roo', 'San Luis Potosí', 'Sinaloa',
+    'Sonora', 'Tabasco', 'Tamaulipas', 'Tlaxcala', 'Veracruz', 'Yucatán', 'Zacatecas'
+];
+
 export default function OnboardingWizard({ isOpen, onComplete, initialData }: OnboardingWizardProps) {
     const router = useRouter();
     const [currentStep, setCurrentStep] = useState(0);
@@ -188,6 +211,10 @@ export default function OnboardingWizard({ isOpen, onComplete, initialData }: On
         service_types: ['dine_in'],
         business_type: 'restaurant',
         table_count: 8,
+        address: '',
+        city: '',
+        state: '',
+        cuisine_type: '',
     });
 
     // Logo preview
@@ -252,6 +279,10 @@ export default function OnboardingWizard({ isOpen, onComplete, initialData }: On
                     seed_demo_data: withDemoData,
                     business_type: formData.business_type,
                     table_count: formData.table_count,
+                    address: formData.address,
+                    city: formData.city,
+                    state: formData.state,
+                    cuisine_type: formData.cuisine_type,
                 }),
             });
 
@@ -674,6 +705,101 @@ export default function OnboardingWizard({ isOpen, onComplete, initialData }: On
         </div>
     );
 
+    const renderLocationStep = () => (
+        <div className="text-center max-w-2xl mx-auto">
+            {/* Header */}
+            <div className="relative mb-8">
+                <div className="w-24 h-24 mx-auto bg-gradient-to-br from-cyan-500 to-blue-600 rounded-3xl flex items-center justify-center shadow-2xl shadow-cyan-500/30">
+                    <Globe className="w-12 h-12 text-white" />
+                </div>
+            </div>
+
+            <h2 className="text-4xl font-bold text-white mb-4">
+                ¿Dónde está tu negocio?
+            </h2>
+
+            <p className="text-xl text-slate-300 mb-10">
+                Esta información nos ayuda a darte recomendaciones personalizadas con IA
+            </p>
+
+            {/* Location Form */}
+            <div className="space-y-6 text-left">
+                {/* Address */}
+                <div>
+                    <label className="block text-sm font-medium text-slate-300 mb-2">
+                        Dirección (opcional)
+                    </label>
+                    <input
+                        type="text"
+                        value={formData.address}
+                        onChange={(e) => setFormData(prev => ({ ...prev, address: e.target.value }))}
+                        placeholder="Ej: Av. Reforma 123, Col. Centro"
+                        className="w-full px-4 py-3 bg-slate-800/50 border border-slate-700 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-cyan-500/50 focus:border-cyan-500 transition-all"
+                    />
+                </div>
+
+                {/* City */}
+                <div>
+                    <label className="block text-sm font-medium text-slate-300 mb-2">
+                        Ciudad
+                    </label>
+                    <input
+                        type="text"
+                        value={formData.city}
+                        onChange={(e) => setFormData(prev => ({ ...prev, city: e.target.value }))}
+                        placeholder="Ej: Guadalajara"
+                        className="w-full px-4 py-3 bg-slate-800/50 border border-slate-700 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-cyan-500/50 focus:border-cyan-500 transition-all"
+                    />
+                </div>
+
+                {/* State */}
+                <div>
+                    <label className="block text-sm font-medium text-slate-300 mb-2">
+                        Estado
+                    </label>
+                    <select
+                        value={formData.state}
+                        onChange={(e) => setFormData(prev => ({ ...prev, state: e.target.value }))}
+                        className="w-full px-4 py-3 bg-slate-800/50 border border-slate-700 rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-cyan-500/50 focus:border-cyan-500 transition-all"
+                    >
+                        <option value="">Selecciona un estado</option>
+                        {mexicanStates.map(state => (
+                            <option key={state} value={state}>{state}</option>
+                        ))}
+                    </select>
+                </div>
+
+                {/* Cuisine Type */}
+                <div>
+                    <label className="block text-sm font-medium text-slate-300 mb-2">
+                        Tipo de Cocina
+                    </label>
+                    <div className="grid grid-cols-3 sm:grid-cols-5 gap-2">
+                        {cuisineTypes.map(cuisine => (
+                            <button
+                                key={cuisine}
+                                onClick={() => setFormData(prev => ({ ...prev, cuisine_type: cuisine }))}
+                                className={`px-3 py-2 rounded-xl text-sm font-medium transition-all ${formData.cuisine_type === cuisine
+                                    ? 'bg-gradient-to-r from-cyan-500 to-blue-600 text-white shadow-lg'
+                                    : 'bg-slate-800/50 border border-slate-700 text-slate-300 hover:border-cyan-500/50 hover:text-white'
+                                    }`}
+                            >
+                                {cuisine}
+                            </button>
+                        ))}
+                    </div>
+                </div>
+            </div>
+
+            {/* Summary */}
+            <div className="mt-8 p-4 bg-slate-800/30 rounded-2xl border border-slate-700/50">
+                <p className="text-slate-400 text-sm">
+                    🤖 Usaremos esta información para generar un análisis de mercado personalizado
+                </p>
+            </div>
+        </div>
+    );
+
     const renderCompleteStep = () => (
         <div className="text-center max-w-xl mx-auto">
             {/* Success Animation */}
@@ -775,7 +901,8 @@ export default function OnboardingWizard({ isOpen, onComplete, initialData }: On
             case 1: return renderWelcomeStep();
             case 2: return renderIdentityStep();
             case 3: return renderConfigStep();
-            case 4: return renderCompleteStep();
+            case 4: return renderLocationStep();
+            case 5: return renderCompleteStep();
             default: return null;
         }
     };

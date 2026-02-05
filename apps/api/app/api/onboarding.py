@@ -267,6 +267,11 @@ class QuickOnboardingRequest(BaseModel):
     seed_demo_data: bool = False
     business_type: str = "restaurant"  # 'restaurant' or 'cafeteria'
     table_count: int = 5  # Number of tables to create (1-50)
+    # Location data for AI analytics
+    address: Optional[str] = None
+    city: Optional[str] = None
+    state: Optional[str] = None
+    cuisine_type: Optional[str] = None
 
 
 class QuickOnboardingResponse(BaseModel):
@@ -334,6 +339,17 @@ async def quick_complete_onboarding(
             # Clean up base64 if switching to a normal URL
             if "custom_logo_base64" in current_features:
                 del current_features["custom_logo_base64"]
+    
+    # Store location data for AI analytics
+    if data.address or data.city or data.state or data.cuisine_type:
+        current_features["restaurant_profile"] = {
+            "address": data.address,
+            "city": data.city,
+            "state": data.state,
+            "cuisine_type": data.cuisine_type,
+            "service_types": data.service_types,
+            "business_type": data.business_type
+        }
     
     tenant.features_config = current_features
     
@@ -529,3 +545,103 @@ async def get_onboarding_status(
         "tenant_name": tenant.trade_name or tenant.name,
         "has_logo": bool(tenant.logo_url),
     }
+
+
+# ============================================
+# AI Analytics Report Endpoint
+# ============================================
+
+class AIAnalyticsRequest(BaseModel):
+    """Request for AI analytics report generation."""
+    restaurant_name: str
+    address: str
+    city: str
+    state: str
+    cuisine_type: str
+    service_types: List[str] = ["dine_in"]
+    business_type: str = "restaurant"
+
+
+class AIAnalyticsResponse(BaseModel):
+    """Response from AI analytics generation."""
+    success: bool
+    market_analysis: str
+    competition_insights: str
+    recommendations: List[str]
+    local_events: str
+    target_audience: str
+    pricing_suggestions: str
+
+
+@router.post("/onboarding/ai-analytics-report", response_model=AIAnalyticsResponse)
+async def generate_ai_analytics_report(
+    data: AIAnalyticsRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Generate an AI-powered analytics report for the restaurant.
+    
+    Uses Perplexity AI to analyze the local market, competition,
+    and provide personalized recommendations based on the restaurant's profile.
+    
+    This endpoint can be called during onboarding to provide
+    valuable insights to new restaurant owners.
+    """
+    from app.services.ai_service import AIService
+    
+    ai_service = AIService()
+    
+    try:
+        report = await ai_service.generate_business_analytics(
+            restaurant_name=data.restaurant_name,
+            address=data.address,
+            city=data.city,
+            state=data.state,
+            cuisine_type=data.cuisine_type,
+            service_types=data.service_types,
+            business_type=data.business_type
+        )
+        
+        # Optionally store the report in the tenant's features_config
+        tenant = await db.execute(
+            select(Tenant).where(Tenant.id == current_user.tenant_id)
+        )
+        tenant = tenant.scalar_one_or_none()
+        
+        if tenant:
+            features = tenant.features_config or {}
+            features["ai_onboarding_report"] = {
+                "market_analysis": report.market_analysis,
+                "competition_insights": report.competition_insights,
+                "recommendations": report.recommendations,
+                "local_events": report.local_events,
+                "target_audience": report.target_audience,
+                "pricing_suggestions": report.pricing_suggestions,
+                "generated_at": str(__import__("datetime").datetime.now())
+            }
+            tenant.features_config = features
+            await db.commit()
+        
+        return AIAnalyticsResponse(
+            success=True,
+            market_analysis=report.market_analysis,
+            competition_insights=report.competition_insights,
+            recommendations=report.recommendations,
+            local_events=report.local_events,
+            target_audience=report.target_audience,
+            pricing_suggestions=report.pricing_suggestions
+        )
+        
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return AIAnalyticsResponse(
+            success=False,
+            market_analysis="Error al generar el análisis.",
+            competition_insights="",
+            recommendations=["Intente nuevamente más tarde."],
+            local_events="",
+            target_audience="",
+            pricing_suggestions=""
+        )

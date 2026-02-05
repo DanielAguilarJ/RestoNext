@@ -23,6 +23,17 @@ class CateringProposal(BaseModel):
     suggested_menu: List[Dict[str, Any]]
     sales_pitch: str
 
+
+class BusinessAnalyticsReport(BaseModel):
+    """AI-generated business analytics report for restaurant onboarding."""
+    market_analysis: str           # Análisis del mercado local
+    competition_insights: str      # Información sobre competencia en la zona
+    recommendations: List[str]     # Recomendaciones estratégicas personalizadas
+    local_events: str             # Eventos locales relevantes para el negocio
+    target_audience: str          # Perfil de cliente objetivo
+    pricing_suggestions: str      # Sugerencias de precios basadas en el mercado
+
+
 class AIService:
     def __init__(self):
         self.settings = get_settings()
@@ -344,3 +355,146 @@ class AIService:
             logger.exception("Unexpected error in upsell suggestion")
             return []
 
+    async def generate_business_analytics(
+        self,
+        restaurant_name: str,
+        address: str,
+        city: str,
+        state: str,
+        cuisine_type: str,
+        service_types: List[str],
+        business_type: str = "restaurant"
+    ) -> BusinessAnalyticsReport:
+        """
+        Generates a comprehensive business analytics report for restaurant onboarding.
+        
+        Uses Perplexity AI to analyze the local market, competition, events,
+        and provide personalized recommendations based on the restaurant's profile.
+        
+        Args:
+            restaurant_name: Name of the restaurant
+            address: Street address
+            city: City name
+            state: State/province
+            cuisine_type: Type of cuisine (Mexican, Italian, etc.)
+            service_types: List of service types (dine_in, delivery, etc.)
+            business_type: 'restaurant' or 'cafeteria'
+            
+        Returns:
+            BusinessAnalyticsReport with market analysis and recommendations
+        """
+        if not self.api_key:
+            logger.warning("Perplexity API Key not configured. Returning default analytics report.")
+            return BusinessAnalyticsReport(
+                market_analysis="Análisis de mercado no disponible - API Key no configurada.",
+                competition_insights="Sin información de competencia disponible.",
+                recommendations=["Configure la API de Perplexity para obtener recomendaciones personalizadas."],
+                local_events="Sin información de eventos locales.",
+                target_audience="Perfil de cliente objetivo no disponible.",
+                pricing_suggestions="Sin sugerencias de precios disponibles."
+            )
+
+        service_desc = ", ".join(service_types)
+        location = f"{address}, {city}, {state}, México"
+        
+        system_prompt = (
+            "Eres un experto consultor de negocios para restaurantes en México con amplio conocimiento del mercado gastronómico. "
+            "Tu tarea es generar un informe de analíticas de negocio personalizado para un nuevo restaurante. "
+            "Debes investigar en línea información actual sobre la zona, competencia, eventos locales y tendencias del mercado. "
+            "Responde SOLO con un objeto JSON válido con estas claves exactas:\n"
+            "- 'market_analysis': Análisis del mercado gastronómico en la zona (2-3 párrafos)\n"
+            "- 'competition_insights': Información sobre restaurantes competidores cercanos (menciona nombres si es posible)\n"
+            "- 'recommendations': Array de 5 recomendaciones estratégicas específicas\n"
+            "- 'local_events': Eventos locales, festividades o temporadas altas relevantes para el restaurante\n"
+            "- 'target_audience': Descripción del perfil de cliente objetivo ideal basado en la ubicación y tipo de cocina\n"
+            "- 'pricing_suggestions': Sugerencias de rango de precios basadas en el mercado local\n"
+            "Sé específico y menciona datos reales cuando sea posible. Responde en español."
+        )
+
+        user_prompt = (
+            f"Genera un informe de analíticas de negocio para:\n\n"
+            f"**Nombre del Restaurante:** {restaurant_name}\n"
+            f"**Ubicación:** {location}\n"
+            f"**Tipo de Cocina:** {cuisine_type}\n"
+            f"**Tipo de Negocio:** {business_type}\n"
+            f"**Servicios:** {service_desc}\n\n"
+            "Investiga la zona y proporciona información útil y específica para este nuevo negocio."
+        )
+
+        try:
+            async with httpx.AsyncClient(timeout=60.0) as client:
+                response = await client.post(
+                    self.base_url,
+                    headers={
+                        "Authorization": f"Bearer {self.api_key}",
+                        "Content-Type": "application/json"
+                    },
+                    json={
+                        "model": self.model,
+                        "messages": [
+                            {"role": "system", "content": system_prompt},
+                            {"role": "user", "content": user_prompt}
+                        ],
+                        "temperature": 0.3
+                    }
+                )
+                
+                if response.status_code != 200:
+                    logger.error(f"Perplexity API Error: {response.status_code} - {response.text}")
+                    return BusinessAnalyticsReport(
+                        market_analysis="Error al generar el análisis de mercado.",
+                        competition_insights="Error al obtener información de competencia.",
+                        recommendations=["Intente nuevamente más tarde."],
+                        local_events="Error al obtener eventos locales.",
+                        target_audience="Error al determinar el público objetivo.",
+                        pricing_suggestions="Error al obtener sugerencias de precios."
+                    )
+
+                data = response.json()
+                content = data["choices"][0]["message"]["content"]
+                
+                # Cleanup markdown code blocks if present
+                clean_content = content.replace("```json", "").replace("```", "").strip()
+                
+                try:
+                    result = json.loads(clean_content)
+                    return BusinessAnalyticsReport(
+                        market_analysis=result.get("market_analysis", "Sin análisis disponible."),
+                        competition_insights=result.get("competition_insights", "Sin información de competencia."),
+                        recommendations=result.get("recommendations", ["Sin recomendaciones disponibles."]),
+                        local_events=result.get("local_events", "Sin eventos locales identificados."),
+                        target_audience=result.get("target_audience", "Sin perfil de audiencia disponible."),
+                        pricing_suggestions=result.get("pricing_suggestions", "Sin sugerencias de precios.")
+                    )
+                except (json.JSONDecodeError, ValueError) as e:
+                    logger.error(f"Failed to parse AI analytics response: {content}")
+                    # Try to extract useful content even if JSON parsing fails
+                    return BusinessAnalyticsReport(
+                        market_analysis=content[:500] if len(content) > 100 else "Error de formato en respuesta.",
+                        competition_insights="No se pudo parsear la respuesta de IA.",
+                        recommendations=["Revise los logs para más detalles."],
+                        local_events="Sin información disponible.",
+                        target_audience="Sin información disponible.",
+                        pricing_suggestions="Sin información disponible."
+                    )
+
+        except httpx.RequestError as e:
+            logger.error(f"Perplexity Connection Error: {str(e)}")
+            return BusinessAnalyticsReport(
+                market_analysis="Error de conexión con el servicio de IA.",
+                competition_insights="Sin conexión disponible.",
+                recommendations=["Verifique su conexión a internet."],
+                local_events="Sin información disponible.",
+                target_audience="Sin información disponible.",
+                pricing_suggestions="Sin información disponible."
+            )
+        except Exception as e:
+            logger.exception("Unexpected error in business analytics generation")
+            return BusinessAnalyticsReport(
+                market_analysis="Error inesperado del sistema.",
+                competition_insights="Error del sistema.",
+                recommendations=["Contacte al soporte técnico."],
+                local_events="Sin información disponible.",
+                target_audience="Sin información disponible.",
+                pricing_suggestions="Sin información disponible."
+            )
