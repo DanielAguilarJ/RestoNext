@@ -1232,6 +1232,10 @@ async def get_calendar_events(
         if event.lead:
             client_name = event.lead.client_name
         
+        # Skip events without dates
+        if not event.start_time or not event.end_time:
+            continue
+            
         calendar_events.append({
             'id': str(event.id),
             'title': event.name,
@@ -1246,7 +1250,7 @@ async def get_calendar_events(
                 'location': event.location,
                 'client_name': client_name,
                 'total_amount': event.total_amount,
-                'menu_items_count': len(event.menu_selections),
+                'menu_items_count': len(event.menu_selections) if event.menu_selections else 0,
             }
         })
     
