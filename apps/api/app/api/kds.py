@@ -352,16 +352,18 @@ async def get_kitchen_orders(
         )
         items = items_result.scalars().all()
         
-        # Get table number
+        # Get table number with proper null handling
         table_number = 0
-        if order.table:
-            table_number = order.table.number
-        else:
-            # Load table if not eager loaded
-            from app.models.models import Table
-            table = await db.get(Table, order.table_id)
-            if table:
-                table_number = table.number
+        try:
+            if order.table_id:
+                from app.models.models import Table
+                table = await db.get(Table, order.table_id)
+                if table:
+                    table_number = table.number
+        except Exception as e:
+            # Log error but don't fail the whole request
+            import logging
+            logging.warning(f"Failed to get table number for order {order.id}: {e}")
         
         kds_items = []
         for item in items:
