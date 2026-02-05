@@ -31,6 +31,7 @@ import {
     ArrowLeft,
     Save,
     ChefHat,
+    Table2,
 } from 'lucide-react';
 
 // API Configuration
@@ -103,6 +104,15 @@ const settingsSections = [
         icon: Phone,
         color: 'from-emerald-500 to-teal-600',
         fields: ['contacts'],
+    },
+    {
+        id: 'tables',
+        title: 'Mesas',
+        description: 'Número y configuración de mesas',
+        icon: Table2,
+        color: 'from-teal-500 to-cyan-600',
+        href: '/admin/settings/tables',
+        external: true,
     },
     {
         id: 'kitchen',

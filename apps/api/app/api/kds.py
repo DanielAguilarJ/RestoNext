@@ -15,7 +15,7 @@ from pydantic import BaseModel, Field
 from app.core.database import get_db
 from app.core.security import get_current_user
 from app.models.models import (
-    User, Tenant, Order, OrderItem, OrderStatus, OrderItemStatus
+    User, Tenant, Order, OrderItem, OrderStatus, OrderItemStatus, Table
 )
 
 
@@ -356,7 +356,6 @@ async def get_kitchen_orders(
         table_number = 0
         try:
             if order.table_id:
-                from app.models.models import Table
                 table = await db.get(Table, order.table_id)
                 if table:
                     table_number = table.number
