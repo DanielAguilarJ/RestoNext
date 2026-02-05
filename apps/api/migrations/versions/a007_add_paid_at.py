@@ -10,7 +10,7 @@ import sqlalchemy as sa
 
 # revision identifiers, used by Alembic.
 revision = 'a007_add_paid_at'
-down_revision = 'a006_fix_missing_columns'
+down_revision = 'add_self_service_dining'
 branch_labels = None
 depends_on = None
 
