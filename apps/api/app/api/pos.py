@@ -39,7 +39,12 @@ async def create_order(
     Triggers WebSocket event `kitchen:new_order` for KDS displays.
     Bar items are routed separately to `bar:new_order`.
     """
+    import logging
+    logger = logging.getLogger(__name__)
+    
     from uuid import UUID as PyUUID
+    
+    logger.info(f"Creating order with data: table_id={order_data.table_id}, items_count={len(order_data.items)}")
     
     # Get table - handle string or UUID with proper error handling
     try:
