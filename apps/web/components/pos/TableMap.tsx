@@ -63,13 +63,17 @@ export function TableMap({ onTableSelect, autoRefresh = true, pendingTables = ne
     useEffect(() => {
         async function loadTables() {
             try {
+                console.log('🔄 Loading tables from API...');
                 const apiTables = await tablesApi.list();
+                console.log('📊 Tables from API:', apiTables);
                 if (apiTables && apiTables.length > 0) {
                     setTables(apiTables as any);
+                    console.log('✅ Loaded', apiTables.length, 'tables from API');
+                } else {
+                    console.warn('⚠️ API returned empty tables array');
                 }
             } catch (error) {
-                console.error('Failed to load tables:', error);
-                // Keep demo tables if API fails
+                console.error('❌ Failed to load tables:', error);
             }
         }
 

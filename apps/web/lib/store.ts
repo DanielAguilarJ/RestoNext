@@ -19,17 +19,7 @@ export interface CartItem {
 }
 
 // Demo tables for development
-const DEMO_TABLES: Table[] = [
-    { id: "table-1", restaurant_id: "default-tenant", number: 1, capacity: 2, status: "free", pos_x: 0, pos_y: 0 },
-    { id: "table-2", restaurant_id: "default-tenant", number: 2, capacity: 4, status: "occupied", pos_x: 1, pos_y: 0 },
-    { id: "table-3", restaurant_id: "default-tenant", number: 3, capacity: 4, status: "free", pos_x: 2, pos_y: 0 },
-    { id: "table-4", restaurant_id: "default-tenant", number: 4, capacity: 6, status: "bill_requested", pos_x: 0, pos_y: 1 },
-    { id: "table-5", restaurant_id: "default-tenant", number: 5, capacity: 4, status: "occupied", pos_x: 1, pos_y: 1 },
-    { id: "table-6", restaurant_id: "default-tenant", number: 6, capacity: 2, status: "free", pos_x: 2, pos_y: 1 },
-    { id: "table-7", restaurant_id: "default-tenant", number: 7, capacity: 8, status: "free", pos_x: 0, pos_y: 2 },
-    { id: "table-8", restaurant_id: "default-tenant", number: 8, capacity: 4, status: "occupied", pos_x: 1, pos_y: 2 },
-    { id: "table-9", restaurant_id: "default-tenant", number: 9, capacity: 4, status: "free", pos_x: 2, pos_y: 2 },
-] as any[];
+const DEMO_TABLES: Table[] = [];
 
 // Store State
 interface POSState {
@@ -64,7 +54,7 @@ interface POSState {
 
 // Create Store
 export const usePOSStore = create<POSState>((set) => ({
-    // Tables - initialized with demo data for development
+    // Tables - empty by default, loaded from API
     tables: DEMO_TABLES,
     selectedTable: null,
 
