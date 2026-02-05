@@ -485,7 +485,7 @@ class Order(Base):
         UUID(as_uuid=True), ForeignKey("customers.id"), nullable=True
     )
     service_type: Mapped[ServiceType] = mapped_column(
-        SQLEnum(ServiceType), default=ServiceType.DINE_IN
+        SQLEnum(ServiceType, values_callable=lambda x: [e.value for e in x]), default=ServiceType.DINE_IN
     )
     # JSONB for delivery info: { "address": "...", "driver_name": "...", "platform": "UberEats" }
     delivery_info: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)
@@ -495,14 +495,14 @@ class Order(Base):
     # ============================================
     # Tracks where the order originated (POS, self-service tablet, kiosk, etc.)
     order_source: Mapped[OrderSource] = mapped_column(
-        SQLEnum(OrderSource), default=OrderSource.POS
+        SQLEnum(OrderSource, values_callable=lambda x: [e.value for e in x]), default=OrderSource.POS
     )
     # For self-service: optional session/guest identifier
     guest_session_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
 
     
     status: Mapped[OrderStatus] = mapped_column(
-        SQLEnum(OrderStatus), default=OrderStatus.OPEN
+        SQLEnum(OrderStatus, values_callable=lambda x: [e.value for e in x]), default=OrderStatus.OPEN
     )
     
     subtotal: Mapped[float] = mapped_column(Float, default=0.0)
