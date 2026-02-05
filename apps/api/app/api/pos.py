@@ -40,151 +40,165 @@ async def create_order(
     Bar items are routed separately to `bar:new_order`.
     """
     import logging
+    import traceback
     logger = logging.getLogger(__name__)
     
-    from uuid import UUID as PyUUID
-    
-    logger.info(f"Creating order with data: table_id={order_data.table_id}, items_count={len(order_data.items)}")
-    
-    # Get table - handle string or UUID with proper error handling
     try:
-        table_id = order_data.table_uuid
-    except (ValueError, AttributeError) as e:
-        raise HTTPException(
-            status_code=400, 
-            detail=f"Invalid table_id format: {order_data.table_id}"
-        )
-    
-    if not table_id:
-        raise HTTPException(status_code=400, detail="table_id is required")
-    
-    table_result = await db.execute(
-        select(Table).where(Table.id == table_id)
-    )
-    table = table_result.scalar_one_or_none()
-    
-    if not table:
-        raise HTTPException(status_code=404, detail="Table not found")
-    
-    # Create order
-    order = Order(
-        tenant_id=current_user.tenant_id,
-        table_id=table_id,
-        waiter_id=current_user.id,
-        status=OrderStatus.OPEN,
-        notes=order_data.notes,
-    )
-    db.add(order)
-    await db.flush()  # Get order ID
-    
-    # Process items
-    subtotal = 0.0
-    kitchen_items = []
-    bar_items = []
-    
-    for item_data in order_data.items:
-        # Get menu item - convert string to UUID if needed
+        from uuid import UUID as PyUUID
+        
+        logger.info(f"Creating order with data: table_id={order_data.table_id}, items_count={len(order_data.items)}")
+        
+        # Get table - handle string or UUID with proper error handling
         try:
-            menu_item_id = item_data.menu_item_uuid
-        except (ValueError, AttributeError):
+            table_id = order_data.table_uuid
+        except (ValueError, AttributeError) as e:
             raise HTTPException(
-                status_code=400,
-                detail=f"Invalid menu_item_id format: {item_data.menu_item_id}"
+                status_code=400, 
+                detail=f"Invalid table_id format: {order_data.table_id}"
             )
         
-        menu_result = await db.execute(
-            select(MenuItem).where(MenuItem.id == menu_item_id)
+        if not table_id:
+            raise HTTPException(status_code=400, detail="table_id is required")
+        
+        table_result = await db.execute(
+            select(Table).where(Table.id == table_id)
         )
-        menu_item = menu_result.scalar_one_or_none()
+        table = table_result.scalar_one_or_none()
         
-        if not menu_item:
-            raise HTTPException(
-                status_code=404, 
-                detail=f"Menu item {item_data.menu_item_id} not found"
-            )
+        if not table:
+            raise HTTPException(status_code=404, detail="Table not found")
         
-        if not menu_item.is_available:
-            raise HTTPException(
-                status_code=400,
-                detail=f"{menu_item.name} is not available"
-            )
-        
-        # Calculate price with modifiers
-        unit_price = menu_item.price
-        for modifier in item_data.selected_modifiers:
-            unit_price += modifier.price_delta
-        
-        # Create order item
-        order_item = OrderItem(
-            order_id=order.id,
-            menu_item_id=menu_item.id,
-            menu_item_name=menu_item.name,
-            route_to=menu_item.route_to,
-            quantity=item_data.quantity,
-            unit_price=unit_price,
-            selected_modifiers=[m.model_dump() for m in item_data.selected_modifiers],
-            seat_number=item_data.seat_number,
-            notes=item_data.notes,
-            status=OrderItemStatus.PENDING,
+        # Create order
+        order = Order(
+            tenant_id=current_user.tenant_id,
+            table_id=table_id,
+            waiter_id=current_user.id,
+            status=OrderStatus.OPEN,
+            notes=order_data.notes,
         )
-        db.add(order_item)
+        db.add(order)
+        await db.flush()  # Get order ID
         
-        item_total = unit_price * item_data.quantity
-        subtotal += item_total
+        # Process items
+        subtotal = 0.0
+        kitchen_items = []
+        bar_items = []
         
-        # Route to appropriate display
-        item_dict = {
-            "id": str(order_item.id),
-            "name": menu_item.name,
-            "quantity": item_data.quantity,
-            "modifiers": [m.model_dump() for m in item_data.selected_modifiers],
-            "notes": item_data.notes,
+        for item_data in order_data.items:
+            # Get menu item - convert string to UUID if needed
+            try:
+                menu_item_id = item_data.menu_item_uuid
+            except (ValueError, AttributeError):
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Invalid menu_item_id format: {item_data.menu_item_id}"
+                )
+            
+            menu_result = await db.execute(
+                select(MenuItem).where(MenuItem.id == menu_item_id)
+            )
+            menu_item = menu_result.scalar_one_or_none()
+            
+            if not menu_item:
+                raise HTTPException(
+                    status_code=404, 
+                    detail=f"Menu item {item_data.menu_item_id} not found"
+                )
+            
+            if not menu_item.is_available:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"{menu_item.name} is not available"
+                )
+            
+            # Calculate price with modifiers
+            unit_price = menu_item.price
+            for modifier in item_data.selected_modifiers:
+                unit_price += modifier.price_delta
+            
+            # Create order item
+            order_item = OrderItem(
+                order_id=order.id,
+                menu_item_id=menu_item.id,
+                menu_item_name=menu_item.name,
+                route_to=menu_item.route_to,
+                quantity=item_data.quantity,
+                unit_price=unit_price,
+                selected_modifiers=[m.model_dump() for m in item_data.selected_modifiers],
+                seat_number=item_data.seat_number,
+                notes=item_data.notes,
+                status=OrderItemStatus.PENDING,
+            )
+            db.add(order_item)
+            
+            item_total = unit_price * item_data.quantity
+            subtotal += item_total
+            
+            # Route to appropriate display
+            item_dict = {
+                "id": str(order_item.id),
+                "name": menu_item.name,
+                "quantity": item_data.quantity,
+                "modifiers": [m.model_dump() for m in item_data.selected_modifiers],
+                "notes": item_data.notes,
+                "table_number": table.number,
+            }
+            
+            if menu_item.route_to.value == "bar":
+                bar_items.append(item_dict)
+            else:
+                kitchen_items.append(item_dict)
+        
+        # Calculate totals
+        tax = subtotal * 0.16  # IVA 16%
+        total = subtotal + tax
+        
+        order.subtotal = subtotal
+        order.tax = tax
+        order.total = total
+        
+        # Update table status
+        table.status = TableStatus.OCCUPIED
+        
+        await db.commit()
+        await db.refresh(order)
+        
+        # Load relationships for response
+        await db.refresh(order, ["items"])
+        
+        # Send WebSocket notifications
+        order_notification = {
+            "order_id": str(order.id),
             "table_number": table.number,
+            "waiter_name": current_user.name,
+            "created_at": order.created_at.isoformat(),
         }
         
-        if menu_item.route_to.value == "bar":
-            bar_items.append(item_dict)
-        else:
-            kitchen_items.append(item_dict)
-    
-    # Calculate totals
-    tax = subtotal * 0.16  # IVA 16%
-    total = subtotal + tax
-    
-    order.subtotal = subtotal
-    order.tax = tax
-    order.total = total
-    
-    # Update table status
-    table.status = TableStatus.OCCUPIED
-    
-    await db.commit()
-    await db.refresh(order)
-    
-    # Load relationships for response
-    await db.refresh(order, ["items"])
-    
-    # Send WebSocket notifications
-    order_notification = {
-        "order_id": str(order.id),
-        "table_number": table.number,
-        "waiter_name": current_user.name,
-        "created_at": order.created_at.isoformat(),
-    }
-    
-    if kitchen_items:
-        await ws_manager.notify_kitchen_new_order({
-            **order_notification,
-            "items": kitchen_items,
-        })
-    
-    if bar_items:
-        await ws_manager.notify_bar_new_order({
-            **order_notification,
-            "items": bar_items,
-        })
-    
-    return order
+        if kitchen_items:
+            await ws_manager.notify_kitchen_new_order({
+                **order_notification,
+                "items": kitchen_items,
+            })
+        
+        if bar_items:
+            await ws_manager.notify_bar_new_order({
+                **order_notification,
+                "items": bar_items,
+            })
+        
+        return order
+        
+    except HTTPException:
+        # Re-raise HTTP exceptions as-is
+        raise
+    except Exception as e:
+        # Log the full exception with traceback
+        logger.error(f"Error creating order: {str(e)}")
+        logger.error(f"Traceback: {traceback.format_exc()}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Internal server error: {str(e)}"
+        )
 
 
 @router.get("/{order_id}", response_model=OrderResponse)
