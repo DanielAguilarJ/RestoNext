@@ -335,14 +335,21 @@ async def kitchen_websocket(websocket: WebSocket):
     Receives new orders and item updates in real-time.
     """
     await ws_manager.connect(websocket, "kitchen")
+    kitchen_count = len(ws_manager.active_connections.get("kitchen", set()))
+    print(f"INFO:     🍳 Kitchen WS connected (total kitchen connections: {kitchen_count})")
     try:
         while True:
-            # Keep connection alive, receive pings
             data = await websocket.receive_text()
             if data == "ping":
                 await websocket.send_text("pong")
     except WebSocketDisconnect:
+        pass
+    except Exception as e:
+        print(f"WARNING:  Kitchen WS error: {type(e).__name__}: {e}")
+    finally:
         ws_manager.disconnect(websocket, "kitchen")
+        kitchen_count = len(ws_manager.active_connections.get("kitchen", set()))
+        print(f"INFO:     🍳 Kitchen WS disconnected (remaining: {kitchen_count})")
 
 
 @app.websocket("/ws/bar")
@@ -358,6 +365,10 @@ async def bar_websocket(websocket: WebSocket):
             if data == "ping":
                 await websocket.send_text("pong")
     except WebSocketDisconnect:
+        pass
+    except Exception:
+        pass
+    finally:
         ws_manager.disconnect(websocket, "bar")
 
 
@@ -374,6 +385,10 @@ async def waiter_websocket(websocket: WebSocket):
             if data == "ping":
                 await websocket.send_text("pong")
     except WebSocketDisconnect:
+        pass
+    except Exception:
+        pass
+    finally:
         ws_manager.disconnect(websocket, "waiter")
 
 
@@ -391,6 +406,10 @@ async def cashier_websocket(websocket: WebSocket):
             if data == "ping":
                 await websocket.send_text("pong")
     except WebSocketDisconnect:
+        pass
+    except Exception:
+        pass
+    finally:
         ws_manager.disconnect(websocket, "cashier")
 
 
@@ -407,6 +426,10 @@ async def pos_websocket(websocket: WebSocket):
             if data == "ping":
                 await websocket.send_text("pong")
     except WebSocketDisconnect:
+        pass
+    except Exception:
+        pass
+    finally:
         ws_manager.disconnect(websocket, "pos")
 
 
@@ -427,6 +450,10 @@ async def customer_websocket(websocket: WebSocket, table_number: int):
                     tenant_id=data.get("tenant_id", ""),
                 )
     except WebSocketDisconnect:
+        pass
+    except Exception:
+        pass
+    finally:
         ws_manager.disconnect(websocket, f"table_{table_number}")
 
 # ============================================

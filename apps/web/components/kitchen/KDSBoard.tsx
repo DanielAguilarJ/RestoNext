@@ -57,6 +57,24 @@ export function KDSBoard() {
         maxReconnectAttempts: 10,
     });
 
+    // Transform API orders to ticket format (reusable)
+    const transformOrders = useCallback((orders: any[]) => {
+        return orders.map((order: any) => ({
+            id: order.id,
+            orderId: order.id,
+            tableNumber: order.table_number || 0,
+            items: (order.items || []).map((item: any) => ({
+                id: item.id,
+                name: item.name || item.menu_item_name,
+                quantity: item.quantity,
+                modifiers: item.modifiers || item.selected_modifiers?.map((m: any) => m.name || m) || [],
+                notes: item.notes,
+                status: item.status || 'pending',
+            })),
+            createdAt: order.paid_at ? new Date(order.paid_at) : new Date(order.created_at),
+        }));
+    }, []);
+
     // Load KDS config and initial orders on mount
     useEffect(() => {
         async function loadInitialData() {
@@ -69,24 +87,7 @@ export function KDSBoard() {
 
                 // Load existing kitchen orders
                 const orders = await kdsApi.getOrders();
-
-                // Transform API orders to ticket format
-                const initialTickets = orders.map((order: any) => ({
-                    id: order.id,
-                    orderId: order.id,
-                    tableNumber: order.table_number || 0,
-                    items: (order.items || []).map((item: any) => ({
-                        id: item.id,
-                        name: item.name || item.menu_item_name,
-                        quantity: item.quantity,
-                        modifiers: item.modifiers || item.selected_modifiers?.map((m: any) => m.name || m) || [],
-                        notes: item.notes,
-                        status: item.status || 'pending',
-                    })),
-                    createdAt: order.paid_at ? new Date(order.paid_at) : new Date(order.created_at),
-                }));
-
-                setTickets(initialTickets);
+                setTickets(transformOrders(orders));
             } catch (error) {
                 console.error("Failed to load KDS config or orders:", error);
             } finally {
@@ -95,7 +96,31 @@ export function KDSBoard() {
         }
 
         loadInitialData();
-    }, [setTickets]);
+    }, [setTickets, transformOrders]);
+
+    // Periodic polling every 10s as fallback for WebSocket
+    // This guarantees orders appear even if WS notification was missed
+    useEffect(() => {
+        const pollInterval = setInterval(async () => {
+            try {
+                const orders = await kdsApi.getOrders();
+                const freshTickets = transformOrders(orders);
+                // Only update if the data actually changed (compare order IDs)
+                setTickets((prev: any) => {
+                    const prevIds = new Set(prev.map((t: any) => t.id));
+                    const freshIds = new Set(freshTickets.map((t: any) => t.id));
+                    const hasChanges = freshTickets.length !== prev.length ||
+                        freshTickets.some((t: any) => !prevIds.has(t.id)) ||
+                        prev.some((t: any) => !freshIds.has(t.id));
+                    return hasChanges ? freshTickets : prev;
+                });
+            } catch (error) {
+                // Silent fail - polling is a fallback, don't spam errors
+            }
+        }, 10000); // Every 10 seconds
+
+        return () => clearInterval(pollInterval);
+    }, [transformOrders, setTickets]);
 
     // Update timer every second
     useEffect(() => {

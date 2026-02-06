@@ -356,9 +356,12 @@ async def get_kitchen_orders(
 ):
     """
     Get all active kitchen orders for display.
-    By default returns orders that are in_progress or ready.
-    Sorted by paid_at (oldest first) for FIFO processing.
+    Mode-aware: In restaurant mode, also includes 'open' orders.
+    Sorted by created_at (oldest first) for FIFO processing.
     """
+    import logging
+    logger = logging.getLogger(__name__)
+    
     # Parse statuses
     status_list = [s.strip() for s in include_statuses.split(",")]
     status_enums = []
@@ -377,6 +380,27 @@ async def get_kitchen_orders(
     if not status_enums:
         status_enums = [OrderStatus.IN_PROGRESS, OrderStatus.READY]
     
+    # Auto-include 'open' orders in restaurant mode
+    # In restaurant mode, orders go from POS directly to kitchen (status=open or in_progress)
+    # In cafeteria mode, only paid orders (in_progress) should appear
+    try:
+        tenant = await db.get(Tenant, current_user.tenant_id)
+        kds_mode = "restaurant"  # default
+        if tenant and tenant.features_config:
+            kds_config = tenant.features_config.get("kds", {})
+            kds_mode = kds_config.get("mode", "restaurant")
+        
+        if kds_mode == "restaurant" and OrderStatus.OPEN not in status_enums:
+            status_enums.append(OrderStatus.OPEN)
+            logger.info(f"KDS restaurant mode: including 'open' orders in query")
+    except Exception as e:
+        # If mode check fails, include open orders as fallback
+        if OrderStatus.OPEN not in status_enums:
+            status_enums.append(OrderStatus.OPEN)
+        logger.warning(f"KDS mode check failed, including 'open' as fallback: {e}")
+    
+    logger.info(f"KDS query: tenant={current_user.tenant_id}, statuses={[s.value for s in status_enums]}")
+    
     # Query orders with items
     result = await db.execute(
         select(Order)
@@ -389,6 +413,8 @@ async def get_kitchen_orders(
         .order_by(Order.paid_at.asc().nullsfirst(), Order.created_at.asc())
     )
     orders = result.scalars().all()
+    
+    logger.info(f"KDS query returned {len(orders)} orders: {[(str(o.id)[:8], o.status.value) for o in orders]}")
     
     # Format response
     kds_orders = []

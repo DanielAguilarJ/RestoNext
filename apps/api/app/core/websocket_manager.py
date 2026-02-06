@@ -44,19 +44,25 @@ class ConnectionManager:
         CRITICAL: This must NEVER block startup, even if Redis is unavailable.
         """
         import asyncio
+        import os
         
         if self.redis_client is not None:
             return  # Already connected
         
-        # Skip Redis entirely if URL is localhost and we're NOT in debug mode
-        # This prevents blocking in Railway when Redis is not configured
-        redis_url = settings.redis_url or ""
-        if "localhost" in redis_url and not settings.debug:
-            print("INFO:     Redis skipped (localhost URL in production mode)")
-            return
+        # Try multiple Redis URL sources (DigitalOcean uses REDISS_URL for TLS)
+        redis_url = (
+            os.getenv("REDIS_URL") or 
+            os.getenv("REDISS_URL") or 
+            settings.redis_url or 
+            ""
+        )
         
-        if not redis_url or redis_url == "redis://localhost:6379":
-            print("INFO:     Redis skipped (default/empty URL)")
+        # Skip if it's clearly a local default and we're in production
+        is_local_default = redis_url in ("", "redis://localhost:6379") or (
+            "localhost" in redis_url and not settings.debug
+        )
+        if is_local_default:
+            print(f"INFO:     Redis skipped (URL={redis_url[:30]}... in production mode)")
             return
         
         async def _try_connect():
@@ -150,6 +156,8 @@ class ConnectionManager:
     
     async def notify_kitchen_new_order(self, order_data: dict):
         """Send new order notification to kitchen displays"""
+        kitchen_count = len(self.active_connections.get("kitchen", set()))
+        print(f"INFO:     🔔 Broadcasting kitchen:new_order to {kitchen_count} kitchen connection(s)")
         message = {
             "event": "kitchen:new_order",
             "payload": order_data

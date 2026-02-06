@@ -161,7 +161,7 @@ interface KDSState {
         createdAt: Date;
     }>;
     addTicket: (ticket: KDSState["tickets"][0]) => void;
-    setTickets: (tickets: KDSState["tickets"]) => void;
+    setTickets: (tickets: KDSState["tickets"] | ((prev: KDSState["tickets"]) => KDSState["tickets"])) => void;
     updateItemStatus: (ticketId: string, itemId: string, status: "pending" | "preparing" | "ready") => void;
     removeTicket: (ticketId: string) => void;
 }
@@ -169,7 +169,13 @@ interface KDSState {
 export const useKDSStore = create<KDSState>((set) => ({
     tickets: [],
 
-    setTickets: (tickets) => set({ tickets }),
+    setTickets: (tickets) => {
+        if (typeof tickets === 'function') {
+            set((state) => ({ tickets: (tickets as any)(state.tickets) }));
+        } else {
+            set({ tickets });
+        }
+    },
 
     addTicket: (ticket) =>
         set((state) => ({
