@@ -527,6 +527,11 @@ export interface KDSConfig {
     shake_animation: boolean;
 }
 
+export interface KDSOrdersResponse {
+    orders: Order[];
+    total_count: number;
+}
+
 export const kdsApi = {
     /**
      * Get KDS configuration for current tenant
@@ -569,7 +574,8 @@ export const kdsApi = {
      * Get active kitchen orders
      */
     getOrders: async (): Promise<Order[]> => {
-        return apiRequest<Order[]>('/kds/orders');
+        const response = await apiRequest<KDSOrdersResponse>('/kds/orders');
+        return response.orders;
     },
 
     /**
