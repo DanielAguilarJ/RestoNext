@@ -160,30 +160,77 @@ async def create_order(
         # Update table status
         table.status = TableStatus.OCCUPIED
         
+        # Auto-transition to IN_PROGRESS for restaurant mode
+        # so orders immediately appear on the Kitchen Display System
+        try:
+            from app.models.models import Tenant
+            tenant = await db.get(Tenant, current_user.tenant_id)
+            kds_mode = "restaurant"  # default
+            if tenant and tenant.features_config:
+                kds_config = tenant.features_config.get("kds", {})
+                kds_mode = kds_config.get("mode", "restaurant")
+            
+            if kds_mode == "restaurant" and (kitchen_items or bar_items):
+                # Restaurant mode: orders go directly to kitchen after creation
+                order.status = OrderStatus.IN_PROGRESS
+                logger.info(f"Restaurant mode: order {order.id} auto-transitioned to IN_PROGRESS")
+        except Exception as e:
+            logger.warning(f"Could not check KDS mode, keeping order as OPEN: {e}")
+        
         await db.commit()
         await db.refresh(order)
         
         # Load relationships for response
         await db.refresh(order, ["items"])
         
-        # Send WebSocket notifications
+        # Send WebSocket notifications with data matching frontend KDS expectations
+        # Frontend expects: id, orderId, tableNumber, items[{id, name, quantity, modifiers, notes, status}], createdAt
+        kds_kitchen_items = [
+            {
+                "id": item["id"],
+                "name": item["name"],
+                "quantity": item["quantity"],
+                "modifiers": [m.get("option_name", str(m)) for m in item.get("modifiers", [])] if item.get("modifiers") else [],
+                "notes": item.get("notes"),
+                "status": "pending",
+            }
+            for item in kitchen_items
+        ]
+        
+        kds_bar_items = [
+            {
+                "id": item["id"],
+                "name": item["name"],
+                "quantity": item["quantity"],
+                "modifiers": [m.get("option_name", str(m)) for m in item.get("modifiers", [])] if item.get("modifiers") else [],
+                "notes": item.get("notes"),
+                "status": "pending",
+            }
+            for item in bar_items
+        ]
+        
         order_notification = {
+            "id": str(order.id),
+            "orderId": str(order.id),
             "order_id": str(order.id),
+            "tableNumber": table.number,
             "table_number": table.number,
             "waiter_name": current_user.name,
+            "createdAt": order.created_at.isoformat(),
             "created_at": order.created_at.isoformat(),
         }
         
         if kitchen_items:
             await ws_manager.notify_kitchen_new_order({
                 **order_notification,
-                "items": kitchen_items,
+                "items": kds_kitchen_items,
             })
+            logger.info(f"Sent kitchen WebSocket notification for order {order.id} with {len(kds_kitchen_items)} items")
         
         if bar_items:
             await ws_manager.notify_bar_new_order({
                 **order_notification,
-                "items": bar_items,
+                "items": kds_bar_items,
             })
         
         return order

@@ -199,8 +199,55 @@ async def mark_order_paid(
     
     await db.commit()
     
-    # TODO: Send WebSocket notification to kitchen
-    # await broadcast_to_kitchen(tenant_id=current_user.tenant_id, event="new_order", order_id=str(order_id))
+    # Send WebSocket notification to kitchen
+    try:
+        from app.core.websocket_manager import ws_manager
+        from app.models.models import OrderItem, Table
+        
+        # Load order items for the notification
+        items_result = await db.execute(
+            select(OrderItem).where(OrderItem.order_id == order_id)
+        )
+        items = items_result.scalars().all()
+        
+        # Get table number
+        table_number = 0
+        if order.table_id:
+            table = await db.get(Table, order.table_id)
+            if table:
+                table_number = table.number
+        
+        kds_items = []
+        for item in items:
+            modifiers = []
+            if item.selected_modifiers:
+                for mod in item.selected_modifiers:
+                    if isinstance(mod, dict):
+                        modifiers.append(mod.get("option_name", str(mod)))
+                    else:
+                        modifiers.append(str(mod))
+            kds_items.append({
+                "id": str(item.id),
+                "name": item.menu_item_name,
+                "quantity": item.quantity,
+                "modifiers": modifiers,
+                "notes": item.notes,
+                "status": "pending",
+            })
+        
+        await ws_manager.notify_kitchen_new_order({
+            "id": str(order_id),
+            "orderId": str(order_id),
+            "order_id": str(order_id),
+            "tableNumber": table_number,
+            "table_number": table_number,
+            "items": kds_items,
+            "createdAt": order.paid_at.isoformat() if order.paid_at else datetime.utcnow().isoformat(),
+            "created_at": order.paid_at.isoformat() if order.paid_at else datetime.utcnow().isoformat(),
+        })
+    except Exception as e:
+        import logging
+        logging.warning(f"Failed to send kitchen WebSocket notification for order {order_id}: {e}")
     
     return {
         "message": "Order marked as paid and sent to kitchen",
