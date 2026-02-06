@@ -22,10 +22,11 @@ services:
   - key: DATABASE_URL
     scope: RUN_TIME
     value: ${db.DATABASE_URL}
-  # Redis (managed by DO)
-  - key: REDIS_URL
-    scope: RUN_TIME
-    value: ${redis.REDISS_URL}
+  # Redis: not needed with instance_count=1 (in-memory WS + polling fallback)
+  # Add back when scaling to 2+ API instances
+  # - key: REDIS_URL
+  #   scope: RUN_TIME
+  #   value: ${redis.REDISS_URL}
   # App Configuration
   - key: SCHEDULER_ENABLED
     scope: RUN_TIME
@@ -146,9 +147,10 @@ databases:
   size: db-s-1vcpu-1gb
   num_nodes: 1
 
-- name: redis
-  engine: REDIS
-  version: "7"
-  production: true
-  size: db-s-1vcpu-1gb
-  num_nodes: 1
+# Redis/Valkey: uncomment when scaling to 2+ API instances ($15/mo)
+# - name: redis
+#   engine: VALKEY
+#   version: "8"
+#   production: true
+#   size: db-s-1vcpu-1gb
+#   num_nodes: 1
