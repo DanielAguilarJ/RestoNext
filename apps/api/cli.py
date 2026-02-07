@@ -55,8 +55,8 @@ PLAN_CONFIGS = {
     "starter": {
         "description": "Para restaurantes pequeños",
         "max_tables": 10,
-        "addons": {"self_service": False, "delivery": False, "kds_pro": False, "analytics_ai": False},
-        "features": {}
+        "addons": {"self_service": True, "delivery": False, "kds_pro": False, "analytics_ai": False},
+        "features": {"self_service": {"allow_bill_request": True}}
     },
     "professional": {
         "description": "Para restaurantes medianos",

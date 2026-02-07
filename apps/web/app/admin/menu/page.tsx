@@ -41,6 +41,7 @@ import {
     Settings,
     Upload,
     Link as LinkIcon,
+    Clock,
 } from "lucide-react";
 import { motion, AnimatePresence, Reorder } from "framer-motion";
 import {
@@ -95,6 +96,7 @@ interface EditingItem {
     price: string;
     image_url: string;
     route_to: string;
+    prep_time_minutes: string;
 }
 
 type ModalType = "category" | "item" | "ai" | null;
@@ -241,6 +243,7 @@ export default function AdminMenuPage() {
                 price: item.price.toString(),
                 image_url: item.image_url || "",
                 route_to: (item as any).route_to || "kitchen",
+                prep_time_minutes: ((item as any).prep_time_minutes || 15).toString(),
             });
         } else {
             setEditingItem({
@@ -250,6 +253,7 @@ export default function AdminMenuPage() {
                 price: "",
                 image_url: "",
                 route_to: "kitchen",
+                prep_time_minutes: "15",
             });
         }
         setModalType("item");
@@ -268,6 +272,7 @@ export default function AdminMenuPage() {
                     image_url: editingItem.image_url || undefined,
                     route_to: editingItem.route_to,
                     category_id: editingItem.category_id,
+                    prep_time_minutes: parseInt(editingItem.prep_time_minutes) || 15,
                 };
                 await menuApi.updateItem(editingItem.id, data);
             } else {
@@ -278,6 +283,7 @@ export default function AdminMenuPage() {
                     price: parseFloat(editingItem.price),
                     image_url: editingItem.image_url || undefined,
                     route_to: editingItem.route_to,
+                    prep_time_minutes: parseInt(editingItem.prep_time_minutes) || 15,
                 };
                 await menuApi.createItem(data);
             }
@@ -921,6 +927,24 @@ export default function AdminMenuPage() {
                                                     <option value="bar">Bar</option>
                                                 </select>
                                             </div>
+                                        </div>
+                                        <div>
+                                            <label className="block text-sm font-medium text-slate-300 mb-2">
+                                                <span className="flex items-center gap-2">
+                                                    <Clock className="w-4 h-4" />
+                                                    Tiempo de Preparación (minutos)
+                                                </span>
+                                            </label>
+                                            <input
+                                                type="number"
+                                                value={editingItem.prep_time_minutes}
+                                                onChange={(e) => setEditingItem({ ...editingItem, prep_time_minutes: e.target.value })}
+                                                className="w-full px-4 py-3 rounded-xl border border-slate-600 bg-slate-700/50 text-white placeholder-slate-500 focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                                                placeholder="15"
+                                                min="1"
+                                                max="120"
+                                            />
+                                            <p className="text-xs text-slate-500 mt-1">Tiempo estimado en minutos. Se mostrará en la pantalla de cocina.</p>
                                         </div>
                                         <div>
                                             <label className="block text-sm font-medium text-slate-300 mb-2">

@@ -488,3 +488,56 @@ async def impersonate_tenant(
         impersonating_tenant=tenant.name
     )
 
+
+# ============================================
+# Fix Self-Service Addon for All Tenants
+# ============================================
+
+class FixAddonsResponse(BaseModel):
+    """Response from fixing self-service addons."""
+    fixed_count: int
+    already_ok_count: int
+    total_tenants: int
+    message: str
+
+
+@router.post(
+    "/fix-self-service-addons",
+    response_model=FixAddonsResponse,
+    summary="Enable self_service addon for all tenants",
+    description="One-time fix: ensures all active tenants have self_service enabled in active_addons."
+)
+async def fix_self_service_addons(
+    current_user: User = Depends(require_roles(UserRole.ADMIN)),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Fix existing tenants that were created before self_service was 
+    made a core feature available on all plans.
+    """
+    result = await db.execute(select(Tenant).where(Tenant.is_active == True))
+    tenants = result.scalars().all()
+    
+    fixed = 0
+    already_ok = 0
+    
+    for tenant in tenants:
+        addons = tenant.active_addons or {}
+        if not addons.get("self_service", False):
+            addons["self_service"] = True
+            tenant.active_addons = addons
+            # Force SQLAlchemy to detect the JSONB mutation
+            from sqlalchemy.orm.attributes import flag_modified
+            flag_modified(tenant, "active_addons")
+            fixed += 1
+        else:
+            already_ok += 1
+    
+    await db.commit()
+    
+    return FixAddonsResponse(
+        fixed_count=fixed,
+        already_ok_count=already_ok,
+        total_tenants=len(tenants),
+        message=f"Self-service enabled for {fixed} tenants. {already_ok} already had it enabled."
+    )

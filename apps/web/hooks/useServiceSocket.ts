@@ -55,7 +55,7 @@ function getWebSocketUrl(): string {
     if (apiUrl) {
         try {
             const url = new URL(apiUrl);
-            return `${protocol}//${url.host}`;
+            return `${protocol}//${url.host}${url.pathname}`;
         } catch {
             // Fallback to current host
         }

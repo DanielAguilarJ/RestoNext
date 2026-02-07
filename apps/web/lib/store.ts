@@ -145,26 +145,38 @@ export const usePOSStore = create<POSState>((set) => ({
 }));
 
 // Kitchen Display Store
+interface KDSItem {
+    id: string;
+    name: string;
+    quantity: number;
+    modifiers: string[];
+    notes?: string;
+    status: "pending" | "preparing" | "ready" | "served";
+    prep_time_minutes: number;
+}
+
+interface KDSTicket {
+    id: string;
+    orderId: string;
+    tableNumber: number;
+    orderNumber: string;
+    orderSource: string;
+    items: KDSItem[];
+    createdAt: Date;
+    maxPrepTimeMinutes: number;
+    notes?: string;
+}
+
 interface KDSState {
-    tickets: Array<{
-        id: string;
-        orderId: string;
-        tableNumber: number;
-        items: Array<{
-            id: string;
-            name: string;
-            quantity: number;
-            modifiers: string[];
-            notes?: string;
-            status: "pending" | "preparing" | "ready";
-        }>;
-        createdAt: Date;
-    }>;
-    addTicket: (ticket: KDSState["tickets"][0]) => void;
-    setTickets: (tickets: KDSState["tickets"] | ((prev: KDSState["tickets"]) => KDSState["tickets"])) => void;
-    updateItemStatus: (ticketId: string, itemId: string, status: "pending" | "preparing" | "ready") => void;
+    tickets: KDSTicket[];
+    addTicket: (ticket: KDSTicket) => void;
+    updateTicket: (ticket: KDSTicket) => void;
+    setTickets: (tickets: KDSTicket[] | ((prev: KDSTicket[]) => KDSTicket[])) => void;
+    updateItemStatus: (ticketId: string, itemId: string, status: KDSItem["status"]) => void;
     removeTicket: (ticketId: string) => void;
 }
+
+export type { KDSItem, KDSTicket };
 
 export const useKDSStore = create<KDSState>((set) => ({
     tickets: [],
@@ -178,8 +190,19 @@ export const useKDSStore = create<KDSState>((set) => ({
     },
 
     addTicket: (ticket) =>
+        set((state) => {
+            // Dedup: don't add if already exists
+            if (state.tickets.some((t) => t.id === ticket.id)) {
+                return state;
+            }
+            return { tickets: [...state.tickets, ticket] };
+        }),
+
+    updateTicket: (ticket) =>
         set((state) => ({
-            tickets: [...state.tickets, ticket],
+            tickets: state.tickets.map((t) =>
+                t.id === ticket.id ? ticket : t
+            ),
         })),
 
     updateItemStatus: (ticketId, itemId, status) =>

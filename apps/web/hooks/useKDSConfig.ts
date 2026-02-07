@@ -80,6 +80,7 @@ export function useKDSConfig() {
         critical_minutes: 10,
         audio_alerts: true,
         shake_animation: true,
+        auto_complete_when_ready: false,
     });
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
@@ -105,6 +106,7 @@ export function useKDSConfig() {
                     critical_minutes: data.critical_minutes || 10,
                     audio_alerts: data.audio_alerts !== false,
                     shake_animation: data.shake_animation !== false,
+                    auto_complete_when_ready: data.auto_complete_when_ready || false,
                 });
             }
         } catch (err) {

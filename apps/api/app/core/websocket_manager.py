@@ -236,7 +236,8 @@ class ConnectionManager:
         subtotal: float,
         tax: float,
         items_count: int,
-        currency: str = "MXN"
+        currency: str = "MXN",
+        order_id: str = None
     ):
         """
         High-priority notification when customer requests the bill.
@@ -255,6 +256,7 @@ class ConnectionManager:
                 "table_id": table_id,
                 "table_number": table_number,
                 "tenant_id": tenant_id,
+                "order_id": order_id,
                 "total": total,
                 "subtotal": subtotal,
                 "tax": tax,

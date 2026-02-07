@@ -54,8 +54,8 @@ export default function SplitCheckPage() {
     // Map backend items to SplitCheck format
     const orderItems = order.items.map((item: any) => ({
         id: item.id || item.menu_item_id,
-        name: item.menu_item?.name || "Producto",
-        price: item.price_at_order,
+        name: item.menu_item_name || "Producto",
+        price: item.unit_price,
         quantity: item.quantity
     }));
 
@@ -96,7 +96,7 @@ export default function SplitCheckPage() {
                     </div>
                     <div>
                         <h1 className="text-xl font-bold flex items-center gap-2">
-                            Mesa {order.table_id || "N/A"}
+                            Mesa {order.table_number || "N/A"}
                             <Sparkles className="w-5 h-5 text-green-500" />
                         </h1>
                         <p className="text-sm text-gray-500">Cerrar Cuenta</p>

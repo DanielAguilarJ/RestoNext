@@ -65,9 +65,21 @@ export function DiningProvider({ children, tenantId, tableId, token }: DiningPro
                 setSession(sessionData);
                 setMenu(menuData);
             } catch (err) {
-                const message = err instanceof api.DiningApiError
-                    ? err.message
-                    : 'Error al conectar con el restaurante';
+                let message: string;
+                if (err instanceof api.DiningApiError) {
+                    // Map specific API errors to user-friendly Spanish messages
+                    if (err.status === 403) {
+                        message = 'El servicio de auto-pedido no está disponible en este momento. Contacta al mesero.';
+                    } else if (err.status === 401) {
+                        message = 'El código QR ha expirado. Por favor, escanea de nuevo el código de tu mesa.';
+                    } else if (err.status === 404) {
+                        message = 'Mesa no encontrada. Verifica el código QR.';
+                    } else {
+                        message = err.message;
+                    }
+                } else {
+                    message = 'Error al conectar con el restaurante. Verifica tu conexión a internet.';
+                }
                 setError(message);
             } finally {
                 setIsLoading(false);

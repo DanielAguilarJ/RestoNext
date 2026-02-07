@@ -226,15 +226,15 @@ export default function CashierPage() {
                                     >
                                         <div className="flex items-center gap-4">
                                             <div className="w-10 h-10 bg-amber-50 text-amber-600 rounded-xl flex items-center justify-center font-bold">
-                                                {order.table_id || "S/N"}
+                                                {order.table_number || "S/N"}
                                             </div>
                                             <div>
-                                                <p className="font-bold text-gray-900 dark:text-white">Mesa {order.table_id || "S/N"}</p>
+                                                <p className="font-bold text-gray-900 dark:text-white">Mesa {order.table_number || "S/N"}</p>
                                                 <p className="text-xs text-gray-500">{order.items?.length || 0} productos</p>
                                             </div>
                                         </div>
                                         <div className="text-right">
-                                            <p className="font-black text-amber-600">{formatPrice(order.total_amount)}</p>
+                                            <p className="font-black text-amber-600">{formatPrice(order.total)}</p>
                                             <p className="text-[10px] text-gray-400 group-hover:text-amber-500 flex items-center gap-1">
                                                 Cobrar <ArrowUpRight className="w-3 h-3" />
                                             </p>

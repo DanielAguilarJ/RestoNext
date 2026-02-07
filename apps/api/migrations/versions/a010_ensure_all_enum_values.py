@@ -22,10 +22,10 @@ def upgrade() -> None:
     
     enums_to_fix = {
         'orderstatus': [
-            'open', 'in_progress', 'ready', 'delivered', 'paid', 'cancelled'
+            'open', 'pending_payment', 'in_progress', 'ready', 'delivered', 'paid', 'cancelled'
         ],
         'orderitemstatus': [
-            'pending', 'preparing', 'ready', 'delivered', 'cancelled'
+            'pending', 'preparing', 'ready', 'served', 'delivered', 'cancelled'
         ],
         'servicetype': [
             'dine_in', 'delivery', 'take_away', 'drive_thru'

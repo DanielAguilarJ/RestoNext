@@ -92,9 +92,9 @@ export function LicenseProvider({ children, initialLicenses }: LicenseProviderPr
         try {
             setIsLoading(true);
 
-            // Get token from localStorage
+            // Get token from localStorage (synced by TokenStorage as 'access_token')
             const token = typeof localStorage !== "undefined"
-                ? localStorage.getItem("restonext_token")
+                ? localStorage.getItem("access_token")
                 : null;
 
             if (!token) {

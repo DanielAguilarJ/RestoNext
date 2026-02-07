@@ -11,7 +11,7 @@ from app.models.models import User, Customer, LoyaltyTransaction, LoyaltyTransac
 from app.schemas.schemas import LoyaltyTransactionResponse
 from app.services.loyalty_service import LoyaltyService
 
-router = APIRouter(prefix="/loyalty", tags=["Loyalty"])
+router = APIRouter(tags=["Loyalty"])
 
 def get_loyalty_service(
     db: AsyncSession = Depends(get_db),

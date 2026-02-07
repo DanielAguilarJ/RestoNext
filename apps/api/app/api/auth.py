@@ -67,41 +67,43 @@ async def pin_login(
     
     PIN must be set up first using /auth/setup-pin endpoint.
     """
-    # Build query based on whether tenant_id is provided
+    # Build query — get users who HAVE a pin_hash set
     if credentials.tenant_id:
         query = select(User).where(
             and_(
-                User.pin_hash == get_password_hash(credentials.pin),
+                User.pin_hash.isnot(None),
                 User.tenant_id == credentials.tenant_id,
                 User.is_active == True
             )
         )
     else:
-        # If no tenant_id, search by PIN only (works for single-tenant setups)
+        # If no tenant_id, search all active users with PINs
         query = select(User).where(
             and_(
-                User.pin_hash == get_password_hash(credentials.pin),
+                User.pin_hash.isnot(None),
                 User.is_active == True
             )
         )
     
     result = await db.execute(query)
-    users = result.scalars().all()
+    candidates = result.scalars().all()
     
-    # For security, if multiple users have same PIN (unlikely), require tenant_id
-    if len(users) > 1:
+    # Verify PIN against each candidate using bcrypt verify (not hash comparison)
+    matched_users = [u for u in candidates if verify_password(credentials.pin, u.pin_hash)]
+    
+    if len(matched_users) > 1:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Multiple users found. Please provide tenant_id.",
         )
     
-    if len(users) == 0:
+    if len(matched_users) == 0:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid PIN",
         )
     
-    user = users[0]
+    user = matched_users[0]
     
     # Generate token
     token = create_access_token(
@@ -109,6 +111,10 @@ async def pin_login(
         tenant_id=str(user.tenant_id),
         role=user.role.value,
     )
+    
+    # Load tenant for addon info
+    tenant = await db.get(Tenant, user.tenant_id)
+    active_addons = (tenant.active_addons or {}) if tenant else {}
     
     return {
         "success": True,
@@ -120,7 +126,9 @@ async def pin_login(
             "name": user.name,
             "email": user.email,
             "role": user.role.value,
-        }
+            "tenant_id": str(user.tenant_id),
+        },
+        "active_addons": active_addons,
     }
 
 
@@ -201,6 +209,10 @@ async def login(
         role=user.role.value,
     )
     
+    # Load tenant for addon info
+    tenant = await db.get(Tenant, user.tenant_id)
+    active_addons = (tenant.active_addons or {}) if tenant else {}
+    
     return {
         "access_token": token.access_token,
         "token_type": token.token_type,
@@ -210,16 +222,47 @@ async def login(
             "name": user.name,
             "email": user.email,
             "role": user.role.value,
-        }
+            "tenant_id": str(user.tenant_id),
+        },
+        "active_addons": active_addons,
     }
+async def logout():
+    """Logout endpoint — client should clear tokens."""
+    return {"success": True, "message": "Logged out successfully"}
 
 
-@router.get("/me", response_model=UserResponse)
+@router.get("/me")
 async def get_current_user_info(
     current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
 ):
-    """Get current authenticated user info"""
-    return current_user
+    """Get current authenticated user info with tenant data for license checks."""
+    tenant = await db.get(Tenant, current_user.tenant_id)
+    tenant_data = None
+    if tenant:
+        tenant_data = {
+            "id": str(tenant.id),
+            "name": tenant.name,
+            "slug": tenant.slug,
+            "trade_name": tenant.trade_name,
+            "logo_url": tenant.logo_url,
+            "active_addons": tenant.active_addons or {},
+            "features_config": tenant.features_config or {},
+            "billing_config": tenant.billing_config or {},
+            "currency": tenant.currency,
+            "timezone": tenant.timezone,
+            "onboarding_complete": tenant.onboarding_complete,
+        }
+    return {
+        "id": str(current_user.id),
+        "tenant_id": str(current_user.tenant_id),
+        "email": current_user.email,
+        "name": current_user.name,
+        "role": current_user.role.value,
+        "is_active": current_user.is_active,
+        "created_at": current_user.created_at.isoformat() if current_user.created_at else None,
+        "tenant": tenant_data,
+    }
 
 
 @router.post("/users", response_model=UserResponse)

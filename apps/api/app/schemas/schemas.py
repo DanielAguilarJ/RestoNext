@@ -67,8 +67,8 @@ class FiscalConfigSchema(BaseModel):
 class FiscalAddressSchema(BaseModel):
     """Structured fiscal address for CFDI 4.0"""
     street: str = Field(..., min_length=1, max_length=300)
-    exterior_number: str = Field(..., min_length=1, max_length=20)
-    interior_number: Optional[str] = Field(None, max_length=20)
+    ext_number: str = Field(..., min_length=1, max_length=20)
+    int_number: Optional[str] = Field(None, max_length=20)
     neighborhood: str = Field(..., min_length=1, max_length=120)  # Colonia
     city: str = Field(..., min_length=1, max_length=120)
     state: str = Field(..., min_length=1, max_length=120)
@@ -143,6 +143,8 @@ class TenantPublic(BaseModel):
     contacts: dict
     ticket_config: dict
     billing_config: dict
+    active_addons: Optional[dict] = None
+    features_config: Optional[dict] = None
     timezone: str
     currency: str
     locale: str
@@ -204,13 +206,16 @@ class MenuItemResponse(BaseModel):
     id: UUID
     category_id: UUID
     name: str
-    description: Optional[str]
+    description: Optional[str] = None
     price: float
-    image_url: Optional[str]
+    image_url: Optional[str] = None
     route_to: str
-    modifiers_schema: Optional[dict]
+    modifiers_schema: Optional[dict] = None
     is_available: bool
-    created_at: datetime
+    sort_order: int = 0
+    prep_time_minutes: int = 15
+    tax_config: Optional[dict] = None
+    created_at: Optional[datetime] = None
     
     class Config:
         from_attributes = True
@@ -306,20 +311,22 @@ class OrderCreate(BaseModel):
 class OrderResponse(BaseModel):
     id: UUID
     tenant_id: UUID
-    table_id: UUID
-    waiter_id: UUID
+    table_id: Optional[UUID] = None
+    waiter_id: Optional[UUID] = None
     status: str
     subtotal: float
     tax: float
     total: float
-    notes: Optional[str]
+    notes: Optional[str] = None
     # Omnichannel
     service_type: str
-    customer_id: Optional[UUID]
-    delivery_info: Optional[dict]
+    customer_id: Optional[UUID] = None
+    delivery_info: Optional[dict] = None
     items: List[OrderItemResponse]
     created_at: datetime
     updated_at: datetime
+    paid_at: Optional[datetime] = None
+    table_number: Optional[int] = None
     
     class Config:
         from_attributes = True
@@ -456,13 +463,14 @@ class CustomerCreate(BaseModel):
 class CustomerResponse(BaseModel):
     id: UUID
     name: str
-    email: Optional[str]
-    phone: Optional[str]
+    email: Optional[str] = None
+    phone: Optional[str] = None
     loyalty_points: float
     wallet_balance: float
     tier_level: str
     annual_spend: float = 0.0
-    addresses: List[dict]
+    addresses: List[dict] = []
+    notes: Optional[str] = None
     created_at: datetime
     
     class Config:
@@ -540,10 +548,12 @@ class PromotionCreate(BaseModel):
 class PromotionResponse(BaseModel):
     id: UUID
     name: str
-    description: Optional[str]
+    description: Optional[str] = None
     rules: dict
     effect: dict
     is_active: bool
+    start_date: Optional[datetime] = None
+    end_date: Optional[datetime] = None
     
     class Config:
         from_attributes = True

@@ -87,8 +87,10 @@ export function ProductDetailsModal({
 
     // Parse modifier groups from item schema
     const modifierGroups: ModifierGroup[] = useMemo(() => {
-        if (!item?.modifier_groups) return [];
-        return item.modifier_groups;
+        if (item?.modifier_groups?.length) return item.modifier_groups;
+        // Fallback: backend returns modifiers_schema.groups
+        if ((item as any)?.modifiers_schema?.groups) return (item as any).modifiers_schema.groups;
+        return [];
     }, [item]);
 
     // Reset state when modal opens with new item

@@ -84,7 +84,7 @@ export function TableMap({ onTableSelect, autoRefresh = true, pendingTables = ne
 
     const handleTableClick = (table: any) => {
         setSelectedTable(table);
-        onTableSelect?.(table.$id || table.id);
+        onTableSelect?.(table.id);
     };
 
     // Check if table has pending bill request
@@ -94,7 +94,7 @@ export function TableMap({ onTableSelect, autoRefresh = true, pendingTables = ne
 
     // Get effective status (combines stored status with real-time alerts)
     const getEffectiveStatus = (table: any) => {
-        if (hasPendingBill(table.id || table.$id)) {
+        if (hasPendingBill(table.id)) {
             return 'bill_requested';
         }
         return table.status;
@@ -251,7 +251,7 @@ export function TableMap({ onTableSelect, autoRefresh = true, pendingTables = ne
             {/* Table Grid */}
             <div className="grid grid-cols-3 gap-4">
                 {tables.map((table, index) => {
-                    const tableId = (table as any).$id || table.id;
+                    const tableId = table.id;
                     const isPendingSync = hasPendingSync(tableId);
                     const effectiveStatus = isPendingSync ? 'pending_sync' : getEffectiveStatus(table);
                     const styles = getStatusStyles(effectiveStatus);
@@ -259,7 +259,7 @@ export function TableMap({ onTableSelect, autoRefresh = true, pendingTables = ne
 
                     return (
                         <button
-                            key={(table as any).$id || table.id}
+                            key={table.id}
                             onClick={() => handleTableClick(table)}
                             className={cn(
                                 // Base styles - FAT FINGER FRIENDLY (min 48x48)
@@ -272,7 +272,7 @@ export function TableMap({ onTableSelect, autoRefresh = true, pendingTables = ne
                                 styles.container,
                                 styles.glow,
                                 // Selection indicator
-                                selectedTable?.$id === (table as any).$id && "ring-4 ring-brand-500 ring-offset-2 scale-105",
+                                selectedTable?.id === table.id && "ring-4 ring-brand-500 ring-offset-2 scale-105",
                                 // Animation
                                 "animate-scale-in"
                             )}
@@ -316,7 +316,7 @@ export function TableMap({ onTableSelect, autoRefresh = true, pendingTables = ne
                             </span>
 
                             {/* Selection indicator */}
-                            {selectedTable?.$id === (table as any).$id && (
+                            {selectedTable?.id === table.id && (
                                 <div className="absolute -top-2 -right-2 w-6 h-6 bg-brand-600 rounded-full flex items-center justify-center shadow-lg animate-bounce-soft">
                                     <span className="text-white text-xs">✓</span>
                                 </div>

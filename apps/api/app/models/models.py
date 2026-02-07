@@ -245,7 +245,7 @@ class Tenant(Base):
     # JSONB for active add-ons/modules the tenant has purchased
     # Example: {"self_service": true, "delivery": false, "kds_pro": true, "analytics_ai": true}
     active_addons: Mapped[dict] = mapped_column(
-        JSONB, nullable=False, default={"self_service": False, "delivery": False, "kds_pro": False}
+        JSONB, nullable=False, default={"self_service": True, "delivery": False, "kds_pro": False}
     )
     # JSONB for custom feature configuration
     # Example: {"self_service": {"allow_bill_request": true, "require_deposit": false}}
@@ -384,6 +384,10 @@ class MenuItem(Base):
     
     is_available: Mapped[bool] = mapped_column(Boolean, default=True)
     sort_order: Mapped[int] = mapped_column(Integer, default=0)
+    
+    # Kitchen preparation time (configurable by admin)
+    prep_time_minutes: Mapped[int] = mapped_column(Integer, default=15, nullable=False)
+    
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     
     # Relationships
@@ -473,11 +477,11 @@ class Order(Base):
     tenant_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("tenants.id"), nullable=False
     )
-    table_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("tables.id"), nullable=False
+    table_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("tables.id"), nullable=True
     )
-    waiter_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("users.id"), nullable=False
+    waiter_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id"), nullable=True
     )
     
     # Omnichannel Support (NEW)
@@ -573,6 +577,10 @@ class OrderItem(Base):
     status: Mapped[OrderItemStatus] = mapped_column(
         SQLEnum(OrderItemStatus), default=OrderItemStatus.PENDING
     )
+    
+    # Denormalized prep time for KDS display (avoids join)
+    prep_time_minutes: Mapped[int] = mapped_column(Integer, default=15, nullable=False)
+    
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     
     # Relationships

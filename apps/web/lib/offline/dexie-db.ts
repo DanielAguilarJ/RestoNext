@@ -58,7 +58,12 @@ export interface PendingOrderItem {
     menu_item_id: string;
     quantity: number;
     notes?: string;
-    modifiers?: string[];
+    selected_modifiers?: Array<{
+        group_name: string;
+        option_id: string;
+        option_name: string;
+        price_delta: number;
+    }>;
 }
 
 export interface PendingOrderData {

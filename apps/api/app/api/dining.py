@@ -386,7 +386,8 @@ async def create_dining_order(
             unit_price=item_price,
             selected_modifiers=modifiers_list,
             notes=item_data.notes,
-            status=OrderItemStatus.PENDING
+            status=OrderItemStatus.PENDING,
+            prep_time_minutes=getattr(menu_item, 'prep_time_minutes', 15) or 15,
         )
         db.add(order_item)
         order_items.append(order_item)
@@ -409,22 +410,46 @@ async def create_dining_order(
     await db.refresh(order)
     
     # Prepare WebSocket notification
+    # Build items with modifiers flattened to string arrays for KDS compatibility
+    ws_items = []
+    max_prep = 15
+    for oi in order_items:
+        prep = getattr(oi, 'prep_time_minutes', 15) or 15
+        if prep > max_prep:
+            max_prep = prep
+        # Flatten modifiers: [{group_name, option_name, ...}] -> ["option_name", ...]
+        mods = []
+        if oi.selected_modifiers:
+            for m in oi.selected_modifiers:
+                if isinstance(m, dict):
+                    mods.append(m.get("option_name", str(m)))
+                else:
+                    mods.append(str(m))
+        ws_items.append({
+            "id": str(oi.id),
+            "name": oi.menu_item_name,
+            "quantity": oi.quantity,
+            "modifiers": mods,
+            "notes": oi.notes,
+            "status": "pending",
+            "route_to": oi.route_to.value if hasattr(oi.route_to, 'value') else str(oi.route_to),
+            "prep_time_minutes": prep,
+        })
+
+    order_number = f"#{ctx.table_number}-{str(order.id)[:4].upper()}"
     ws_payload = {
+        "id": str(order.id),
         "order_id": str(order.id),
         "table_number": ctx.table_number,
+        "order_number": order_number,
         "order_source": "self_service",
-        "items": [
-            {
-                "id": str(oi.id),
-                "name": oi.menu_item_name,
-                "quantity": oi.quantity,
-                "modifiers": oi.selected_modifiers,
-                "notes": oi.notes,
-                "route_to": oi.route_to.value if hasattr(oi.route_to, 'value') else str(oi.route_to)
-            }
-            for oi in order_items
-        ],
-        "created_at": datetime.utcnow().isoformat()
+        "status": order.status.value,
+        "total": order.total,
+        "notes": order.notes,
+        "items": ws_items,
+        "max_prep_time_minutes": max_prep,
+        "created_at": datetime.utcnow().isoformat(),
+        "paid_at": None,
     }
     
     # Notify KDS (Kitchen Display System)
@@ -463,7 +488,7 @@ async def create_dining_order(
         subtotal=subtotal,
         tax=tax,
         total=total,
-        estimated_time_minutes=15,  # TODO: Calculate based on kitchen load
+        estimated_time_minutes=max((getattr(oi, 'prep_time_minutes', 15) or 15 for oi in order_items), default=15),
         created_at=order.created_at
     )
 
@@ -837,7 +862,8 @@ async def request_bill(
         subtotal=subtotal,
         tax=tax,
         items_count=len(bill_items),
-        currency=ctx.tenant.currency
+        currency=ctx.tenant.currency,
+        order_id=str(orders[0].id) if orders else None
     )
     
     return BillRequestResponse(

@@ -266,7 +266,9 @@ export default function POSPage() {
         async function loadMenu() {
             try {
                 const tenantId = "default-tenant";
-                const cats = await menuApi.getCategories(tenantId);
+                const rawCats = await menuApi.getCategories(tenantId);
+                // Normalize: add $id alias for shared types that extend AppwriteDocument
+                const cats = rawCats.map((c: any) => ({ ...c, $id: c.$id || c.id }));
                 setCategories(cats);
                 if (cats.length > 0) {
                     setSelectedCategory(cats[0].$id);
@@ -290,7 +292,15 @@ export default function POSPage() {
     // Load items when category changes
     useEffect(() => {
         if (selectedCategory) {
-            menuApi.getItems(selectedCategory).then(setMenuItems).catch(console.error);
+            menuApi.getItems(selectedCategory).then((items) => {
+                // Normalize: add $id alias + map modifiers_schema.groups → modifier_groups
+                const mapped = items.map((item: any) => ({
+                    ...item,
+                    $id: item.$id || item.id,
+                    modifier_groups: item.modifiers_schema?.groups || item.modifier_groups || [],
+                }));
+                setMenuItems(mapped);
+            }).catch(console.error);
         }
     }, [selectedCategory]);
 
@@ -413,7 +423,7 @@ export default function POSPage() {
                 menu_item_id: item.menu_item_id,
                 quantity: item.quantity,
                 notes: item.notes,
-                modifiers: item.selected_modifiers?.map(m => m.option_name) || [],
+                selected_modifiers: item.selected_modifiers || [],
             })),
         };
 

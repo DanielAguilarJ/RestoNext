@@ -5,6 +5,7 @@ Order management endpoints with real-time WebSocket notifications
 
 from typing import List
 from uuid import UUID
+from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
@@ -128,6 +129,7 @@ async def create_order(
                 seat_number=item_data.seat_number,
                 notes=item_data.notes,
                 status=OrderItemStatus.PENDING,
+                prep_time_minutes=getattr(menu_item, 'prep_time_minutes', 15) or 15,
             )
             db.add(order_item)
             
@@ -142,6 +144,7 @@ async def create_order(
                 "modifiers": [m.model_dump() for m in item_data.selected_modifiers],
                 "notes": item_data.notes,
                 "table_number": table.number,
+                "prep_time_minutes": getattr(menu_item, 'prep_time_minutes', 15) or 15,
             }
             
             if menu_item.route_to.value == "bar":
@@ -174,6 +177,9 @@ async def create_order(
         
         # Send WebSocket notifications with data matching frontend KDS expectations
         # Frontend expects: id, orderId, tableNumber, items[{id, name, quantity, modifiers, notes, status}], createdAt
+        max_kitchen_prep = max((item.get("prep_time_minutes", 15) for item in kitchen_items), default=15)
+        max_bar_prep = max((item.get("prep_time_minutes", 15) for item in bar_items), default=15)
+
         kds_kitchen_items = [
             {
                 "id": item["id"],
@@ -182,6 +188,7 @@ async def create_order(
                 "modifiers": [m.get("option_name", str(m)) for m in item.get("modifiers", [])] if item.get("modifiers") else [],
                 "notes": item.get("notes"),
                 "status": "pending",
+                "prep_time_minutes": item.get("prep_time_minutes", 15),
             }
             for item in kitchen_items
         ]
@@ -194,25 +201,34 @@ async def create_order(
                 "modifiers": [m.get("option_name", str(m)) for m in item.get("modifiers", [])] if item.get("modifiers") else [],
                 "notes": item.get("notes"),
                 "status": "pending",
+                "prep_time_minutes": item.get("prep_time_minutes", 15),
             }
             for item in bar_items
         ]
         
+        order_number = f"#{table.number}-{str(order.id)[:4].upper()}"
         order_notification = {
             "id": str(order.id),
             "orderId": str(order.id),
             "order_id": str(order.id),
             "tableNumber": table.number,
             "table_number": table.number,
+            "order_number": order_number,
+            "order_source": "pos",
+            "status": order.status.value,
+            "total": order.total,
+            "notes": order.notes,
             "waiter_name": current_user.name,
             "createdAt": order.created_at.isoformat(),
             "created_at": order.created_at.isoformat(),
+            "paid_at": order.paid_at.isoformat() if order.paid_at else None,
         }
         
         if kitchen_items:
             await ws_manager.notify_kitchen_new_order({
                 **order_notification,
                 "items": kds_kitchen_items,
+                "max_prep_time_minutes": max_kitchen_prep,
             })
             logger.info(f"Sent kitchen WebSocket notification for order {order.id} with {len(kds_kitchen_items)} items")
         
@@ -220,6 +236,7 @@ async def create_order(
             await ws_manager.notify_bar_new_order({
                 **order_notification,
                 "items": kds_bar_items,
+                "max_prep_time_minutes": max_bar_prep,
             })
         
         return order
@@ -247,14 +264,17 @@ async def get_order(
     result = await db.execute(
         select(Order)
         .where(Order.id == order_id)
-        .options(selectinload(Order.items))
+        .options(selectinload(Order.items), selectinload(Order.table))
     )
     order = result.scalar_one_or_none()
     
     if not order:
         raise HTTPException(status_code=404, detail="Order not found")
     
-    return order
+    data = OrderResponse.model_validate(order)
+    if order.table:
+        data.table_number = order.table.number
+    return data
 
 
 @router.get("", response_model=List[OrderResponse])
@@ -267,7 +287,7 @@ async def list_orders(
     """List orders with optional filters"""
     query = select(Order).where(
         Order.tenant_id == current_user.tenant_id
-    ).options(selectinload(Order.items))
+    ).options(selectinload(Order.items), selectinload(Order.table))
     
     if status:
         status_list = status.split(',')
@@ -282,7 +302,16 @@ async def list_orders(
     query = query.order_by(Order.created_at.desc())
     
     result = await db.execute(query)
-    return result.scalars().all()
+    orders = result.scalars().all()
+    
+    # Enrich with table_number for frontend display
+    response = []
+    for o in orders:
+        data = OrderResponse.model_validate(o)
+        if o.table:
+            data.table_number = o.table.number
+        response.append(data)
+    return response
 
 
 @router.patch("/{order_id}/items/{item_id}/status")
@@ -363,9 +392,11 @@ async def process_payment(
         
         if all_paid:
             order.status = OrderStatus.PAID
+            order.paid_at = datetime.utcnow()
     else:
         # Full payment
         order.status = OrderStatus.PAID
+        order.paid_at = datetime.utcnow()
     
     # Free up the table
     if order.status == OrderStatus.PAID:
@@ -553,6 +584,7 @@ async def create_cafeteria_order(
             selected_modifiers=[],
             notes=item_data.notes,
             status=OrderItemStatus.PENDING,
+            prep_time_minutes=getattr(menu_item, 'prep_time_minutes', 15) or 15,
         )
         db.add(order_item)
         
@@ -566,6 +598,7 @@ async def create_cafeteria_order(
             "quantity": item_data.quantity,
             "notes": item_data.notes,
             "table_number": 0,
+            "prep_time_minutes": getattr(menu_item, 'prep_time_minutes', 15) or 15,
         })
     
     # Calculate totals
@@ -581,6 +614,7 @@ async def create_cafeteria_order(
     
     # Send to kitchen via WebSocket (include both camelCase and snake_case for frontend compatibility)
     if kitchen_items:
+        max_cafe_prep = max((item.get("prep_time_minutes", 15) for item in kitchen_items), default=15)
         kds_items = [
             {
                 "id": item["id"],
@@ -589,6 +623,7 @@ async def create_cafeteria_order(
                 "modifiers": [],
                 "notes": item.get("notes"),
                 "status": "pending",
+                "prep_time_minutes": item.get("prep_time_minutes", 15),
             }
             for item in kitchen_items
         ]
@@ -598,10 +633,17 @@ async def create_cafeteria_order(
             "order_id": str(order.id),
             "tableNumber": 0,
             "table_number": 0,
+            "order_number": f"#C-{str(order.id)[:4].upper()}",
+            "order_source": "pos",
+            "status": order.status.value,
+            "total": order.total,
+            "notes": order.notes,
             "waiter_name": current_user.name,
             "createdAt": order.created_at.isoformat(),
             "created_at": order.created_at.isoformat(),
+            "paid_at": order.paid_at.isoformat() if order.paid_at else None,
             "items": kds_items,
+            "max_prep_time_minutes": max_cafe_prep,
             "is_cafeteria": True,
         }
         await ws_manager.notify_kitchen_new_order(order_notification)

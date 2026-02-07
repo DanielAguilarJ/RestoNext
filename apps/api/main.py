@@ -111,6 +111,34 @@ async def lifespan(app: FastAPI):
         print(f"CRITICAL: ❌ Database initialization failed: {e}")
         raise  # Database is critical, fail fast
     
+    # Auto-fix: Ensure all tenants have self_service enabled (core feature for all plans)
+    try:
+        from app.core.database import async_session_maker
+        from sqlalchemy import select
+        from sqlalchemy.orm.attributes import flag_modified
+        from app.models.models import Tenant as TenantModel
+        
+        async with async_session_maker() as db_session:
+            result = await db_session.execute(
+                select(TenantModel).where(TenantModel.is_active == True)
+            )
+            tenants = result.scalars().all()
+            fixed_count = 0
+            for t in tenants:
+                addons = t.active_addons or {}
+                if not addons.get("self_service", False):
+                    addons["self_service"] = True
+                    t.active_addons = addons
+                    flag_modified(t, "active_addons")
+                    fixed_count += 1
+            if fixed_count > 0:
+                await db_session.commit()
+                print(f"INFO:     🔧 Auto-fix: Enabled self_service for {fixed_count} tenant(s)")
+            else:
+                print("INFO:     ✅ All tenants already have self_service enabled")
+    except Exception as e:
+        print(f"WARNING:  ⚠️ Auto-fix self_service check failed: {e}")
+    
     # Connect to Redis for WebSocket pub/sub (OPTIONAL - must never block)
     try:
         # Extra safety: wrap in timeout at lifespan level too

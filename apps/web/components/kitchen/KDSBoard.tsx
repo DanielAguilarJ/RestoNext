@@ -2,211 +2,302 @@
 
 /**
  * KDSBoard - Kitchen Display System Board
- * 
- * Features:
- * - Mode-aware filtering (cafeteria vs restaurant)
- * - Initial orders load on mount
- * - Real-time WebSocket updates
- * - Configurable time thresholds
- * - Audio alerts for critical orders
+ *
+ * Complete kitchen flow:
+ * - Orders arrive with per-item prep time countdowns
+ * - Warning & critical alerts (sound + vibration)
+ * - Click items to cycle status: pending -> preparing -> ready
+ * - "Bump" button to complete & remove entire ticket
+ * - Auto-removal when backend sends order_complete
+ * - Configurable thresholds per tenant
  */
 
 import { useEffect, useState, useRef, useCallback } from "react";
 import Link from "next/link";
 import { useKDSStore } from "@/lib/store";
+import type { KDSTicket } from "@/lib/store";
 import { useKitchenSocket } from "@/hooks/useKitchenSocket";
 import { kdsApi, KDSConfig } from "@/lib/api";
 import { cn, formatTimeElapsed } from "@/lib/utils";
-import { Clock, Check, ChefHat, ArrowLeft, Flame, Bell, Sparkles, Wifi, WifiOff, RefreshCw, Volume2, VolumeX } from "lucide-react";
+import {
+    Clock, Check, ChefHat, ArrowLeft, Flame, Bell, Sparkles,
+    Wifi, WifiOff, RefreshCw, Volume2, VolumeX, Send
+} from "lucide-react";
 
-// Default config if API call fails
 const DEFAULT_CONFIG: KDSConfig = {
-    mode: 'restaurant',
+    mode: "restaurant",
     warning_minutes: 5,
     critical_minutes: 10,
     audio_alerts: true,
     shake_animation: true,
+    auto_complete_when_ready: true,
 };
 
-// Helper to get timer status based on config
-function getTimerStatusWithConfig(minutes: number, config: KDSConfig): "normal" | "warning" | "critical" {
+function getTimerStatus(
+    minutes: number,
+    config: KDSConfig
+): "normal" | "warning" | "critical" {
     if (minutes >= config.critical_minutes) return "critical";
     if (minutes >= config.warning_minutes) return "warning";
     return "normal";
 }
 
+function getItemTimeRemaining(createdAt: Date, prepMinutes: number): {
+    remaining: number;
+    overdue: boolean;
+    label: string;
+} {
+    const elapsed = (Date.now() - createdAt.getTime()) / 60000;
+    const remaining = Math.ceil(prepMinutes - elapsed);
+    const overdue = remaining <= 0;
+    const absMin = Math.abs(remaining);
+    const label = overdue ? `+${absMin}m` : `${remaining}m`;
+    return { remaining, overdue, label };
+}
+
 export function KDSBoard() {
-    const { tickets, addTicket, updateItemStatus, setTickets } = useKDSStore();
+    const { tickets, addTicket, updateItemStatus, setTickets, removeTicket } =
+        useKDSStore();
     const [currentTime, setCurrentTime] = useState(new Date());
     const [config, setConfig] = useState<KDSConfig>(DEFAULT_CONFIG);
     const [isLoadingConfig, setIsLoadingConfig] = useState(true);
     const [audioEnabled, setAudioEnabled] = useState(true);
+    const [bumpingOrders, setBumpingOrders] = useState<Set<string>>(new Set());
     const audioContextRef = useRef<AudioContext | null>(null);
     const criticalOrdersPlayedRef = useRef<Set<string>>(new Set());
+    const overdueItemsPlayedRef = useRef<Set<string>>(new Set());
 
-    // Connect to Kitchen WebSocket
     const {
         isConnected,
         connectionError,
         reconnectAttempts,
         connect,
-        disconnect
+        disconnect,
     } = useKitchenSocket({
         autoConnect: true,
         reconnectInterval: 3000,
         maxReconnectAttempts: 10,
     });
 
-    // Transform API orders to ticket format (reusable)
-    const transformOrders = useCallback((orders: any[]) => {
+    // Transform API orders to ticket format
+    const transformOrders = useCallback((orders: any[]): KDSTicket[] => {
         return orders.map((order: any) => ({
             id: order.id,
             orderId: order.id,
-            tableNumber: order.table_number || 0,
+            tableNumber: order.table_number ?? 0,
+            orderNumber: order.order_number ?? "",
+            orderSource: order.order_source ?? "pos",
+            maxPrepTimeMinutes: order.max_prep_time_minutes ?? 15,
+            notes: order.notes ?? undefined,
             items: (order.items || []).map((item: any) => ({
                 id: item.id,
                 name: item.name || item.menu_item_name,
                 quantity: item.quantity,
-                modifiers: item.modifiers || item.selected_modifiers?.map((m: any) => m.name || m) || [],
+                modifiers:
+                    item.modifiers
+                        ? (Array.isArray(item.modifiers)
+                            ? item.modifiers.map((m: any) => (typeof m === 'string' ? m : m.option_name || m.name || String(m)))
+                            : [])
+                        : item.selected_modifiers?.map((m: any) => m.option_name || m.name || String(m)) ||
+                          [],
                 notes: item.notes,
-                status: item.status || 'pending',
+                status: item.status || "pending",
+                prep_time_minutes: item.prep_time_minutes ?? 15,
             })),
-            createdAt: order.paid_at ? new Date(order.paid_at) : new Date(order.created_at),
+            createdAt: order.paid_at
+                ? new Date(order.paid_at)
+                : new Date(order.created_at),
         }));
     }, []);
 
-    // Load KDS config and initial orders on mount
+    // Load config + initial orders
     useEffect(() => {
         async function loadInitialData() {
             setIsLoadingConfig(true);
             try {
-                // Load config
                 const kdsConfig = await kdsApi.getConfig();
                 setConfig(kdsConfig);
                 setAudioEnabled(kdsConfig.audio_alerts);
-
-                // Load existing kitchen orders
                 const orders = await kdsApi.getOrders();
                 setTickets(transformOrders(orders));
             } catch (error) {
-                console.error("Failed to load KDS config or orders:", error);
+                console.error("Failed to load KDS data:", error);
             } finally {
                 setIsLoadingConfig(false);
             }
         }
-
         loadInitialData();
     }, [setTickets, transformOrders]);
 
-    // Periodic polling every 10s as fallback for WebSocket
-    // This guarantees orders appear even if WS notification was missed
+    // Poll every 10s as WS fallback
     useEffect(() => {
         const pollInterval = setInterval(async () => {
             try {
                 const orders = await kdsApi.getOrders();
-                const freshTickets = transformOrders(orders);
-                // Only update if the data actually changed (compare order IDs)
-                setTickets((prev: any) => {
-                    const prevIds = new Set(prev.map((t: any) => t.id));
-                    const freshIds = new Set(freshTickets.map((t: any) => t.id));
-                    const hasChanges = freshTickets.length !== prev.length ||
-                        freshTickets.some((t: any) => !prevIds.has(t.id)) ||
-                        prev.some((t: any) => !freshIds.has(t.id));
-                    return hasChanges ? freshTickets : prev;
+                const fresh = transformOrders(orders);
+                setTickets((prev: KDSTicket[]) => {
+                    const prevIds = new Set(prev.map((t) => t.id));
+                    const freshIds = new Set(fresh.map((t) => t.id));
+                    const hasChanges =
+                        fresh.length !== prev.length ||
+                        fresh.some((t) => !prevIds.has(t.id)) ||
+                        prev.some((t) => !freshIds.has(t.id));
+                    return hasChanges ? fresh : prev;
                 });
-            } catch (error) {
-                // Silent fail - polling is a fallback, don't spam errors
+            } catch {
+                // Silent fallback
             }
-        }, 10000); // Every 10 seconds
-
+        }, 10000);
         return () => clearInterval(pollInterval);
     }, [transformOrders, setTickets]);
 
-    // Update timer every second
+    // Timer tick every second
     useEffect(() => {
-        const interval = setInterval(() => {
-            setCurrentTime(new Date());
-        }, 1000);
-
+        const interval = setInterval(() => setCurrentTime(new Date()), 1000);
         return () => clearInterval(interval);
     }, []);
 
     // Audio alert for critical orders
     useEffect(() => {
         if (!config.audio_alerts || !audioEnabled) return;
-
-        tickets.forEach(ticket => {
-            const minutes = Math.floor((currentTime.getTime() - ticket.createdAt.getTime()) / 60000);
-            const status = getTimerStatusWithConfig(minutes, config);
-
-            if (status === "critical" && !criticalOrdersPlayedRef.current.has(ticket.id)) {
+        tickets.forEach((ticket) => {
+            const minutes = Math.floor(
+                (currentTime.getTime() - ticket.createdAt.getTime()) / 60000
+            );
+            const status = getTimerStatus(minutes, config);
+            if (
+                status === "critical" &&
+                !criticalOrdersPlayedRef.current.has(ticket.id)
+            ) {
                 playCriticalAlert();
+                triggerVibration([300, 100, 300, 100, 300]);
                 criticalOrdersPlayedRef.current.add(ticket.id);
             }
+            // Per-item overdue alerts
+            ticket.items.forEach((item) => {
+                if (item.status === "ready") return;
+                const key = `${ticket.id}-${item.id}`;
+                const info = getItemTimeRemaining(
+                    ticket.createdAt,
+                    item.prep_time_minutes
+                );
+                if (info.overdue && !overdueItemsPlayedRef.current.has(key)) {
+                    playOverdueItemAlert();
+                    triggerVibration([200, 80, 200]);
+                    overdueItemsPlayedRef.current.add(key);
+                }
+            });
         });
     }, [currentTime, tickets, config, audioEnabled]);
 
-    // Play critical alert sound
-    const playCriticalAlert = useCallback(() => {
-        try {
-            if (!audioContextRef.current) {
-                audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)();
-            }
-            const ctx = audioContextRef.current;
-
-            // Create an urgent sounding alert (two-tone)
-            const playTone = (freq: number, startTime: number, duration: number) => {
-                const oscillator = ctx.createOscillator();
-                const gainNode = ctx.createGain();
-                oscillator.connect(gainNode);
-                gainNode.connect(ctx.destination);
-                oscillator.frequency.value = freq;
-                oscillator.type = 'sine';
-                gainNode.gain.value = 0.4;
-                oscillator.start(startTime);
-                oscillator.stop(startTime + duration);
-            };
-
-            const now = ctx.currentTime;
-            // Urgent two-tone pattern
-            playTone(880, now, 0.15);
-            playTone(660, now + 0.18, 0.15);
-            playTone(880, now + 0.36, 0.15);
-        } catch (error) {
-            console.debug('Could not play critical alert sound');
+    // Sound helpers
+    const getAudioCtx = useCallback(() => {
+        if (!audioContextRef.current) {
+            audioContextRef.current = new (window.AudioContext ||
+                (window as any).webkitAudioContext)();
         }
+        return audioContextRef.current;
     }, []);
 
-    const handleItemClick = async (ticketId: string, itemId: string, currentStatus: string) => {
-        const nextStatus = currentStatus === "pending"
-            ? "preparing"
-            : currentStatus === "preparing"
-                ? "ready"
-                : "pending";
-
-        // Optimistically update UI
-        updateItemStatus(ticketId, itemId, nextStatus as "pending" | "preparing" | "ready");
-
-        // Send update to server
+    const playCriticalAlert = useCallback(() => {
         try {
-            await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'https://restonext.me/api'}/kds/items/${itemId}/status`, {
-                method: 'PATCH',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${localStorage.getItem('access_token')}`,
-                },
-                body: JSON.stringify({ status: nextStatus }),
-            });
+            const ctx = getAudioCtx();
+            const now = ctx.currentTime;
+            const playTone = (freq: number, start: number, dur: number) => {
+                const osc = ctx.createOscillator();
+                const gain = ctx.createGain();
+                osc.connect(gain);
+                gain.connect(ctx.destination);
+                osc.frequency.value = freq;
+                osc.type = "square";
+                gain.gain.value = 0.35;
+                osc.start(start);
+                osc.stop(start + dur);
+            };
+            playTone(880, now, 0.12);
+            playTone(660, now + 0.15, 0.12);
+            playTone(880, now + 0.3, 0.12);
+            playTone(660, now + 0.45, 0.12);
+        } catch {
+            /* silent */
+        }
+    }, [getAudioCtx]);
+
+    const playOverdueItemAlert = useCallback(() => {
+        try {
+            const ctx = getAudioCtx();
+            const osc = ctx.createOscillator();
+            const gain = ctx.createGain();
+            osc.connect(gain);
+            gain.connect(ctx.destination);
+            osc.frequency.value = 440;
+            osc.type = "triangle";
+            gain.gain.value = 0.2;
+            osc.start(ctx.currentTime);
+            osc.stop(ctx.currentTime + 0.2);
+        } catch {
+            /* silent */
+        }
+    }, [getAudioCtx]);
+
+    // Handle item click -> cycle status
+    const handleItemClick = async (
+        ticketId: string,
+        itemId: string,
+        currentStatus: string
+    ) => {
+        const nextStatus =
+            currentStatus === "pending"
+                ? "preparing"
+                : currentStatus === "preparing"
+                    ? "ready"
+                    : null;
+        if (!nextStatus) return; // Already ready, no further cycling
+
+        updateItemStatus(
+            ticketId,
+            itemId,
+            nextStatus as "pending" | "preparing" | "ready"
+        );
+
+        try {
+            await kdsApi.updateItemStatus(itemId, nextStatus);
         } catch (error) {
-            console.error('Failed to update item status:', error);
-            // Revert on error
-            updateItemStatus(ticketId, itemId, currentStatus as "pending" | "preparing" | "ready");
+            console.error("Failed to update item status:", error);
+            updateItemStatus(
+                ticketId,
+                itemId,
+                currentStatus as "pending" | "preparing" | "ready"
+            );
         }
     };
 
-    const getTimerMinutes = (createdAt: Date) => {
-        return Math.floor((currentTime.getTime() - createdAt.getTime()) / 60000);
+    // Bump (complete) entire order
+    const handleBumpOrder = async (ticketId: string) => {
+        setBumpingOrders((prev) => new Set(prev).add(ticketId));
+        try {
+            await kdsApi.completeOrder(ticketId);
+            // Wait a moment for the animation, then remove
+            setTimeout(() => {
+                removeTicket(ticketId);
+                setBumpingOrders((prev) => {
+                    const next = new Set(prev);
+                    next.delete(ticketId);
+                    return next;
+                });
+            }, 400);
+        } catch (error) {
+            console.error("Failed to complete order:", error);
+            setBumpingOrders((prev) => {
+                const next = new Set(prev);
+                next.delete(ticketId);
+                return next;
+            });
+        }
     };
+
+    const getTimerMinutes = (createdAt: Date) =>
+        Math.floor((currentTime.getTime() - createdAt.getTime()) / 60000);
 
     const handleManualReconnect = () => {
         disconnect();
@@ -214,12 +305,16 @@ export function KDSBoard() {
     };
 
     const toggleAudio = () => {
-        setAudioEnabled(prev => !prev);
-        // Initialize audio context on user interaction
+        setAudioEnabled((prev) => !prev);
         if (!audioContextRef.current) {
-            audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)();
+            audioContextRef.current = new (window.AudioContext ||
+                (window as any).webkitAudioContext)();
         }
     };
+
+    // Check if all items in a ticket are ready
+    const allItemsReady = (ticket: KDSTicket) =>
+        ticket.items.length > 0 && ticket.items.every((i) => i.status === "ready");
 
     if (isLoadingConfig) {
         return (
@@ -237,8 +332,14 @@ export function KDSBoard() {
             {/* Animated Background */}
             <div className="absolute inset-0 overflow-hidden pointer-events-none">
                 <div className="absolute top-20 left-10 w-2 h-2 bg-orange-500 rounded-full animate-pulse opacity-50" />
-                <div className="absolute top-40 right-20 w-3 h-3 bg-red-500 rounded-full animate-pulse opacity-50" style={{ animationDelay: '0.5s' }} />
-                <div className="absolute bottom-32 left-1/4 w-2 h-2 bg-amber-500 rounded-full animate-pulse opacity-50" style={{ animationDelay: '1s' }} />
+                <div
+                    className="absolute top-40 right-20 w-3 h-3 bg-red-500 rounded-full animate-pulse opacity-50"
+                    style={{ animationDelay: "0.5s" }}
+                />
+                <div
+                    className="absolute bottom-32 left-1/4 w-2 h-2 bg-amber-500 rounded-full animate-pulse opacity-50"
+                    style={{ animationDelay: "1s" }}
+                />
             </div>
 
             {/* Header */}
@@ -260,15 +361,15 @@ export function KDSBoard() {
                                 <Flame className="w-5 h-5 text-orange-500" />
                             </h1>
                             <p className="text-sm text-gray-400">
-                                {config.mode === 'cafeteria' ? 'Modo Cafetería' : 'Modo Restaurante'}
+                                {config.mode === "cafeteria"
+                                    ? "Modo Cafetería"
+                                    : "Modo Restaurante"}
                             </p>
                         </div>
                     </div>
                 </div>
 
-                {/* Stats & Controls */}
                 <div className="flex items-center gap-4">
-                    {/* Audio Toggle */}
                     <button
                         onClick={toggleAudio}
                         className={cn(
@@ -279,18 +380,27 @@ export function KDSBoard() {
                         )}
                         title={audioEnabled ? "Silenciar alertas" : "Activar alertas"}
                     >
-                        {audioEnabled ? <Volume2 className="w-5 h-5" /> : <VolumeX className="w-5 h-5" />}
+                        {audioEnabled ? (
+                            <Volume2 className="w-5 h-5" />
+                        ) : (
+                            <VolumeX className="w-5 h-5" />
+                        )}
                     </button>
 
-                    {/* Connection Status */}
-                    <div className={cn(
-                        "glass-dark rounded-xl px-4 py-2 flex items-center gap-2 transition-all duration-300",
-                        isConnected ? "border border-green-500/30" : "border border-red-500/30"
-                    )}>
+                    <div
+                        className={cn(
+                            "glass-dark rounded-xl px-4 py-2 flex items-center gap-2 transition-all duration-300",
+                            isConnected
+                                ? "border border-green-500/30"
+                                : "border border-red-500/30"
+                        )}
+                    >
                         {isConnected ? (
                             <>
                                 <Wifi className="w-5 h-5 text-green-500" />
-                                <span className="text-green-400 text-sm font-medium">Conectado</span>
+                                <span className="text-green-400 text-sm font-medium">
+                                    Conectado
+                                </span>
                             </>
                         ) : (
                             <>
@@ -298,7 +408,7 @@ export function KDSBoard() {
                                 <span className="text-red-400 text-sm font-medium">
                                     {reconnectAttempts > 0
                                         ? `Reconectando... (${reconnectAttempts})`
-                                        : 'Desconectado'}
+                                        : "Desconectado"}
                                 </span>
                                 <button
                                     onClick={handleManualReconnect}
@@ -311,7 +421,6 @@ export function KDSBoard() {
                         )}
                     </div>
 
-                    {/* Order Count */}
                     <div className="glass-dark rounded-xl px-4 py-2 flex items-center gap-2">
                         <Bell className="w-5 h-5 text-yellow-500" />
                         <span className="text-white font-bold">{tickets.length}</span>
@@ -338,7 +447,9 @@ export function KDSBoard() {
             <div className="relative z-10 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
                 {tickets.map((ticket, ticketIndex) => {
                     const minutes = getTimerMinutes(ticket.createdAt);
-                    const timerStatus = getTimerStatusWithConfig(minutes, config);
+                    const timerStatus = getTimerStatus(minutes, config);
+                    const isBumping = bumpingOrders.has(ticket.id);
+                    const isAllReady = allItemsReady(ticket);
 
                     return (
                         <div
@@ -346,7 +457,11 @@ export function KDSBoard() {
                             className={cn(
                                 "rounded-2xl overflow-hidden transition-all duration-300 animate-scale-in",
                                 "shadow-xl hover:shadow-2xl",
-                                timerStatus === "critical" && config.shake_animation && "animate-shake ring-2 ring-red-500/50"
+                                timerStatus === "critical" &&
+                                    config.shake_animation &&
+                                    "animate-shake ring-2 ring-red-500/50",
+                                isBumping && "opacity-0 scale-90 transition-all duration-400",
+                                isAllReady && "ring-2 ring-green-500/60"
                             )}
                             style={{ animationDelay: `${ticketIndex * 0.1}s` }}
                         >
@@ -354,109 +469,195 @@ export function KDSBoard() {
                             <div
                                 className={cn(
                                     "px-4 py-3 flex items-center justify-between",
-                                    timerStatus === "normal" && "bg-gradient-to-r from-blue-600 to-blue-700",
-                                    timerStatus === "warning" && "bg-gradient-to-r from-amber-500 to-orange-500",
-                                    timerStatus === "critical" && "bg-gradient-to-r from-red-500 to-red-600"
+                                    isAllReady
+                                        ? "bg-gradient-to-r from-green-600 to-emerald-600"
+                                        : timerStatus === "normal"
+                                            ? "bg-gradient-to-r from-blue-600 to-blue-700"
+                                            : timerStatus === "warning"
+                                                ? "bg-gradient-to-r from-amber-500 to-orange-500"
+                                                : "bg-gradient-to-r from-red-500 to-red-600"
                                 )}
                             >
-                                <div className="flex items-center gap-3">
+                                <div className="flex flex-col">
                                     <span className="text-white font-bold text-lg">
-                                        {ticket.tableNumber === 0 ? "Mostrador" : `Mesa ${ticket.tableNumber}`}
+                                        {ticket.tableNumber === 0
+                                            ? "Mostrador"
+                                            : `Mesa ${ticket.tableNumber}`}
                                     </span>
-                                    {timerStatus === "critical" && (
+                                    {ticket.orderNumber && (
+                                        <span className="text-white/70 text-xs font-mono">
+                                            {ticket.orderNumber}
+                                        </span>
+                                    )}
+                                </div>
+                                <div className="flex items-center gap-2">
+                                    {timerStatus === "critical" && !isAllReady && (
                                         <span className="px-2 py-0.5 bg-white/20 rounded-full text-xs font-bold text-white animate-pulse">
                                             ¡URGENTE!
                                         </span>
                                     )}
-                                </div>
-                                <div className={cn(
-                                    "flex items-center gap-2 px-3 py-1 rounded-full text-white",
-                                    timerStatus === "critical" ? "bg-white/20 animate-pulse" : "bg-white/10"
-                                )}>
-                                    <Clock className="w-4 h-4" />
-                                    <span className="font-mono font-bold">
-                                        {formatTimeElapsed(ticket.createdAt)}
-                                    </span>
+                                    {isAllReady && (
+                                        <span className="px-2 py-0.5 bg-white/20 rounded-full text-xs font-bold text-white">
+                                            ✓ LISTO
+                                        </span>
+                                    )}
+                                    <div
+                                        className={cn(
+                                            "flex items-center gap-2 px-3 py-1 rounded-full text-white",
+                                            timerStatus === "critical" && !isAllReady
+                                                ? "bg-white/20 animate-pulse"
+                                                : "bg-white/10"
+                                        )}
+                                    >
+                                        <Clock className="w-4 h-4" />
+                                        <span className="font-mono font-bold">
+                                            {formatTimeElapsed(ticket.createdAt)}
+                                        </span>
+                                    </div>
                                 </div>
                             </div>
 
+                            {/* Order Notes */}
+                            {ticket.notes && (
+                                <div className="bg-amber-500/10 border-b border-amber-500/30 px-4 py-2">
+                                    <p className="text-amber-300 text-sm">
+                                        <span className="font-semibold">📝 Nota:</span> {ticket.notes}
+                                    </p>
+                                </div>
+                            )}
+
                             {/* Ticket Items */}
                             <div className="bg-gray-800 p-4 space-y-2">
-                                {ticket.items.map((item, itemIndex) => (
-                                    <button
-                                        key={item.id}
-                                        onClick={() => handleItemClick(ticket.id, item.id, item.status)}
-                                        className={cn(
-                                            "w-full text-left p-4 rounded-xl transition-all duration-300",
-                                            "border-2 active:scale-[0.98] animate-slide-up",
-                                            item.status === "pending" && "bg-gray-700/50 border-gray-600 hover:border-gray-500",
-                                            item.status === "preparing" && "bg-orange-500/20 border-orange-500 hover:bg-orange-500/30",
-                                            item.status === "ready" && "bg-green-500/20 border-green-500"
-                                        )}
-                                        style={{ animationDelay: `${itemIndex * 0.05}s` }}
-                                    >
-                                        <div className="flex items-center justify-between">
-                                            <div className="flex items-center gap-3">
-                                                <span className={cn(
-                                                    "text-xl font-black px-2 py-0.5 rounded",
-                                                    item.status === "pending" && "bg-gray-600 text-gray-300",
-                                                    item.status === "preparing" && "bg-orange-500 text-white",
-                                                    item.status === "ready" && "bg-green-500 text-white"
-                                                )}>
-                                                    {item.quantity}x
-                                                </span>
-                                                <span className="text-white font-semibold text-lg">
-                                                    {item.name}
-                                                </span>
+                                {ticket.items.map((item, itemIndex) => {
+                                    const itemTime = getItemTimeRemaining(
+                                        ticket.createdAt,
+                                        item.prep_time_minutes
+                                    );
+                                    const isItemOverdue =
+                                        itemTime.overdue && item.status !== "ready";
+
+                                    return (
+                                        <button
+                                            key={item.id}
+                                            onClick={() =>
+                                                handleItemClick(ticket.id, item.id, item.status)
+                                            }
+                                            disabled={item.status === "ready"}
+                                            className={cn(
+                                                "w-full text-left p-4 rounded-xl transition-all duration-300",
+                                                "border-2 active:scale-[0.98] animate-slide-up",
+                                                item.status === "pending" &&
+                                                    "bg-gray-700/50 border-gray-600 hover:border-gray-500",
+                                                item.status === "preparing" &&
+                                                    "bg-orange-500/20 border-orange-500 hover:bg-orange-500/30",
+                                                item.status === "ready" &&
+                                                    "bg-green-500/20 border-green-500 cursor-default",
+                                                isItemOverdue && "border-red-500 bg-red-500/10"
+                                            )}
+                                            style={{ animationDelay: `${itemIndex * 0.05}s` }}
+                                        >
+                                            <div className="flex items-center justify-between">
+                                                <div className="flex items-center gap-3">
+                                                    <span
+                                                        className={cn(
+                                                            "text-xl font-black px-2 py-0.5 rounded",
+                                                            item.status === "pending" &&
+                                                                "bg-gray-600 text-gray-300",
+                                                            item.status === "preparing" &&
+                                                                "bg-orange-500 text-white",
+                                                            item.status === "ready" &&
+                                                                "bg-green-500 text-white"
+                                                        )}
+                                                    >
+                                                        {item.quantity}x
+                                                    </span>
+                                                    <span className="text-white font-semibold text-lg">
+                                                        {item.name}
+                                                    </span>
+                                                </div>
+                                                <div className="flex items-center gap-2">
+                                                    {/* Per-item prep time countdown */}
+                                                    {item.status !== "ready" && (
+                                                        <span
+                                                            className={cn(
+                                                                "text-xs font-mono px-2 py-1 rounded-full",
+                                                                isItemOverdue
+                                                                    ? "bg-red-500/30 text-red-300 animate-pulse"
+                                                                    : "bg-gray-600/50 text-gray-400"
+                                                            )}
+                                                        >
+                                                            {itemTime.label}
+                                                        </span>
+                                                    )}
+                                                    {item.status === "ready" && (
+                                                        <div className="w-8 h-8 bg-green-500 rounded-full flex items-center justify-center animate-scale-in">
+                                                            <Check className="w-5 h-5 text-white" />
+                                                        </div>
+                                                    )}
+                                                </div>
                                             </div>
-                                            {item.status === "ready" && (
-                                                <div className="w-8 h-8 bg-green-500 rounded-full flex items-center justify-center animate-scale-in">
-                                                    <Check className="w-5 h-5 text-white" />
+
+                                            {item.modifiers.length > 0 && (
+                                                <div className="mt-2 flex flex-wrap gap-1">
+                                                    {item.modifiers.map(
+                                                        (mod: string, i: number) => (
+                                                            <span
+                                                                key={i}
+                                                                className="px-2 py-0.5 bg-gray-600/50 rounded text-xs text-gray-300"
+                                                            >
+                                                                {mod}
+                                                            </span>
+                                                        )
+                                                    )}
                                                 </div>
                                             )}
-                                        </div>
 
-                                        {/* Modifiers */}
-                                        {item.modifiers.length > 0 && (
-                                            <div className="mt-2 flex flex-wrap gap-1">
-                                                {item.modifiers.map((mod: string, i: number) => (
-                                                    <span key={i} className="px-2 py-0.5 bg-gray-600/50 rounded text-xs text-gray-300">
-                                                        {mod}
+                                            {item.notes && (
+                                                <div className="mt-2 text-sm text-yellow-400 italic">
+                                                    📝 {item.notes}
+                                                </div>
+                                            )}
+
+                                            <div className="mt-3 text-xs font-semibold uppercase tracking-wider">
+                                                {item.status === "pending" && (
+                                                    <span className="text-gray-400 flex items-center gap-1">
+                                                        <span className="w-2 h-2 bg-gray-400 rounded-full" />
+                                                        Pendiente - Toca para iniciar
                                                     </span>
-                                                ))}
+                                                )}
+                                                {item.status === "preparing" && (
+                                                    <span className="text-orange-400 flex items-center gap-1">
+                                                        <span className="w-2 h-2 bg-orange-500 rounded-full animate-pulse" />
+                                                        Preparando... - Toca cuando esté listo
+                                                    </span>
+                                                )}
+                                                {item.status === "ready" && (
+                                                    <span className="text-green-400 flex items-center gap-1">
+                                                        <Sparkles className="w-3 h-3" />
+                                                        ¡Listo para servir!
+                                                    </span>
+                                                )}
                                             </div>
-                                        )}
+                                        </button>
+                                    );
+                                })}
 
-                                        {/* Notes */}
-                                        {item.notes && (
-                                            <div className="mt-2 text-sm text-yellow-400 italic">
-                                                📝 {item.notes}
-                                            </div>
-                                        )}
-
-                                        {/* Status Badge */}
-                                        <div className="mt-3 text-xs font-semibold uppercase tracking-wider">
-                                            {item.status === "pending" && (
-                                                <span className="text-gray-400 flex items-center gap-1">
-                                                    <span className="w-2 h-2 bg-gray-400 rounded-full" />
-                                                    Pendiente - Toca para iniciar
-                                                </span>
-                                            )}
-                                            {item.status === "preparing" && (
-                                                <span className="text-orange-400 flex items-center gap-1">
-                                                    <span className="w-2 h-2 bg-orange-500 rounded-full animate-pulse" />
-                                                    Preparando... - Toca cuando esté listo
-                                                </span>
-                                            )}
-                                            {item.status === "ready" && (
-                                                <span className="text-green-400 flex items-center gap-1">
-                                                    <Sparkles className="w-3 h-3" />
-                                                    ¡Listo para servir!
-                                                </span>
-                                            )}
-                                        </div>
-                                    </button>
-                                ))}
+                                {/* BUMP / Complete button */}
+                                <button
+                                    onClick={() => handleBumpOrder(ticket.id)}
+                                    disabled={isBumping}
+                                    className={cn(
+                                        "w-full mt-3 py-3 rounded-xl font-bold text-sm uppercase tracking-wider",
+                                        "transition-all duration-300 flex items-center justify-center gap-2",
+                                        isAllReady
+                                            ? "bg-gradient-to-r from-green-500 to-emerald-600 text-white hover:from-green-600 hover:to-emerald-700 shadow-lg shadow-green-500/30 animate-pulse"
+                                            : "bg-gray-700/50 text-gray-400 hover:bg-gray-700 hover:text-white border border-gray-600",
+                                        isBumping && "opacity-50 cursor-not-allowed"
+                                    )}
+                                >
+                                    <Send className="w-4 h-4" />
+                                    {isAllReady ? "¡Entregar Pedido!" : "Completar y Entregar"}
+                                </button>
                             </div>
                         </div>
                     );
@@ -469,18 +670,22 @@ export function KDSBoard() {
                     <div className="w-24 h-24 bg-gray-800 rounded-3xl flex items-center justify-center mb-6 animate-bounce-soft">
                         <ChefHat className="w-12 h-12 text-gray-600" />
                     </div>
-                    <p className="text-xl font-medium text-gray-400 mb-2">Sin pedidos pendientes</p>
-                    <p className="text-gray-500 mb-4">
-                        {config.mode === 'cafeteria'
-                            ? 'Los pedidos pagados aparecerán aquí automáticamente'
-                            : 'Los nuevos pedidos aparecerán aquí automáticamente'}
+                    <p className="text-xl font-medium text-gray-400 mb-2">
+                        Sin pedidos pendientes
                     </p>
-
-                    {/* Connection hint */}
-                    <div className={cn(
-                        "flex items-center gap-2 px-4 py-2 rounded-lg",
-                        isConnected ? "bg-green-500/10 text-green-400" : "bg-yellow-500/10 text-yellow-400"
-                    )}>
+                    <p className="text-gray-500 mb-4">
+                        {config.mode === "cafeteria"
+                            ? "Los pedidos pagados aparecerán aquí automáticamente"
+                            : "Los nuevos pedidos aparecerán aquí automáticamente"}
+                    </p>
+                    <div
+                        className={cn(
+                            "flex items-center gap-2 px-4 py-2 rounded-lg",
+                            isConnected
+                                ? "bg-green-500/10 text-green-400"
+                                : "bg-yellow-500/10 text-yellow-400"
+                        )}
+                    >
                         {isConnected ? (
                             <>
                                 <Wifi className="w-4 h-4" />
@@ -497,4 +702,13 @@ export function KDSBoard() {
             )}
         </div>
     );
+}
+
+// Vibration helper
+function triggerVibration(pattern: number[]) {
+    try {
+        if (navigator.vibrate) navigator.vibrate(pattern);
+    } catch {
+        /* not supported */
+    }
 }

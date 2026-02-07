@@ -204,13 +204,14 @@ export interface User {
     email: string;
     name: string;
     role: UserRole;
-    restaurant_id: string;
+    tenant_id: string;
 }
 
 export interface LoginResponse {
     access_token: string;
     token_type: string;
     user: User;
+    active_addons?: Record<string, boolean>;
 }
 
 // ============================================
@@ -245,6 +246,13 @@ export const authApi = {
 
         const data: LoginResponse = await response.json();
         TokenStorage.set(data.access_token);
+        // Set licenses cookie immediately from login response
+        if (data.active_addons) {
+            const enabledModules = Object.entries(data.active_addons)
+                .filter(([, enabled]) => enabled)
+                .map(([key]) => key);
+            setLicensesCookie(enabledModules);
+        }
         return data;
     },
 
@@ -297,6 +305,13 @@ export const authApi = {
         const data = await response.json();
         if (data.access_token) {
             TokenStorage.set(data.access_token);
+        }
+        // Set licenses cookie immediately from PIN login response
+        if (data.active_addons) {
+            const enabledModules = Object.entries(data.active_addons)
+                .filter(([, enabled]) => enabled as boolean)
+                .map(([key]) => key);
+            setLicensesCookie(enabledModules);
         }
         return { ...data, success: true };
     },
@@ -525,10 +540,35 @@ export interface KDSConfig {
     critical_minutes: number;
     audio_alerts: boolean;
     shake_animation: boolean;
+    auto_complete_when_ready: boolean;
+}
+
+export interface KDSOrderItem {
+    id: string;
+    name: string;
+    quantity: number;
+    status: string;
+    notes: string | null;
+    modifiers: string[];
+    prep_time_minutes: number;
+}
+
+export interface KDSOrder {
+    id: string;
+    table_number: number;
+    order_number: string;
+    status: string;
+    created_at: string;
+    paid_at: string | null;
+    items: KDSOrderItem[];
+    total: number;
+    notes: string | null;
+    order_source: string;
+    max_prep_time_minutes: number;
 }
 
 export interface KDSOrdersResponse {
-    orders: Order[];
+    orders: KDSOrder[];
     total_count: number;
 }
 
@@ -571,9 +611,19 @@ export const kdsApi = {
     },
 
     /**
+     * Update individual item status
+     */
+    updateItemStatus: async (itemId: string, status: string): Promise<{ message: string; item_id: string; status: string }> => {
+        return apiRequest(`/kds/items/${itemId}/status`, {
+            method: 'PATCH',
+            body: JSON.stringify({ status }),
+        });
+    },
+
+    /**
      * Get active kitchen orders
      */
-    getOrders: async (): Promise<Order[]> => {
+    getOrders: async (): Promise<KDSOrder[]> => {
         const response = await apiRequest<KDSOrdersResponse>('/kds/orders');
         return response.orders;
     },
@@ -583,7 +633,7 @@ export const kdsApi = {
      */
     completeOrder: async (orderId: string): Promise<{ message: string }> => {
         return apiRequest<{ message: string }>(`/kds/orders/${orderId}/complete`, {
-            method: 'DELETE',
+            method: 'POST',
         });
     }
 };
@@ -617,6 +667,7 @@ export interface ItemCreateData {
     modifiers_schema?: Record<string, unknown>;
     tax_config?: Record<string, number>;
     sort_order?: number;
+    prep_time_minutes?: number;
 }
 
 export interface ItemUpdateData {
@@ -630,6 +681,7 @@ export interface ItemUpdateData {
     tax_config?: Record<string, number>;
     is_available?: boolean;
     sort_order?: number;
+    prep_time_minutes?: number;
 }
 
 export interface AIOptimizationResponse {

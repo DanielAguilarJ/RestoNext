@@ -51,6 +51,7 @@ class MenuItemResponse(BaseModel):
     tax_config: dict = {"iva": 0.16}
     is_available: bool = True
     sort_order: int = 0
+    prep_time_minutes: int = 15
 
     class Config:
         from_attributes = True
@@ -88,6 +89,7 @@ class ItemCreateRequest(BaseModel):
     modifiers_schema: Optional[dict] = None
     tax_config: Optional[dict] = None
     sort_order: int = 0
+    prep_time_minutes: int = 15
 
 
 class ItemUpdateRequest(BaseModel):
@@ -102,6 +104,7 @@ class ItemUpdateRequest(BaseModel):
     tax_config: Optional[dict] = None
     is_available: Optional[bool] = None
     sort_order: Optional[int] = None
+    prep_time_minutes: Optional[int] = None
 
 
 # ============================================
@@ -317,6 +320,7 @@ async def list_items(
             tax_config=item.tax_config or {"iva": 0.16},
             is_available=item.is_available,
             sort_order=item.sort_order,
+            prep_time_minutes=item.prep_time_minutes,
         )
         for item in items
     ]
@@ -369,6 +373,7 @@ async def create_item(
         modifiers_schema=request.modifiers_schema,
         tax_config=request.tax_config or {"iva": 0.16},
         sort_order=request.sort_order,
+        prep_time_minutes=request.prep_time_minutes,
     )
     
     db.add(item)
@@ -387,6 +392,7 @@ async def create_item(
         tax_config=item.tax_config or {"iva": 0.16},
         is_available=item.is_available,
         sort_order=item.sort_order,
+        prep_time_minutes=item.prep_time_minutes,
     )
 
 
@@ -456,6 +462,8 @@ async def update_item(
         item.is_available = request.is_available
     if request.sort_order is not None:
         item.sort_order = request.sort_order
+    if request.prep_time_minutes is not None:
+        item.prep_time_minutes = request.prep_time_minutes
     
     await db.commit()
     await db.refresh(item)
@@ -472,6 +480,7 @@ async def update_item(
         tax_config=item.tax_config or {"iva": 0.16},
         is_available=item.is_available,
         sort_order=item.sort_order,
+        prep_time_minutes=item.prep_time_minutes,
     )
 
 

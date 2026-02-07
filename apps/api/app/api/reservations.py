@@ -162,6 +162,16 @@ async def update_reservation_status(
     
     return reservation_to_response(reservation)
 
+@router.get("/agents", response_model=List[dict])
+async def list_agents(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    query = select(CommissionAgent).where(CommissionAgent.tenant_id == current_user.tenant_id)
+    result = await db.execute(query)
+    agents = result.scalars().all()
+    return [{"id": a.id, "name": a.name, "type": a.type} for a in agents]
+
 @router.get("/{reservation_id}", response_model=ReservationResponse)
 async def get_reservation(
     reservation_id: UUID,
@@ -205,13 +215,3 @@ async def delete_reservation(
     await db.commit()
     
     return {"message": "Reservation cancelled successfully"}
-
-@router.get("/agents", response_model=List[dict])
-async def list_agents(
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db)
-):
-    query = select(CommissionAgent).where(CommissionAgent.tenant_id == current_user.tenant_id)
-    result = await db.execute(query)
-    agents = result.scalars().all()
-    return [{"id": a.id, "name": a.name, "type": a.type} for a in agents]

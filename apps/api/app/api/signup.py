@@ -56,7 +56,7 @@ STRIPE_PRICE_IDS = {
 # Plan features configuration
 PLAN_ADDONS = {
     "starter": {
-        "self_service": False,
+        "self_service": True,  # Core feature: QR self-ordering enabled for ALL plans
         "kds_pro": False,
         "analytics_ai": False,
         "multi_branch": False,

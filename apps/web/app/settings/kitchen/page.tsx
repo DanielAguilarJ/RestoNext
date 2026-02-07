@@ -28,6 +28,7 @@ interface KDSConfig {
     critical_minutes: number;
     audio_alerts: boolean;
     shake_animation: boolean;
+    auto_complete_when_ready: boolean;
 }
 
 export default function KitchenSettingsPage() {
@@ -37,6 +38,7 @@ export default function KitchenSettingsPage() {
         critical_minutes: 10,
         audio_alerts: true,
         shake_animation: true,
+        auto_complete_when_ready: true,
     });
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
@@ -67,6 +69,7 @@ export default function KitchenSettingsPage() {
                     critical_minutes: data.critical_minutes || 10,
                     audio_alerts: data.audio_alerts !== false,
                     shake_animation: data.shake_animation !== false,
+                    auto_complete_when_ready: data.auto_complete_when_ready !== false,
                 });
             }
         } catch (err) {
@@ -408,6 +411,34 @@ export default function KitchenSettingsPage() {
                                 <div className={cn(
                                     "w-5 h-5 bg-white rounded-full absolute top-0.5 transition-all",
                                     config.shake_animation ? "left-6" : "left-0.5"
+                                )} />
+                            </div>
+                        </button>
+
+                        {/* Auto Complete When Ready */}
+                        <button
+                            onClick={() => setConfig(c => ({ ...c, auto_complete_when_ready: !c.auto_complete_when_ready }))}
+                            className="w-full p-4 bg-slate-700/30 hover:bg-slate-700/50 rounded-xl flex items-center justify-between transition-colors"
+                        >
+                            <div className="flex items-center gap-4">
+                                <CheckCircle className={cn(
+                                    "w-6 h-6",
+                                    config.auto_complete_when_ready ? "text-emerald-500" : "text-slate-600"
+                                )} />
+                                <div className="text-left">
+                                    <p className="text-white font-medium">Auto-completar pedido</p>
+                                    <p className="text-sm text-slate-400">
+                                        Marcar pedido como listo automáticamente cuando todos los items estén preparados
+                                    </p>
+                                </div>
+                            </div>
+                            <div className={cn(
+                                "w-12 h-6 rounded-full transition-colors relative",
+                                config.auto_complete_when_ready ? "bg-emerald-500" : "bg-slate-600"
+                            )}>
+                                <div className={cn(
+                                    "w-5 h-5 bg-white rounded-full absolute top-0.5 transition-all",
+                                    config.auto_complete_when_ready ? "left-6" : "left-0.5"
                                 )} />
                             </div>
                         </button>
