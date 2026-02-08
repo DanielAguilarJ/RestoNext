@@ -285,33 +285,43 @@ async def list_orders(
     current_user: User = Depends(get_current_user),
 ):
     """List orders with optional filters"""
-    query = select(Order).where(
-        Order.tenant_id == current_user.tenant_id
-    ).options(selectinload(Order.items), selectinload(Order.table))
-    
-    if status:
-        status_list = status.split(',')
-        if len(status_list) > 1:
-            query = query.where(Order.status.in_(status_list))
-        else:
-            query = query.where(Order.status == status)
-    
-    if table_id:
-        query = query.where(Order.table_id == table_id)
-    
-    query = query.order_by(Order.created_at.desc())
-    
-    result = await db.execute(query)
-    orders = result.scalars().all()
-    
-    # Enrich with table_number for frontend display
-    response = []
-    for o in orders:
-        data = OrderResponse.model_validate(o)
-        if o.table:
-            data.table_number = o.table.number
-        response.append(data)
-    return response
+    try:
+        query = select(Order).where(
+            Order.tenant_id == current_user.tenant_id
+        ).options(selectinload(Order.items), selectinload(Order.table))
+        
+        if status:
+            # Strip whitespace and validate enum values
+            valid_statuses = {s.value for s in OrderStatus}
+            status_list = [s.strip() for s in status.split(',') if s.strip()]
+            status_list = [s for s in status_list if s in valid_statuses]
+            if status_list:
+                if len(status_list) > 1:
+                    query = query.where(Order.status.in_(status_list))
+                else:
+                    query = query.where(Order.status == status_list[0])
+        
+        if table_id:
+            query = query.where(Order.table_id == table_id)
+        
+        query = query.order_by(Order.created_at.desc())
+        
+        result = await db.execute(query)
+        orders = result.scalars().all()
+        
+        # Enrich with table_number for frontend display
+        response = []
+        for o in orders:
+            data = OrderResponse.model_validate(o)
+            if o.table:
+                data.table_number = o.table.number
+            response.append(data)
+        return response
+    except Exception as e:
+        import traceback
+        print(f"[ERROR] list_orders failed: {e}")
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Error listing orders: {str(e)}")
 
 
 @router.patch("/{order_id}/items/{item_id}/status")
@@ -624,7 +634,6 @@ async def create_cafeteria_order(
             tenant_id=current_user.tenant_id,
             number=0,
             capacity=1,
-            zone="counter",
             status=TableStatus.FREE,
         )
         db.add(counter_table)
