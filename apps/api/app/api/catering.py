@@ -246,15 +246,29 @@ async def create_event(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    event = Event(
-        **event_in.model_dump(),
-        tenant_id=current_user.tenant_id,
-        status=EventStatus.DRAFT
-    )
-    db.add(event)
-    await db.commit()
-    await db.refresh(event)
-    return event
+    import logging
+    logger = logging.getLogger("catering.events")
+    try:
+        event_data = event_in.model_dump()
+        # Strip timezone info to match TIMESTAMP WITHOUT TIME ZONE columns
+        if event_data.get('start_time') and hasattr(event_data['start_time'], 'tzinfo') and event_data['start_time'].tzinfo:
+            event_data['start_time'] = event_data['start_time'].replace(tzinfo=None)
+        if event_data.get('end_time') and hasattr(event_data['end_time'], 'tzinfo') and event_data['end_time'].tzinfo:
+            event_data['end_time'] = event_data['end_time'].replace(tzinfo=None)
+
+        event = Event(
+            **event_data,
+            tenant_id=current_user.tenant_id,
+            status=EventStatus.DRAFT
+        )
+        db.add(event)
+        await db.commit()
+        await db.refresh(event)
+        return event
+    except Exception as e:
+        logger.error(f"Error creating event: {e}", exc_info=True)
+        await db.rollback()
+        raise HTTPException(status_code=400, detail=f"Error al crear el evento: {str(e)}")
 
 @router.get("/events", response_model=List[EventResponse])
 async def get_events(
@@ -1214,11 +1228,13 @@ async def get_calendar_events(
 
         query = select(Event).where(Event.tenant_id == current_user.tenant_id)
 
-        # Date filtering
+        # Date filtering — strip timezone info to match TIMESTAMP WITHOUT TIME ZONE columns
         if start_date:
-            query = query.where(Event.start_time >= start_date)
+            naive_start = start_date.replace(tzinfo=None) if start_date.tzinfo else start_date
+            query = query.where(Event.start_time >= naive_start)
         if end_date:
-            query = query.where(Event.end_time <= end_date)
+            naive_end = end_date.replace(tzinfo=None) if end_date.tzinfo else end_date
+            query = query.where(Event.end_time <= naive_end)
 
         result = await db.execute(
             query.options(

@@ -70,10 +70,34 @@ export default function NewEventPage() {
             setLoading(true);
             setError(null);
 
+            // Validate dates before combining
+            if (!formData.start_date) {
+                setError('La fecha de inicio es requerida');
+                setLoading(false);
+                return;
+            }
+
             // Combine date and time into ISO strings
             const startDateTime = new Date(`${formData.start_date}T${formData.start_time}:00`);
             const endDate = formData.end_date || formData.start_date;
             const endDateTime = new Date(`${endDate}T${formData.end_time}:00`);
+
+            // Validate resulting dates
+            if (isNaN(startDateTime.getTime())) {
+                setError('La fecha/hora de inicio no es válida');
+                setLoading(false);
+                return;
+            }
+            if (isNaN(endDateTime.getTime())) {
+                setError('La fecha/hora de fin no es válida');
+                setLoading(false);
+                return;
+            }
+            if (endDateTime <= startDateTime) {
+                setError('La fecha de fin debe ser posterior a la fecha de inicio');
+                setLoading(false);
+                return;
+            }
 
             // Create the event
             const event = await cateringApi.createEvent({
