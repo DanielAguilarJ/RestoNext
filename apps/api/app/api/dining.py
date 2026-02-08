@@ -333,9 +333,9 @@ async def create_dining_order(
                 Order.table_id == ctx.table_id,
                 Order.status.in_([OrderStatus.OPEN, OrderStatus.IN_PROGRESS])
             )
-        )
+        ).order_by(Order.created_at.desc())
     )
-    existing_order = existing_order_result.scalar_one_or_none()
+    existing_order = existing_order_result.scalars().first()
     
     if existing_order:
         # Add items to existing order
@@ -502,7 +502,7 @@ async def get_order_status(
     Get real-time status of the current order.
     Customers can track which items are being prepared vs ready.
     """
-    # Find current order for this table
+    # Find current order for this table (most recent)
     result = await db.execute(
         select(Order)
         .where(
@@ -514,7 +514,7 @@ async def get_order_status(
         .options(selectinload(Order.items))
         .order_by(Order.created_at.desc())
     )
-    order = result.scalar_one_or_none()
+    order = result.scalars().first()
     
     if not order:
         raise HTTPException(
@@ -584,9 +584,9 @@ async def create_service_request(
                 ServiceRequest.request_type == request_type,
                 ServiceRequest.status == ServiceRequestStatus.PENDING
             )
-        )
+        ).order_by(ServiceRequest.created_at.desc())
     )
-    existing = existing_result.scalar_one_or_none()
+    existing = existing_result.scalars().first()
     
     if existing:
         # Return existing request instead of creating duplicate
@@ -832,9 +832,9 @@ async def request_bill(
                 ServiceRequest.request_type == ServiceRequestType.BILL,
                 ServiceRequest.status == ServiceRequestStatus.PENDING
             )
-        )
+        ).order_by(ServiceRequest.created_at.desc())
     )
-    existing = existing_request.scalar_one_or_none()
+    existing = existing_request.scalars().first()
     
     request_timestamp = datetime.utcnow()
     
@@ -898,7 +898,7 @@ async def get_table_session(
     Get session information for the table.
     Used by the tablet app to initialize and show relevant UI.
     """
-    # Find current order if exists
+    # Find current order if exists (most recent)
     order_result = await db.execute(
         select(Order).where(
             and_(
@@ -907,7 +907,7 @@ async def get_table_session(
             )
         ).order_by(Order.created_at.desc())
     )
-    current_order = order_result.scalar_one_or_none()
+    current_order = order_result.scalars().first()
     
     # Get feature config
     features_config = ctx.tenant.features_config or {}

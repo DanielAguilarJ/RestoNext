@@ -685,8 +685,9 @@ async def get_order_splits(
     """
     result = await db.execute(
         select(BillSplit).where(BillSplit.order_id == order_id)
+        .order_by(BillSplit.created_at.desc())
     )
-    bill_split = result.scalar_one_or_none()
+    bill_split = result.scalars().first()
     
     if not bill_split:
         raise HTTPException(
@@ -720,8 +721,9 @@ async def save_order_splits(
     # Check for existing split
     result = await db.execute(
         select(BillSplit).where(BillSplit.order_id == order_id)
+        .order_by(BillSplit.created_at.desc())
     )
-    bill_split = result.scalar_one_or_none()
+    bill_split = result.scalars().first()
     
     # Convert splits to dict format for JSONB
     splits_data = [s.model_dump() for s in split_data.splits]
@@ -754,8 +756,9 @@ async def delete_order_splits(
     """Delete the bill split configuration for an order."""
     result = await db.execute(
         select(BillSplit).where(BillSplit.order_id == order_id)
+        .order_by(BillSplit.created_at.desc())
     )
-    bill_split = result.scalar_one_or_none()
+    bill_split = result.scalars().first()
     
     if not bill_split:
         raise HTTPException(status_code=404, detail="No splits found")

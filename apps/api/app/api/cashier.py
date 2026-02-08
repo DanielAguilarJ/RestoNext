@@ -182,7 +182,7 @@ async def get_open_shift(
     tenant_id: UUID, 
     db: AsyncSession
 ) -> Optional[CashShift]:
-    """Get user's currently open shift"""
+    """Get user's currently open shift (most recent if multiple exist)"""
     result = await db.execute(
         select(CashShift).where(
             and_(
@@ -190,9 +190,9 @@ async def get_open_shift(
                 CashShift.tenant_id == tenant_id,
                 CashShift.status == ShiftStatus.OPEN
             )
-        )
+        ).order_by(CashShift.opened_at.desc())
     )
-    return result.scalar_one_or_none()
+    return result.scalars().first()
 
 
 # ============================================
