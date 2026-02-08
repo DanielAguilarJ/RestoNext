@@ -1197,64 +1197,88 @@ async def get_calendar_events(
     Get events formatted for calendar display.
     Returns events with color coding based on status.
     """
-    query = select(Event).where(Event.tenant_id == current_user.tenant_id)
-    
-    # Date filtering
-    if start_date:
-        query = query.where(Event.start_time >= start_date)
-    if end_date:
-        query = query.where(Event.end_time <= end_date)
-    
-    result = await db.execute(
-        query.options(
-            selectinload(Event.lead),
-            selectinload(Event.menu_selections)
+    import logging
+    logger = logging.getLogger("catering.calendar")
+
+    try:
+        # First check if the events table exists (migration may not have been applied)
+        try:
+            check = await db.execute(
+                select(Event).where(Event.tenant_id == current_user.tenant_id).limit(0)
+            )
+        except Exception as table_err:
+            logger.warning(f"Catering tables may not exist yet: {table_err}")
+            # Tables don't exist yet – return empty list gracefully
+            await db.rollback()
+            return {"events": []}
+
+        query = select(Event).where(Event.tenant_id == current_user.tenant_id)
+
+        # Date filtering
+        if start_date:
+            query = query.where(Event.start_time >= start_date)
+        if end_date:
+            query = query.where(Event.end_time <= end_date)
+
+        result = await db.execute(
+            query.options(
+                selectinload(Event.lead),
+                selectinload(Event.menu_selections)
+            )
         )
-    )
-    events = result.unique().scalars().all()
-    
-    # Status to color mapping
-    status_colors = {
-        EventStatus.DRAFT: '#6B7280',      # Gray
-        EventStatus.CONFIRMED: '#10B981',   # Green
-        EventStatus.BOOKED: '#F59E0B',       # Gold/Amber - Deposit paid
-        EventStatus.IN_PROGRESS: '#3B82F6', # Blue
-        EventStatus.COMPLETED: '#8B5CF6',   # Purple
-        EventStatus.CANCELLED: '#EF4444',   # Red
-    }
-    
-    calendar_events = []
-    for event in events:
-        status = event.status
-        color = status_colors.get(status, '#6B7280')
-        
-        client_name = ''
-        if event.lead:
-            client_name = event.lead.client_name
-        
-        # Skip events without dates
-        if not event.start_time or not event.end_time:
-            continue
-            
-        calendar_events.append({
-            'id': str(event.id),
-            'title': event.name,
-            'start': event.start_time.isoformat(),
-            'end': event.end_time.isoformat(),
-            'status': status.value if hasattr(status, 'value') else str(status),
-            'color': color,
-            'backgroundColor': color,
-            'borderColor': color,
-            'extendedProps': {
-                'guest_count': event.guest_count,
-                'location': event.location,
-                'client_name': client_name,
-                'total_amount': event.total_amount,
-                'menu_items_count': len(event.menu_selections) if event.menu_selections else 0,
-            }
-        })
-    
-    return {"events": calendar_events}
+        events = result.unique().scalars().all()
+
+        # Status to color mapping
+        status_colors = {
+            EventStatus.DRAFT: '#6B7280',      # Gray
+            EventStatus.CONFIRMED: '#10B981',   # Green
+            EventStatus.BOOKED: '#F59E0B',       # Gold/Amber - Deposit paid
+            EventStatus.IN_PROGRESS: '#3B82F6', # Blue
+            EventStatus.COMPLETED: '#8B5CF6',   # Purple
+            EventStatus.CANCELLED: '#EF4444',   # Red
+        }
+
+        calendar_events = []
+        for event in events:
+            try:
+                status = event.status
+                color = status_colors.get(status, '#6B7280')
+
+                client_name = ''
+                if event.lead:
+                    client_name = event.lead.client_name
+
+                # Skip events without dates
+                if not event.start_time or not event.end_time:
+                    continue
+
+                calendar_events.append({
+                    'id': str(event.id),
+                    'title': event.name,
+                    'start': event.start_time.isoformat(),
+                    'end': event.end_time.isoformat(),
+                    'status': status.value if hasattr(status, 'value') else str(status),
+                    'color': color,
+                    'backgroundColor': color,
+                    'borderColor': color,
+                    'extendedProps': {
+                        'guest_count': event.guest_count,
+                        'location': event.location,
+                        'client_name': client_name,
+                        'total_amount': float(event.total_amount) if event.total_amount else 0.0,
+                        'menu_items_count': len(event.menu_selections) if event.menu_selections else 0,
+                    }
+                })
+            except Exception as item_err:
+                logger.error(f"Error processing event {event.id}: {item_err}")
+                continue
+
+        return {"events": calendar_events}
+
+    except Exception as e:
+        logger.error(f"Error in get_calendar_events: {e}", exc_info=True)
+        # Return empty list instead of crashing with 500
+        return {"events": []}
 
 
 # ==========================================
