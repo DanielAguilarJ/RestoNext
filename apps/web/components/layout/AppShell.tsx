@@ -90,6 +90,14 @@ export default function AppShell({ children }: AppShellProps) {
                     },
                 });
 
+                if (response.status === 401) {
+                    // Token expired/invalid — clear and redirect
+                    localStorage.removeItem('access_token');
+                    setIsAuthenticated(false);
+                    setIsLoadingLegal(false);
+                    return;
+                }
+
                 if (response.ok) {
                     const status: OnboardingStatus = await response.json();
                     setShowOnboarding(status.show_wizard);
@@ -120,6 +128,14 @@ export default function AppShell({ children }: AppShellProps) {
                         'Content-Type': 'application/json',
                     },
                 });
+
+                if (response.status === 401) {
+                    // Token expired/invalid — clear and stop
+                    localStorage.removeItem('access_token');
+                    setIsAuthenticated(false);
+                    setRequiresLegalAcceptance(false);
+                    return;
+                }
 
                 if (response.ok) {
                     const status: AcceptanceStatus = await response.json();

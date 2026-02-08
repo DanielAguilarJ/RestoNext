@@ -172,6 +172,13 @@ export default function DashboardHome() {
                     },
                 });
 
+                if (userResponse.status === 401) {
+                    // Token expired/invalid — clear immediately and redirect
+                    localStorage.removeItem('access_token');
+                    router.push('/login');
+                    return;
+                }
+
                 if (!userResponse.ok) {
                     throw new Error("Authentication failed");
                 }
