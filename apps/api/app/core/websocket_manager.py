@@ -83,8 +83,9 @@ class ConnectionManager:
             
             # Only set up pub/sub if connection succeeded
             self.pubsub = self.redis_client.pubsub()
+            # Subscribe to the SAME role-based channel names that broadcast_to_channel publishes to
             await asyncio.wait_for(
-                self.pubsub.subscribe("kitchen:new_order", "kitchen:order_update", "table:call_waiter"),
+                self.pubsub.subscribe("kitchen", "bar", "waiter", "cashier", "pos", "all"),
                 timeout=3.0
             )
             print(f"INFO:     ✅ Connected to Redis successfully")
@@ -165,11 +166,14 @@ class ConnectionManager:
         await self.broadcast_to_channel(message, "kitchen")
     
     async def notify_kitchen_item_ready(self, item_data: dict):
-        """Notify that an item is ready for pickup"""
+        """Notify that an item is ready for pickup — broadcast to both kitchen and waiter"""
         message = {
             "event": "kitchen:item_ready",
             "payload": item_data
         }
+        # Kitchen KDS needs to see ready items too
+        await self.broadcast_to_channel(message, "kitchen")
+        # Waiter gets notified for pickup
         await self.broadcast_to_channel(message, "waiter")
     
     async def notify_call_waiter(self, table_number: int, tenant_id: str):

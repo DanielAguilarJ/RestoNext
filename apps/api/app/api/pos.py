@@ -325,8 +325,20 @@ async def update_item_status(
     """
     Update order item status (for kitchen/bar staff).
     
-    When status changes to 'ready', notifies waiters via WebSocket.
+    Validates status transitions:
+      pending → preparing → ready → served
+    
+    Broadcasts item_update to kitchen channel so KDS sees the change,
+    and notifies waiters when items become ready.
     """
+    # Validate the target status value
+    valid_statuses = ["pending", "preparing", "ready", "served"]
+    if new_status not in valid_statuses:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid status. Must be one of: {valid_statuses}"
+        )
+
     result = await db.execute(
         select(OrderItem)
         .where(OrderItem.id == item_id, OrderItem.order_id == order_id)
@@ -336,8 +348,32 @@ async def update_item_status(
     if not item:
         raise HTTPException(status_code=404, detail="Order item not found")
     
+    # Validate status transition
+    VALID_ITEM_TRANSITIONS = {
+        "pending": ["preparing"],
+        "preparing": ["ready"],
+        "ready": ["served"],
+    }
+    current = item.status.value
+    allowed = VALID_ITEM_TRANSITIONS.get(current, [])
+    if new_status not in allowed:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Cannot transition from '{current}' to '{new_status}'. Allowed: {allowed}"
+        )
+
     item.status = OrderItemStatus(new_status)
     await db.commit()
+    
+    # Broadcast to kitchen channel so KDS board updates in real-time
+    await ws_manager.broadcast_to_channel({
+        "event": "kitchen:item_update",
+        "payload": {
+            "order_id": str(order_id),
+            "item_id": str(item_id),
+            "status": new_status,
+        }
+    }, "kitchen")
     
     # Notify waiter when item is ready
     if new_status == "ready":
@@ -346,6 +382,41 @@ async def update_item_status(
             "item_id": str(item_id),
             "item_name": item.menu_item_name,
         })
+
+        # Auto-complete: if ALL items in the order are ready, mark order as READY
+        all_items_result = await db.execute(
+            select(OrderItem).where(OrderItem.order_id == order_id)
+        )
+        all_items = all_items_result.scalars().all()
+        if all(i.status == OrderItemStatus.READY for i in all_items):
+            order_result = await db.execute(
+                select(Order).where(Order.id == order_id)
+                .options(selectinload(Order.items))
+            )
+            order = order_result.scalar_one_or_none()
+            if order and order.status != OrderStatus.READY:
+                order.status = OrderStatus.READY
+                await db.commit()
+                # Notify kitchen that the full order is ready
+                table_number = 0
+                if order.table_id:
+                    table_result = await db.execute(
+                        select(Table).where(Table.id == order.table_id)
+                    )
+                    table = table_result.scalar_one_or_none()
+                    table_number = table.number if table else 0
+                await ws_manager.broadcast_to_channel({
+                    "event": "kitchen:order_all_ready",
+                    "payload": {"order_id": str(order_id), "table_number": table_number}
+                }, "kitchen")
+                await ws_manager.broadcast_to_channel({
+                    "event": "kitchen:order_ready",
+                    "payload": {
+                        "order_id": str(order_id),
+                        "table_number": table_number,
+                        "message": f"Todos listos! Mesa {table_number}" if table_number else "Todos listos!",
+                    }
+                }, "waiter")
     
     return {"status": "updated", "new_status": new_status}
 
@@ -373,6 +444,13 @@ async def process_payment(
     
     if not order:
         raise HTTPException(status_code=404, detail="Order not found")
+    
+    # Guard: prevent paying an already-paid or cancelled order
+    if order.status == OrderStatus.PAID:
+        raise HTTPException(
+            status_code=400,
+            detail="This order has already been paid"
+        )
     
     if payment:
         # Partial payment for split check

@@ -310,6 +310,20 @@ async def update_order_status(
         raise HTTPException(
             status_code=400, detail=f"Invalid status. Must be one of: {valid_statuses}"
         )
+    # Validate order-level transitions (no going backward)
+    VALID_ORDER_TRANSITIONS = {
+        "open": ["in_progress"],
+        "pending_payment": ["in_progress"],
+        "in_progress": ["ready"],
+        "ready": ["delivered"],
+    }
+    current_status = order.status.value
+    allowed_order = VALID_ORDER_TRANSITIONS.get(current_status, [])
+    if request.status not in allowed_order:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Cannot transition order from '{current_status}' to '{request.status}'. Allowed: {allowed_order}"
+        )
     status_map = {
         "in_progress": OrderStatus.IN_PROGRESS,
         "ready": OrderStatus.READY,
