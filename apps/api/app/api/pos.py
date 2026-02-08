@@ -452,7 +452,7 @@ async def process_payment(
             detail="This order has already been paid"
         )
     
-    if payment:
+    if payment and payment.split_number is not None:
         # Partial payment for split check
         for split in order.bill_splits:
             if split.splits:
@@ -472,7 +472,7 @@ async def process_payment(
             order.status = OrderStatus.PAID
             order.paid_at = datetime.utcnow()
     else:
-        # Full payment
+        # Full payment (no body, or body without split_number)
         order.status = OrderStatus.PAID
         order.paid_at = datetime.utcnow()
     
@@ -513,10 +513,34 @@ async def process_payment(
     
     await db.commit()
     
+    # Load items so frontend can display the order summary
+    await db.refresh(order, ["items"])
+    table_result2 = await db.execute(
+        select(Table).where(Table.id == order.table_id)
+    )
+    t = table_result2.scalar_one_or_none()
+    
     return {
         "status": "success",
         "order_status": order.status.value,
-        "message": "Payment processed successfully"
+        "message": "Payment processed successfully",
+        "id": str(order.id),
+        "total": order.total,
+        "subtotal": order.subtotal,
+        "tax": order.tax,
+        "paid_at": order.paid_at.isoformat() if order.paid_at else None,
+        "table_number": t.number if t else None,
+        "payment_method": payment.payment_method if payment else "cash",
+        "items": [
+            {
+                "id": str(item.id),
+                "menu_item_name": item.menu_item_name,
+                "quantity": item.quantity,
+                "unit_price": float(item.unit_price),
+                "status": item.status.value if hasattr(item.status, 'value') else str(item.status),
+            }
+            for item in order.items
+        ] if order.items else [],
     }
 
 

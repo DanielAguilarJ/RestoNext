@@ -362,10 +362,12 @@ class BillSplitResponse(BaseModel):
 
 
 class PartialPaymentRequest(BaseModel):
-    """Request for paying a portion of a split check"""
-    split_number: int
-    amount: float
-    payment_method: str  # cash, card, transfer
+    """Request for paying an order (full or partial split)"""
+    payment_method: str = "cash"  # cash, card, transfer
+    amount: Optional[float] = None
+    split_number: Optional[int] = None
+    tip: Optional[float] = None
+    reference: Optional[str] = None
 
 
 # ============================================
