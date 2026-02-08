@@ -259,7 +259,9 @@ class ActivityLogger {
 
             if (sync && typeof navigator !== 'undefined' && 'sendBeacon' in navigator) {
                 // Use sendBeacon for page unload (more reliable)
-                navigator.sendBeacon(endpoint, JSON.stringify(batch));
+                // Must use Blob with application/json type; plain string sends as text/plain → 422
+                const blob = new Blob([JSON.stringify(batch)], { type: 'application/json' });
+                navigator.sendBeacon(endpoint, blob);
             } else {
                 await fetch(endpoint, {
                     method: 'POST',
