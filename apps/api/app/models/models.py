@@ -283,7 +283,7 @@ class User(Base):
     hashed_password: Mapped[str] = mapped_column(String(255), nullable=False)
     name: Mapped[str] = mapped_column(String(128), nullable=False)
     role: Mapped[UserRole] = mapped_column(
-        SQLEnum(UserRole), nullable=False, default=UserRole.WAITER
+        SQLEnum(UserRole, values_callable=lambda x: [e.value for e in x]), nullable=False, default=UserRole.WAITER
     )
     
     # PIN for fast POS login (4-6 digit hashed)
@@ -323,7 +323,7 @@ class MenuCategory(Base):
     
     # Printer routing - determines which station printer receives tickets
     printer_target: Mapped[PrinterTarget] = mapped_column(
-        SQLEnum(PrinterTarget), default=PrinterTarget.KITCHEN
+        SQLEnum(PrinterTarget, values_callable=lambda x: [e.value for e in x]), default=PrinterTarget.KITCHEN
     )
     
     # Relationships
@@ -370,7 +370,7 @@ class MenuItem(Base):
     
     # Where this item should appear: Kitchen or Bar display
     route_to: Mapped[RouteDestination] = mapped_column(
-        SQLEnum(RouteDestination), default=RouteDestination.KITCHEN
+        SQLEnum(RouteDestination, values_callable=lambda x: [e.value for e in x]), default=RouteDestination.KITCHEN
     )
     
     # JSONB for complex modifier logic
@@ -413,7 +413,7 @@ class Table(Base):
     number: Mapped[int] = mapped_column(Integer, nullable=False)
     capacity: Mapped[int] = mapped_column(Integer, default=4)
     status: Mapped[TableStatus] = mapped_column(
-        SQLEnum(TableStatus), default=TableStatus.FREE
+        SQLEnum(TableStatus, values_callable=lambda x: [e.value for e in x]), default=TableStatus.FREE
     )
     
     # Position for visual table map (grid coordinates)
@@ -561,7 +561,7 @@ class OrderItem(Base):
     # Denormalized for quick display (avoid join on kitchen display)
     menu_item_name: Mapped[str] = mapped_column(String(128), nullable=False)
     route_to: Mapped[RouteDestination] = mapped_column(
-        SQLEnum(RouteDestination), default=RouteDestination.KITCHEN
+        SQLEnum(RouteDestination, values_callable=lambda x: [e.value for e in x]), default=RouteDestination.KITCHEN
     )
     
     quantity: Mapped[int] = mapped_column(Integer, default=1)
@@ -575,7 +575,7 @@ class OrderItem(Base):
     
     notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     status: Mapped[OrderItemStatus] = mapped_column(
-        SQLEnum(OrderItemStatus), default=OrderItemStatus.PENDING
+        SQLEnum(OrderItemStatus, values_callable=lambda x: [e.value for e in x]), default=OrderItemStatus.PENDING
     )
     
     # Denormalized prep time for KDS display (avoids join)
@@ -612,7 +612,7 @@ class BillSplit(Base):
     )
     
     split_type: Mapped[SplitType] = mapped_column(
-        SQLEnum(SplitType), nullable=False
+        SQLEnum(SplitType, values_callable=lambda x: [e.value for e in x]), nullable=False
     )
     
     # JSONB for flexible split details
@@ -648,7 +648,7 @@ class Invoice(Base):
     # SAT UUID after successful stamping
     uuid: Mapped[Optional[str]] = mapped_column(String(36), nullable=True)
     status: Mapped[CFDIStatus] = mapped_column(
-        SQLEnum(CFDIStatus), default=CFDIStatus.PENDING
+        SQLEnum(CFDIStatus, values_callable=lambda x: [e.value for e in x]), default=CFDIStatus.PENDING
     )
     
     # Receptor (Customer) data
@@ -727,7 +727,7 @@ class Ingredient(Base):
     name: Mapped[str] = mapped_column(String(128), nullable=False)
     sku: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
     unit: Mapped[UnitOfMeasure] = mapped_column(
-        SQLEnum(UnitOfMeasure), nullable=False
+        SQLEnum(UnitOfMeasure, values_callable=lambda x: [e.value for e in x]), nullable=False
     )
     
     # Current theoretical stock
@@ -780,7 +780,7 @@ class Recipe(Base):
     # Amount to deduct per menu item sold
     quantity: Mapped[float] = mapped_column(Float, nullable=False)
     unit: Mapped[UnitOfMeasure] = mapped_column(
-        SQLEnum(UnitOfMeasure), nullable=False
+        SQLEnum(UnitOfMeasure, values_callable=lambda x: [e.value for e in x]), nullable=False
     )
     
     # For UI: optional notes (e.g., "cocida", "cruda")
@@ -834,12 +834,12 @@ class InventoryTransaction(Base):
     )
     
     transaction_type: Mapped[TransactionType] = mapped_column(
-        SQLEnum(TransactionType), nullable=False
+        SQLEnum(TransactionType, values_callable=lambda x: [e.value for e in x]), nullable=False
     )
     # Positive for entries, negative for exits
     quantity: Mapped[float] = mapped_column(Float, nullable=False)
     unit: Mapped[UnitOfMeasure] = mapped_column(
-        SQLEnum(UnitOfMeasure), nullable=False
+        SQLEnum(UnitOfMeasure, values_callable=lambda x: [e.value for e in x]), nullable=False
     )
     
     # Reference to source document (order_id, purchase_id, etc.)
@@ -964,7 +964,7 @@ class PurchaseOrder(Base):
     )
     
     status: Mapped[PurchaseOrderStatus] = mapped_column(
-        SQLEnum(PurchaseOrderStatus), default=PurchaseOrderStatus.DRAFT
+        SQLEnum(PurchaseOrderStatus, values_callable=lambda x: [e.value for e in x]), default=PurchaseOrderStatus.DRAFT
     )
     
     expected_delivery: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
@@ -1082,7 +1082,7 @@ class EventLead(Base):
     event_type: Mapped[Optional[str]] = mapped_column(String(64), nullable=True) # Wedding, Corporate, etc.
     
     status: Mapped[LeadStatus] = mapped_column(
-        SQLEnum(LeadStatus), default=LeadStatus.NEW
+        SQLEnum(LeadStatus, values_callable=lambda x: [e.value for e in x]), default=LeadStatus.NEW
     )
     
     notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
@@ -1122,7 +1122,7 @@ class Event(Base):
     guest_count: Mapped[int] = mapped_column(Integer, default=0)
     location: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     status: Mapped[EventStatus] = mapped_column(
-        SQLEnum(EventStatus), default=EventStatus.DRAFT
+        SQLEnum(EventStatus, values_callable=lambda x: [e.value for e in x]), default=EventStatus.DRAFT
     )
     
     # Financials
@@ -1229,7 +1229,7 @@ class CateringQuote(Base):
     # Valid until
     valid_until: Mapped[datetime] = mapped_column(DateTime, nullable=False)
     status: Mapped[QuoteStatus] = mapped_column(
-        SQLEnum(QuoteStatus), default=QuoteStatus.DRAFT
+        SQLEnum(QuoteStatus, values_callable=lambda x: [e.value for e in x]), default=QuoteStatus.DRAFT
     )
     
     # Token for public access (magic link)
@@ -1343,7 +1343,7 @@ class Customer(Base):
     # Loyalty Status
     loyalty_points: Mapped[float] = mapped_column(Float, default=0.0)
     wallet_balance: Mapped[float] = mapped_column(Float, default=0.0) # Monedero electrónico
-    tier_level: Mapped[LoyaltyTier] = mapped_column(SQLEnum(LoyaltyTier), default=LoyaltyTier.BASE)
+    tier_level: Mapped[LoyaltyTier] = mapped_column(SQLEnum(LoyaltyTier, values_callable=lambda x: [e.value for e in x]), default=LoyaltyTier.BASE)
     annual_spend: Mapped[float] = mapped_column(Float, default=0.0) # Gasto anual acumulado
     
     notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
@@ -1370,7 +1370,7 @@ class LoyaltyTransaction(Base):
         UUID(as_uuid=True), ForeignKey("orders.id"), nullable=True
     )
     
-    type: Mapped[LoyaltyTransactionType] = mapped_column(SQLEnum(LoyaltyTransactionType))
+    type: Mapped[LoyaltyTransactionType] = mapped_column(SQLEnum(LoyaltyTransactionType, values_callable=lambda x: [e.value for e in x]))
     points_delta: Mapped[float] = mapped_column(Float, default=0.0)
     amount_delta: Mapped[float] = mapped_column(Float, default=0.0)
 
@@ -1436,13 +1436,13 @@ class Reservation(Base):
     reservation_time: Mapped[datetime] = mapped_column(DateTime, nullable=False)
     party_size: Mapped[int] = mapped_column(Integer, default=2)
     status: Mapped[ReservationStatus] = mapped_column(
-        SQLEnum(ReservationStatus), default=ReservationStatus.PENDING
+        SQLEnum(ReservationStatus, values_callable=lambda x: [e.value for e in x]), default=ReservationStatus.PENDING
     )
 
     # Deposits & Payments
     deposit_amount: Mapped[float] = mapped_column(Float, default=0.0)
     payment_status: Mapped[ReservationPaymentStatus] = mapped_column(
-        SQLEnum(ReservationPaymentStatus), default=ReservationPaymentStatus.PENDING
+        SQLEnum(ReservationPaymentStatus, values_callable=lambda x: [e.value for e in x]), default=ReservationPaymentStatus.PENDING
     )
     
     notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
@@ -1552,12 +1552,12 @@ class ServiceRequest(Base):
     
     # Type of request
     request_type: Mapped[ServiceRequestType] = mapped_column(
-        SQLEnum(ServiceRequestType), nullable=False
+        SQLEnum(ServiceRequestType, values_callable=lambda x: [e.value for e in x]), nullable=False
     )
     
     # Status workflow
     status: Mapped[ServiceRequestStatus] = mapped_column(
-        SQLEnum(ServiceRequestStatus), default=ServiceRequestStatus.PENDING
+        SQLEnum(ServiceRequestStatus, values_callable=lambda x: [e.value for e in x]), default=ServiceRequestStatus.PENDING
     )
     
     # Optional message for custom requests
