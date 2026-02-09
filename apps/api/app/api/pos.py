@@ -523,6 +523,21 @@ async def process_payment(
     
     await db.commit()
     
+    # 🔔 Broadcast analytics update when order is fully paid
+    if order.status == OrderStatus.PAID:
+        try:
+            await ws_manager.notify_analytics_update("order_paid", {
+                "order_id": str(order.id),
+                "total": float(order.total or 0),
+                "subtotal": float(order.subtotal or 0),
+                "tax": float(order.tax or 0),
+                "payment_method": payment.payment_method if payment else "cash",
+                "table_number": None,  # Will be set below
+                "items_count": len(order.items) if order.items else 0,
+            })
+        except Exception as e:
+            print(f"WARNING: Analytics WS notification failed: {e}")
+    
     # Load items so frontend can display the order summary
     await db.refresh(order, ["items"])
     table_result2 = await db.execute(

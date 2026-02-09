@@ -14,6 +14,7 @@ from pydantic import BaseModel, Field
 
 from app.core.database import get_db
 from app.core.security import get_current_user
+from app.core.websocket_manager import ws_manager
 from app.models.models import User, Order, OrderStatus
 from app.models.cash_management import (
     CashShift, CashTransaction, ShiftStatus, 
@@ -477,6 +478,18 @@ async def record_sale(
         shift.transfer_sales += request.amount + request.tip_amount
     
     await db.commit()
+    
+    # 🔔 Broadcast analytics update for the new sale transaction
+    try:
+        await ws_manager.notify_analytics_update("sale_recorded", {
+            "transaction_id": str(transaction.id),
+            "amount": float(request.amount),
+            "tip_amount": float(request.tip_amount),
+            "payment_method": pm.value,
+            "order_id": request.order_id,
+        })
+    except Exception as e:
+        print(f"WARNING: Analytics WS notification failed: {e}")
     
     return {
         "message": "Sale recorded",

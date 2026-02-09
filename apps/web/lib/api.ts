@@ -996,6 +996,125 @@ export interface SalesByCategoryResponse {
 }
 
 // ============================================
+// Kitchen Performance Types
+// ============================================
+
+export interface BottleneckInfo {
+    slow_orders: number;
+    avg_slow_minutes: number;
+    percentage: number;
+}
+
+export interface StationBreakdown {
+    [key: string]: {
+        items_count: number;
+        total_quantity: number;
+    };
+}
+
+export interface KitchenPerformanceResponse {
+    avg_prep_minutes: number;
+    median_prep_minutes: number;
+    p95_prep_minutes: number;
+    orders_completed: number;
+    items_per_hour: number;
+    station_breakdown: StationBreakdown;
+    bottleneck: BottleneckInfo;
+    start_date: string;
+    end_date: string;
+}
+
+// ============================================
+// Live Operations Types
+// ============================================
+
+export interface OccupancyData {
+    total_tables: number;
+    occupied_tables: number;
+    percentage: number;
+}
+
+export interface TodaySalesData {
+    sales: number;
+    orders: number;
+}
+
+export interface LiveOperationsResponse {
+    occupancy: OccupancyData;
+    active_orders: { [status: string]: number };
+    total_active_orders: number;
+    kitchen_queue: number;
+    avg_prep_minutes_today: number;
+    today: TodaySalesData;
+}
+
+// ============================================
+// Payment Analytics Types
+// ============================================
+
+export interface PaymentMethodData {
+    count: number;
+    amount: number;
+    tips: number;
+    percentage: number;
+}
+
+export interface ShiftSummaryData {
+    total_shifts: number;
+    avg_shift_hours: number;
+    total_discrepancy: number;
+    shifts_with_discrepancy: number;
+    total_drops: number;
+}
+
+export interface PaymentAnalyticsResponse {
+    payment_methods: { [method: string]: PaymentMethodData };
+    total_revenue: number;
+    total_tips: number;
+    total_transactions: number;
+    tip_percentage: number;
+    shifts: ShiftSummaryData;
+    start_date: string;
+    end_date: string;
+}
+
+// ============================================
+// Order Source Analytics Types
+// ============================================
+
+export interface OrderSourceData {
+    source: string | null;
+    order_count: number;
+    total_sales: number;
+    avg_ticket: number;
+    percentage: number;
+}
+
+export interface OrderSourceResponse {
+    sources: OrderSourceData[];
+    total_sales: number;
+    start_date: string;
+    end_date: string;
+}
+
+// ============================================
+// Unified Dashboard Type
+// ============================================
+
+export interface UnifiedDashboardResponse {
+    kpis: KPIResponse;
+    sales_comparison: SalesComparisonResponse;
+    sales_by_category: SalesByCategoryResponse;
+    sales_by_hour: SalesByHourResponse;
+    top_dishes: TopDishesResponse;
+    kitchen_performance: KitchenPerformanceResponse;
+    live_operations: LiveOperationsResponse;
+    payment_analytics: PaymentAnalyticsResponse;
+    order_sources: OrderSourceResponse;
+    generated_at: string;
+}
+
+// ============================================
 // Analytics API
 // ============================================
 
@@ -1059,6 +1178,69 @@ export const analyticsApi = {
         const endpoint = query ? `/analytics/sales-by-category?${query}` : '/analytics/sales-by-category';
 
         return apiRequest<SalesByCategoryResponse>(endpoint);
+    },
+
+    /**
+     * Get kitchen/KDS performance metrics
+     */
+    getKitchenPerformance: async (startDate?: Date, endDate?: Date): Promise<KitchenPerformanceResponse> => {
+        const params = new URLSearchParams();
+        if (startDate) params.append('start_date', startDate.toISOString());
+        if (endDate) params.append('end_date', endDate.toISOString());
+
+        const query = params.toString();
+        const endpoint = query ? `/analytics/kitchen-performance?${query}` : '/analytics/kitchen-performance';
+
+        return apiRequest<KitchenPerformanceResponse>(endpoint);
+    },
+
+    /**
+     * Get real-time operations pulse (no date range - live data)
+     */
+    getOperationsPulse: async (): Promise<LiveOperationsResponse> => {
+        return apiRequest<LiveOperationsResponse>('/analytics/operations-pulse');
+    },
+
+    /**
+     * Get payment method breakdown and cashier analytics
+     */
+    getPaymentAnalytics: async (startDate?: Date, endDate?: Date): Promise<PaymentAnalyticsResponse> => {
+        const params = new URLSearchParams();
+        if (startDate) params.append('start_date', startDate.toISOString());
+        if (endDate) params.append('end_date', endDate.toISOString());
+
+        const query = params.toString();
+        const endpoint = query ? `/analytics/payment-analytics?${query}` : '/analytics/payment-analytics';
+
+        return apiRequest<PaymentAnalyticsResponse>(endpoint);
+    },
+
+    /**
+     * Get order source breakdown (POS, Self-Service, Delivery, Kiosk)
+     */
+    getOrderSources: async (startDate?: Date, endDate?: Date): Promise<OrderSourceResponse> => {
+        const params = new URLSearchParams();
+        if (startDate) params.append('start_date', startDate.toISOString());
+        if (endDate) params.append('end_date', endDate.toISOString());
+
+        const query = params.toString();
+        const endpoint = query ? `/analytics/order-sources?${query}` : '/analytics/order-sources';
+
+        return apiRequest<OrderSourceResponse>(endpoint);
+    },
+
+    /**
+     * 🚀 Unified dashboard - ALL analytics in a single request
+     */
+    getUnifiedDashboard: async (startDate?: Date, endDate?: Date): Promise<UnifiedDashboardResponse> => {
+        const params = new URLSearchParams();
+        if (startDate) params.append('start_date', startDate.toISOString());
+        if (endDate) params.append('end_date', endDate.toISOString());
+
+        const query = params.toString();
+        const endpoint = query ? `/analytics/dashboard?${query}` : '/analytics/dashboard';
+
+        return apiRequest<UnifiedDashboardResponse>(endpoint);
     }
 };
 

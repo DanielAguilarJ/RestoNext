@@ -17,7 +17,12 @@ from app.services.analytics_service import (
     get_top_profitable_dishes,
     get_sales_comparison,
     get_kpis,
-    get_sales_by_category
+    get_sales_by_category,
+    get_kitchen_performance,
+    get_live_operations,
+    get_payment_analytics,
+    get_order_source_analytics,
+    get_unified_dashboard,
 )
 from app.schemas.schemas import ForecastResponse
 from app.schemas.analytics_schemas import (
@@ -25,7 +30,12 @@ from app.schemas.analytics_schemas import (
     TopDishesResponse,
     SalesComparisonResponse,
     KPIResponse,
-    SalesByCategoryResponse
+    SalesByCategoryResponse,
+    KitchenPerformanceResponse,
+    LiveOperationsResponse,
+    PaymentAnalyticsResponse,
+    OrderSourceResponse,
+    UnifiedDashboardResponse,
 )
 from app.services.ai_service import AIService
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -392,3 +402,222 @@ async def api_get_demand_context(
             "demand_multiplier": round(demand_multiplier, 2),
             "analysis_summary": analysis
         }
+
+
+# ============================================
+# Kitchen / KDS Performance
+# ============================================
+
+@router.get("/kitchen-performance", response_model=KitchenPerformanceResponse)
+async def api_get_kitchen_performance(
+    start_date: datetime = Query(
+        default=None,
+        description="Start date for analysis (defaults to 7 days ago)"
+    ),
+    end_date: datetime = Query(
+        default=None,
+        description="End date for analysis (defaults to now)"
+    ),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_manager_or_admin),
+):
+    """
+    Get Kitchen Display System performance metrics.
+    
+    Returns:
+    - **avg_prep_minutes**: Average order preparation time
+    - **median_prep_minutes**: Median prep time (less sensitive to outliers)
+    - **p95_prep_minutes**: 95th percentile (worst case scenario)
+    - **items_per_hour**: Kitchen throughput
+    - **station_breakdown**: Items processed by station (kitchen vs bar)
+    - **bottleneck**: Slow orders analysis (>20min)
+    
+    Use this to identify kitchen bottlenecks and optimize workflows.
+    """
+    start_date = normalize_datetime(start_date)
+    end_date = normalize_datetime(end_date)
+    
+    if not end_date:
+        end_date = datetime.utcnow()
+    if not start_date:
+        start_date = end_date - timedelta(days=7)
+    
+    result = await get_kitchen_performance(
+        db=db,
+        tenant_id=current_user.tenant_id,
+        start_date=start_date,
+        end_date=end_date
+    )
+    
+    return result
+
+
+# ============================================
+# Real-time Operations Pulse
+# ============================================
+
+@router.get("/operations-pulse", response_model=LiveOperationsResponse)
+async def api_get_live_operations(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_manager_or_admin),
+):
+    """
+    Get real-time operational metrics.
+    
+    Returns LIVE data (no date range needed):
+    - **occupancy**: Table occupancy (occupied vs total, percentage)
+    - **active_orders**: Orders in progress by status (OPEN, IN_PROGRESS, READY, PENDING_PAYMENT)
+    - **kitchen_queue**: Number of items pending in kitchen
+    - **avg_prep_minutes_today**: Average prep time for today
+    - **today**: Today's sales and order count
+    
+    This endpoint is designed for frequent polling (every 30-60 seconds)
+    to power the Operations Pulse widget in the analytics dashboard.
+    """
+    result = await get_live_operations(
+        db=db,
+        tenant_id=current_user.tenant_id
+    )
+    
+    return result
+
+
+# ============================================
+# Payment / Cashier Analytics
+# ============================================
+
+@router.get("/payment-analytics", response_model=PaymentAnalyticsResponse)
+async def api_get_payment_analytics(
+    start_date: datetime = Query(
+        default=None,
+        description="Start date for analysis (defaults to 30 days ago)"
+    ),
+    end_date: datetime = Query(
+        default=None,
+        description="End date for analysis (defaults to now)"
+    ),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_manager_or_admin),
+):
+    """
+    Get payment method breakdown and cashier shift analytics.
+    
+    Returns:
+    - **payment_methods**: Breakdown by CASH, CARD, TRANSFER (count, amount, tips, %)
+    - **total_revenue**: Total revenue from all payment methods
+    - **total_tips**: Total tips collected
+    - **tip_percentage**: Tips as % of revenue
+    - **shifts**: Cash shift summary (total, avg duration, discrepancies, drops)
+    
+    Integrates CashShift/CashTransaction data for complete cash flow picture.
+    """
+    start_date = normalize_datetime(start_date)
+    end_date = normalize_datetime(end_date)
+    
+    if not end_date:
+        end_date = datetime.utcnow()
+    if not start_date:
+        start_date = end_date - timedelta(days=30)
+    
+    result = await get_payment_analytics(
+        db=db,
+        tenant_id=current_user.tenant_id,
+        start_date=start_date,
+        end_date=end_date
+    )
+    
+    return result
+
+
+# ============================================
+# Order Source Analytics
+# ============================================
+
+@router.get("/order-sources", response_model=OrderSourceResponse)
+async def api_get_order_sources(
+    start_date: datetime = Query(
+        default=None,
+        description="Start date for analysis (defaults to 30 days ago)"
+    ),
+    end_date: datetime = Query(
+        default=None,
+        description="End date for analysis (defaults to now)"
+    ),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_manager_or_admin),
+):
+    """
+    Get order breakdown by source channel (POS, Self-Service, Delivery, Kiosk).
+    
+    Helps understand which ordering channels generate the most revenue.
+    """
+    start_date = normalize_datetime(start_date)
+    end_date = normalize_datetime(end_date)
+    
+    if not end_date:
+        end_date = datetime.utcnow()
+    if not start_date:
+        start_date = end_date - timedelta(days=30)
+    
+    result = await get_order_source_analytics(
+        db=db,
+        tenant_id=current_user.tenant_id,
+        start_date=start_date,
+        end_date=end_date
+    )
+    
+    return result
+
+
+# ============================================
+# Unified Dashboard Endpoint
+# ============================================
+
+@router.get("/dashboard")
+async def api_get_unified_dashboard(
+    start_date: datetime = Query(
+        default=None,
+        description="Start date for analysis (defaults to 30 days ago)"
+    ),
+    end_date: datetime = Query(
+        default=None,
+        description="End date for analysis (defaults to now)"
+    ),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_manager_or_admin),
+):
+    """
+    🚀 Unified Dashboard - Single endpoint for ALL analytics data.
+    
+    Returns all dashboard widgets' data in a single optimized request.
+    Eliminates the need for 5+ parallel API calls from the frontend.
+    
+    Includes:
+    - KPIs (average ticket, total sales, food cost %)
+    - Sales comparison (current vs previous week)
+    - Sales by category (pie chart)
+    - Sales by hour (heatmap)
+    - Top dishes (profitability table)
+    - Kitchen performance (prep times, throughput)
+    - Live operations (table occupancy, active orders)
+    - Payment analytics (method breakdown, tips, shifts)
+    - Order sources (POS vs self-service vs delivery)
+    
+    All queries are executed in parallel using asyncio.gather for maximum performance.
+    """
+    start_date = normalize_datetime(start_date)
+    end_date = normalize_datetime(end_date)
+    
+    if not end_date:
+        end_date = datetime.utcnow()
+    if not start_date:
+        start_date = end_date - timedelta(days=30)
+    
+    result = await get_unified_dashboard(
+        db=db,
+        tenant_id=current_user.tenant_id,
+        start_date=start_date,
+        end_date=end_date
+    )
+    
+    return result

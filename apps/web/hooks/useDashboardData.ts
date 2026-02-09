@@ -7,7 +7,12 @@ import {
     KPIResponse,
     SalesComparisonResponse,
     TopDishesResponse,
-    SalesByCategoryResponse
+    SalesByCategoryResponse,
+    KitchenPerformanceResponse,
+    LiveOperationsResponse,
+    PaymentAnalyticsResponse,
+    OrderSourceResponse,
+    UnifiedDashboardResponse,
 } from '@/lib/api';
 
 // ============================================
@@ -278,12 +283,21 @@ export function useOperationsPulse() {
     const { filters } = useDashboardContext();
     const { dateRange } = filters;
 
-    // Fetch current KPIs with shorter stale time for "live" feel
+    // Fetch LIVE operations data (no date range - real-time)
+    const liveOpsQuery = useQuery({
+        queryKey: ['operationsPulse', 'live'],
+        queryFn: () => analyticsApi.getOperationsPulse(),
+        staleTime: 10 * 1000, // 10 seconds for live data
+        refetchInterval: 30 * 1000, // Auto-refresh every 30 seconds
+        placeholderData: (previousData) => previousData,
+    });
+
+    // Fetch current KPIs for sales delta comparison
     const kpisQuery = useQuery({
         queryKey: ['operationsPulse', 'kpis', dateRange.from.toISOString(), dateRange.to.toISOString()],
         queryFn: () => analyticsApi.getKPIs(dateRange.from, dateRange.to),
-        staleTime: 15 * 1000, // 15 seconds for more "live" data
-        refetchInterval: 30 * 1000, // Auto-refresh every 30 seconds
+        staleTime: 15 * 1000,
+        refetchInterval: 30 * 1000,
         placeholderData: (previousData) => previousData,
     });
 
@@ -318,21 +332,23 @@ export function useOperationsPulse() {
         previousQuery.data?.total_sales ?? 0
     );
 
+    // Use REAL data from live operations endpoint
+    const liveOps = liveOpsQuery.data;
+
     const data: OperationsPulseData | null = kpisQuery.data ? {
         liveSales,
         occupancy: {
-            percentage: 75, // TODO: Connect to real tables API
-            activeTables: 18,
-            totalTables: 24,
+            percentage: liveOps?.occupancy.percentage ?? 0,
+            activeTables: liveOps?.occupancy.occupied_tables ?? 0,
+            totalTables: liveOps?.occupancy.total_tables ?? 0,
         },
         kitchenSpeed: {
-            averageMinutes: 12.5,
-            targetMinutes: 15,
-            deltaMinutes: -2.5,
+            averageMinutes: liveOps?.avg_prep_minutes_today ?? 0,
+            targetMinutes: 15, // Configurable target
+            deltaMinutes: (liveOps?.avg_prep_minutes_today ?? 15) - 15,
         },
         recentSalesData: sparklineData.length > 0 ? sparklineData : [
-            { value: 400 }, { value: 600 }, { value: 500 },
-            { value: 900 }, { value: 800 }, { value: 1200 }, { value: 1100 }
+            { value: 0 }
         ],
     } : null;
 
@@ -342,15 +358,160 @@ export function useOperationsPulse() {
 
     return {
         data,
-        isLoading: kpisQuery.isLoading,
-        isFetching: kpisQuery.isFetching || hourlyQuery.isFetching,
-        error: kpisQuery.error,
+        liveOps, // Expose full live operations data
+        isLoading: kpisQuery.isLoading || liveOpsQuery.isLoading,
+        isFetching: kpisQuery.isFetching || hourlyQuery.isFetching || liveOpsQuery.isFetching,
+        error: kpisQuery.error || liveOpsQuery.error,
         isDayZero,
         refetch: () => {
             kpisQuery.refetch();
             hourlyQuery.refetch();
             previousQuery.refetch();
+            liveOpsQuery.refetch();
         },
+    };
+}
+
+// ============================================
+// HOOK: useKitchenPerformance
+// ============================================
+
+export function useKitchenPerformance() {
+    const { filters } = useDashboardContext();
+    const { dateRange } = filters;
+
+    const query = useQuery({
+        queryKey: ['kitchenPerformance', dateRange.from.toISOString(), dateRange.to.toISOString()],
+        queryFn: () => analyticsApi.getKitchenPerformance(dateRange.from, dateRange.to),
+        staleTime: 30 * 1000,
+        placeholderData: (previousData) => previousData,
+    });
+
+    const data = query.data;
+
+    // Determine performance level
+    const performanceLevel: 'excellent' | 'good' | 'warning' | 'critical' = data
+        ? data.avg_prep_minutes <= 10
+            ? 'excellent'
+            : data.avg_prep_minutes <= 15
+                ? 'good'
+                : data.avg_prep_minutes <= 25
+                    ? 'warning'
+                    : 'critical'
+        : 'good';
+
+    return {
+        data,
+        performanceLevel,
+        isLoading: query.isLoading,
+        isFetching: query.isFetching,
+        error: query.error,
+        refetch: query.refetch,
+    };
+}
+
+// ============================================
+// HOOK: usePaymentAnalytics
+// ============================================
+
+export function usePaymentAnalytics() {
+    const { filters } = useDashboardContext();
+    const { dateRange } = filters;
+
+    const query = useQuery({
+        queryKey: ['paymentAnalytics', dateRange.from.toISOString(), dateRange.to.toISOString()],
+        queryFn: () => analyticsApi.getPaymentAnalytics(dateRange.from, dateRange.to),
+        staleTime: 60 * 1000,
+        placeholderData: (previousData) => previousData,
+    });
+
+    const data = query.data;
+
+    // Transform payment methods for chart display
+    const chartData = data
+        ? Object.entries(data.payment_methods).map(([method, info]) => ({
+            name: method === 'CASH' ? 'Efectivo'
+                : method === 'CARD' ? 'Tarjeta'
+                : method === 'TRANSFER' ? 'Transferencia'
+                : method,
+            value: info.amount,
+            percentage: info.percentage,
+            count: info.count,
+            tips: info.tips,
+        }))
+        : [];
+
+    return {
+        data,
+        chartData,
+        isLoading: query.isLoading,
+        isFetching: query.isFetching,
+        error: query.error,
+        refetch: query.refetch,
+    };
+}
+
+// ============================================
+// HOOK: useOrderSources
+// ============================================
+
+export function useOrderSources() {
+    const { filters } = useDashboardContext();
+    const { dateRange } = filters;
+
+    const query = useQuery({
+        queryKey: ['orderSources', dateRange.from.toISOString(), dateRange.to.toISOString()],
+        queryFn: () => analyticsApi.getOrderSources(dateRange.from, dateRange.to),
+        staleTime: 60 * 1000,
+        placeholderData: (previousData) => previousData,
+    });
+
+    const data = query.data;
+
+    const chartData = data?.sources.map(s => ({
+        name: s.source === 'POS' ? 'POS'
+            : s.source === 'SELF_SERVICE' ? 'Autoservicio'
+            : s.source === 'DELIVERY_APP' ? 'Delivery'
+            : s.source === 'KIOSK' ? 'Kiosco'
+            : s.source ?? 'Otro',
+        value: s.total_sales,
+        orders: s.order_count,
+        avg_ticket: s.avg_ticket,
+        percentage: s.percentage,
+    })) ?? [];
+
+    return {
+        data,
+        chartData,
+        isLoading: query.isLoading,
+        isFetching: query.isFetching,
+        error: query.error,
+        refetch: query.refetch,
+    };
+}
+
+// ============================================
+// HOOK: useUnifiedDashboard (Single request for all data)
+// ============================================
+
+export function useUnifiedDashboard() {
+    const { filters } = useDashboardContext();
+    const { dateRange } = filters;
+
+    const query = useQuery({
+        queryKey: ['unifiedDashboard', dateRange.from.toISOString(), dateRange.to.toISOString()],
+        queryFn: () => analyticsApi.getUnifiedDashboard(dateRange.from, dateRange.to),
+        staleTime: 30 * 1000,
+        refetchInterval: 60 * 1000, // Auto-refresh every minute
+        placeholderData: (previousData) => previousData,
+    });
+
+    return {
+        data: query.data,
+        isLoading: query.isLoading,
+        isFetching: query.isFetching,
+        error: query.error,
+        refetch: query.refetch,
     };
 }
 

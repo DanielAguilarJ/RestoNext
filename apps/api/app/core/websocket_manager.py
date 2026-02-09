@@ -216,6 +216,30 @@ class ConnectionManager:
         }
         await self.broadcast_to_channel(message, "waiter")
     
+    async def notify_analytics_update(self, event_type: str, data: dict):
+        """
+        Broadcast analytics-relevant events to all connected dashboards.
+        
+        Events:
+        - analytics:order_paid - When an order is paid (updates live sales)
+        - analytics:table_status - When table status changes (updates occupancy)
+        - analytics:kitchen_update - When kitchen throughput changes
+        
+        Sent to POS and cashier channels since analytics dashboards
+        are typically viewed by managers on POS/cashier stations.
+        """
+        message = {
+            "event": f"analytics:{event_type}",
+            "payload": {
+                "timestamp": datetime.utcnow().isoformat(),
+                **data
+            }
+        }
+        # Broadcast to all channels that might have analytics dashboards
+        await self.broadcast_to_channel(message, "pos")
+        await self.broadcast_to_channel(message, "cashier")
+        await self.broadcast_to_channel(message, "all")
+    
     async def notify_table_order_update(self, table_id: str, order_data: dict):
         """
         Notify about order updates for a specific table.
