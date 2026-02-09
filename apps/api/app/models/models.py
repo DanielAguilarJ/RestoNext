@@ -58,6 +58,8 @@ class OrderItemStatus(str, enum.Enum):
     PREPARING = "preparing"
     READY = "ready"
     SERVED = "served"
+    DELIVERED = "delivered"
+    CANCELLED = "cancelled"
 
 
 class RouteDestination(str, enum.Enum):
@@ -135,12 +137,6 @@ class ReservationStatus(str, enum.Enum):
     SEATED = "seated"
     CANCELLED = "cancelled"
     NO_SHOW = "no_show"
-
-
-    EARN = "earn"       # Acumular
-    REDEEM = "redeem"   # Redimir
-    ADJUSTMENT = "adjustment"
-    EXPIRED = "expired" # Puntos expirados
 
 
 class LoyaltyTier(str, enum.Enum):

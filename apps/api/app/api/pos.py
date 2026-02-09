@@ -292,14 +292,14 @@ async def list_orders(
         
         if status:
             # Strip whitespace and validate enum values
-            valid_statuses = {s.value for s in OrderStatus}
+            valid_statuses = {s.value: s for s in OrderStatus}
             status_list = [s.strip() for s in status.split(',') if s.strip()]
-            status_list = [s for s in status_list if s in valid_statuses]
-            if status_list:
-                if len(status_list) > 1:
-                    query = query.where(Order.status.in_(status_list))
+            enum_list = [valid_statuses[s] for s in status_list if s in valid_statuses]
+            if enum_list:
+                if len(enum_list) > 1:
+                    query = query.where(Order.status.in_(enum_list))
                 else:
-                    query = query.where(Order.status == status_list[0])
+                    query = query.where(Order.status == enum_list[0])
         
         if table_id:
             query = query.where(Order.table_id == table_id)
