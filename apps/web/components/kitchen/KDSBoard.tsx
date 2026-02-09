@@ -63,6 +63,7 @@ export function KDSBoard() {
     const [isLoadingConfig, setIsLoadingConfig] = useState(true);
     const [audioEnabled, setAudioEnabled] = useState(true);
     const [bumpingOrders, setBumpingOrders] = useState<Set<string>>(new Set());
+    const updatingItemsRef = useRef<Set<string>>(new Set());
     const audioContextRef = useRef<AudioContext | null>(null);
     const criticalOrdersPlayedRef = useRef<Set<string>>(new Set());
     const overdueItemsPlayedRef = useRef<Set<string>>(new Set());
@@ -138,11 +139,24 @@ export function KDSBoard() {
                 setTickets((prev: KDSTicket[]) => {
                     const prevIds = new Set(prev.map((t) => t.id));
                     const freshIds = new Set(fresh.map((t) => t.id));
-                    const hasChanges =
+                    // Check for ticket additions/removals
+                    const ticketSetChanged =
                         fresh.length !== prev.length ||
                         fresh.some((t) => !prevIds.has(t.id)) ||
                         prev.some((t) => !freshIds.has(t.id));
-                    return hasChanges ? fresh : prev;
+                    if (ticketSetChanged) return fresh;
+                    // Also check for item status changes within tickets
+                    const prevMap = new Map(prev.map((t) => [t.id, t]));
+                    const hasItemChanges = fresh.some((ft) => {
+                        const pt = prevMap.get(ft.id);
+                        if (!pt) return true;
+                        if (ft.items.length !== pt.items.length) return true;
+                        return ft.items.some((fi, idx) => {
+                            const pi = pt.items[idx];
+                            return !pi || fi.id !== pi.id || fi.status !== pi.status;
+                        });
+                    });
+                    return hasItemChanges ? fresh : prev;
                 });
             } catch {
                 // Silent fallback
@@ -240,12 +254,15 @@ export function KDSBoard() {
         }
     }, [getAudioCtx]);
 
-    // Handle item click -> cycle status
+    // Handle item click -> cycle status (with in-flight guard to prevent race conditions)
     const handleItemClick = async (
         ticketId: string,
         itemId: string,
         currentStatus: string
     ) => {
+        // Prevent double-clicks while an API call is in-flight for this item
+        if (updatingItemsRef.current.has(itemId)) return;
+
         const nextStatus =
             currentStatus === "pending"
                 ? "preparing"
@@ -253,6 +270,8 @@ export function KDSBoard() {
                     ? "ready"
                     : null;
         if (!nextStatus) return; // Already ready, no further cycling
+
+        updatingItemsRef.current.add(itemId);
 
         updateItemStatus(
             ticketId,
@@ -269,6 +288,8 @@ export function KDSBoard() {
                 itemId,
                 currentStatus as "pending" | "preparing" | "ready"
             );
+        } finally {
+            updatingItemsRef.current.delete(itemId);
         }
     };
 

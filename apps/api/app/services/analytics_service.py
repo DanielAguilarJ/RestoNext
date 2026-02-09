@@ -55,8 +55,8 @@ async def get_sales_by_hour(
     Returns data suitable for a 7-day (rows) x 24-hour (columns) heatmap.
     """
     # Query using PostgreSQL EXTRACT for hour and day of week
-    # CRITICAL: PostgreSQL stores enum NAMES (PAID, DELIVERED) not values (paid, delivered)
-    # SQLAlchemy's SQLEnum stores the Python enum name by default
+    # PostgreSQL enum values are stored in lowercase to match Python model values
+    # Migration a013 normalized all enum values to lowercase
     query = text("""
         SELECT 
             EXTRACT(HOUR FROM o.created_at)::int AS hour,
@@ -65,7 +65,7 @@ async def get_sales_by_hour(
             COUNT(o.id) AS order_count
         FROM orders o
         WHERE o.tenant_id = :tenant_id
-            AND o.status IN ('PAID', 'DELIVERED')
+            AND o.status IN ('paid', 'delivered')
             AND o.created_at >= :start_date
             AND o.created_at <= :end_date
         GROUP BY 
@@ -121,7 +121,7 @@ async def get_top_profitable_dishes(
     Calculates profit margin as percentage.
     """
     # First, get revenue per menu item
-    # CRITICAL: Use uppercase enum names (PAID, DELIVERED)
+    # Enum values are lowercase (paid, delivered) matching Python model
     revenue_query = text("""
         SELECT 
             mi.id AS menu_item_id,
@@ -134,7 +134,7 @@ async def get_top_profitable_dishes(
         JOIN menu_items mi ON mi.id = oi.menu_item_id
         JOIN menu_categories mc ON mc.id = mi.category_id
         WHERE o.tenant_id = :tenant_id
-            AND o.status IN ('PAID', 'DELIVERED')
+            AND o.status IN ('paid', 'delivered')
             AND o.created_at >= :start_date
             AND o.created_at <= :end_date
         GROUP BY mi.id, mi.name, mc.name
@@ -221,7 +221,7 @@ async def get_sales_comparison(
                 COUNT(o.id) AS order_count
             FROM orders o
             WHERE o.tenant_id = :tenant_id
-                AND o.status IN ('PAID', 'DELIVERED')
+                AND o.status IN ('paid', 'delivered')
                 AND DATE(o.created_at) >= :start_date
                 AND DATE(o.created_at) <= :end_date
             GROUP BY DATE(o.created_at), EXTRACT(DOW FROM o.created_at)
@@ -289,7 +289,7 @@ async def get_kpis(
     - Average orders per day
     - Busiest hour and day
     """
-    # Basic order aggregations - use uppercase enum names
+    # Basic order aggregations - enum values are lowercase
     query = text("""
         SELECT 
             COALESCE(AVG(o.total), 0) AS average_ticket,
@@ -297,7 +297,7 @@ async def get_kpis(
             COUNT(o.id) AS total_orders
         FROM orders o
         WHERE o.tenant_id = :tenant_id
-            AND o.status IN ('PAID', 'DELIVERED')
+            AND o.status IN ('paid', 'delivered')
             AND o.created_at >= :start_date
             AND o.created_at <= :end_date
     """)
@@ -326,7 +326,7 @@ async def get_kpis(
         FROM order_items oi
         JOIN orders o ON o.id = oi.order_id
         WHERE o.tenant_id = :tenant_id
-            AND o.status IN ('PAID', 'DELIVERED')
+            AND o.status IN ('paid', 'delivered')
             AND o.created_at >= :start_date
             AND o.created_at <= :end_date
     """)
@@ -353,7 +353,7 @@ async def get_kpis(
             COUNT(o.id) AS order_count
         FROM orders o
         WHERE o.tenant_id = :tenant_id
-            AND o.status IN ('PAID', 'DELIVERED')
+            AND o.status IN ('paid', 'delivered')
             AND o.created_at >= :start_date
             AND o.created_at <= :end_date
         GROUP BY EXTRACT(HOUR FROM o.created_at)
@@ -377,7 +377,7 @@ async def get_kpis(
             COUNT(o.id) AS order_count
         FROM orders o
         WHERE o.tenant_id = :tenant_id
-            AND o.status IN ('PAID', 'DELIVERED')
+            AND o.status IN ('paid', 'delivered')
             AND o.created_at >= :start_date
             AND o.created_at <= :end_date
         GROUP BY EXTRACT(DOW FROM o.created_at)
@@ -429,7 +429,7 @@ async def get_sales_by_category(
         JOIN menu_items mi ON mi.id = oi.menu_item_id
         JOIN menu_categories mc ON mc.id = mi.category_id
         WHERE o.tenant_id = :tenant_id
-            AND o.status IN ('PAID', 'DELIVERED')
+            AND o.status IN ('paid', 'delivered')
             AND o.created_at >= :start_date
             AND o.created_at <= :end_date
         GROUP BY mc.id, mc.name
@@ -513,7 +513,7 @@ async def get_kitchen_performance(
             COUNT(o.id) AS orders_completed
         FROM orders o
         WHERE o.tenant_id = :tenant_id
-            AND o.status IN ('READY', 'DELIVERED', 'PAID')
+            AND o.status IN ('ready', 'delivered', 'paid')
             AND o.created_at >= :start_date
             AND o.created_at <= :end_date
             AND o.updated_at > o.created_at
@@ -540,7 +540,7 @@ async def get_kitchen_performance(
         FROM order_items oi
         JOIN orders o ON o.id = oi.order_id
         WHERE o.tenant_id = :tenant_id
-            AND o.status IN ('READY', 'DELIVERED', 'PAID')
+            AND o.status IN ('ready', 'delivered', 'paid')
             AND o.created_at >= :start_date
             AND o.created_at <= :end_date
         GROUP BY oi.route_to
@@ -571,7 +571,7 @@ async def get_kitchen_performance(
             COALESCE(AVG(EXTRACT(EPOCH FROM (o.updated_at - o.created_at)) / 60.0), 0) AS avg_slow_minutes
         FROM orders o
         WHERE o.tenant_id = :tenant_id
-            AND o.status IN ('READY', 'DELIVERED', 'PAID')
+            AND o.status IN ('ready', 'delivered', 'paid')
             AND o.created_at >= :start_date
             AND o.created_at <= :end_date
             AND o.updated_at > o.created_at
@@ -626,7 +626,7 @@ async def get_live_operations(
     table_query = text("""
         SELECT 
             COUNT(*) AS total_tables,
-            COALESCE(SUM(CASE WHEN t.status != 'FREE' THEN 1 ELSE 0 END), 0) AS occupied_tables
+            COALESCE(SUM(CASE WHEN t.status != 'free' THEN 1 ELSE 0 END), 0) AS occupied_tables
         FROM tables t
         WHERE t.tenant_id = :tenant_id
             AND t.number > 0
@@ -646,7 +646,7 @@ async def get_live_operations(
             COUNT(o.id) AS count
         FROM orders o
         WHERE o.tenant_id = :tenant_id
-            AND o.status IN ('OPEN', 'IN_PROGRESS', 'READY', 'PENDING_PAYMENT')
+            AND o.status IN ('open', 'in_progress', 'ready', 'pending_payment')
         GROUP BY o.status
     """)
     
@@ -665,7 +665,7 @@ async def get_live_operations(
             COUNT(o.id) AS today_orders
         FROM orders o
         WHERE o.tenant_id = :tenant_id
-            AND o.status IN ('PAID', 'DELIVERED')
+            AND o.status IN ('paid', 'delivered')
             AND o.created_at >= :today_start
     """)
     
@@ -683,8 +683,8 @@ async def get_live_operations(
         FROM order_items oi
         JOIN orders o ON o.id = oi.order_id
         WHERE o.tenant_id = :tenant_id
-            AND o.status IN ('OPEN', 'IN_PROGRESS')
-            AND oi.status IN ('PENDING', 'PREPARING')
+            AND o.status IN ('open', 'in_progress')
+            AND oi.status IN ('pending', 'preparing')
     """)
     
     queue_result = await db.execute(queue_query, {"tenant_id": str(tenant_id)})
@@ -700,7 +700,7 @@ async def get_live_operations(
             ) AS avg_prep_minutes
         FROM orders o
         WHERE o.tenant_id = :tenant_id
-            AND o.status IN ('READY', 'DELIVERED', 'PAID')
+            AND o.status IN ('ready', 'delivered', 'paid')
             AND o.created_at >= :today_start
             AND o.updated_at > o.created_at
     """)
@@ -755,7 +755,7 @@ async def get_payment_analytics(
         FROM cash_transactions ct
         JOIN cash_shifts cs ON cs.id = ct.shift_id
         WHERE cs.tenant_id = :tenant_id
-            AND ct.transaction_type = 'SALE'
+            AND ct.transaction_type = 'sale'
             AND ct.created_at >= :start_date
             AND ct.created_at <= :end_date
         GROUP BY ct.payment_method
@@ -800,7 +800,7 @@ async def get_payment_analytics(
             COALESCE(SUM(cs.total_drops), 0) AS total_drops
         FROM cash_shifts cs
         WHERE cs.tenant_id = :tenant_id
-            AND cs.status = 'CLOSED'
+            AND cs.status = 'closed'
             AND cs.opened_at >= :start_date
             AND cs.closed_at <= :end_date
     """)
@@ -852,7 +852,7 @@ async def get_order_source_analytics(
             COALESCE(AVG(o.total), 0) AS avg_ticket
         FROM orders o
         WHERE o.tenant_id = :tenant_id
-            AND o.status IN ('PAID', 'DELIVERED')
+            AND o.status IN ('paid', 'delivered')
             AND o.created_at >= :start_date
             AND o.created_at <= :end_date
         GROUP BY o.order_source
@@ -911,7 +911,7 @@ async def get_service_type_analytics(
             COALESCE(AVG(o.total), 0) AS avg_ticket
         FROM orders o
         WHERE o.tenant_id = :tenant_id
-            AND o.status IN ('PAID', 'DELIVERED')
+            AND o.status IN ('paid', 'delivered')
             AND o.created_at >= :start_date
             AND o.created_at <= :end_date
         GROUP BY o.service_type
