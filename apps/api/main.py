@@ -461,6 +461,27 @@ async def pos_websocket(websocket: WebSocket):
         ws_manager.disconnect(websocket, "pos")
 
 
+@app.websocket("/ws/all")
+async def all_websocket(websocket: WebSocket):
+    """
+    WebSocket for Dashboard/Manager views.
+    Receives analytics broadcasts (order_paid, sale_recorded, table_status).
+    Used by the main dashboard for real-time KPI updates.
+    """
+    await ws_manager.connect(websocket, "all")
+    try:
+        while True:
+            data = await websocket.receive_text()
+            if data == "ping":
+                await websocket.send_text("pong")
+    except WebSocketDisconnect:
+        pass
+    except Exception:
+        pass
+    finally:
+        ws_manager.disconnect(websocket, "all")
+
+
 @app.websocket("/ws/customer/{table_number}")
 async def customer_websocket(websocket: WebSocket, table_number: int):
     """

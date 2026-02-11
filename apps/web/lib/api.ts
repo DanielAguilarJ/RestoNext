@@ -783,7 +783,69 @@ export const menuApi = {
             method: 'POST',
         });
     },
+
+    // ---- Recipe / Escandallo ----
+
+    /**
+     * List all recipe ingredients for a menu item
+     */
+    getRecipes: async (itemId: string): Promise<RecipeEntry[]> => {
+        return apiRequest<RecipeEntry[]>(`/menu/items/${itemId}/recipes`);
+    },
+
+    /**
+     * Add an ingredient to a menu item's recipe
+     */
+    addRecipe: async (itemId: string, data: RecipeCreateData): Promise<RecipeEntry> => {
+        return apiRequest<RecipeEntry>(`/menu/items/${itemId}/recipes`, {
+            method: 'POST',
+            body: JSON.stringify(data),
+        });
+    },
+
+    /**
+     * Update a recipe entry (quantity, unit, notes)
+     */
+    updateRecipe: async (itemId: string, recipeId: string, data: RecipeUpdateData): Promise<RecipeEntry> => {
+        return apiRequest<RecipeEntry>(`/menu/items/${itemId}/recipes/${recipeId}`, {
+            method: 'PATCH',
+            body: JSON.stringify(data),
+        });
+    },
+
+    /**
+     * Remove an ingredient from a menu item's recipe
+     */
+    deleteRecipe: async (itemId: string, recipeId: string): Promise<void> => {
+        await apiRequest(`/menu/items/${itemId}/recipes/${recipeId}`, {
+            method: 'DELETE',
+        });
+    },
 };
+
+// Recipe types
+export interface RecipeEntry {
+    id: string;
+    menu_item_id: string;
+    ingredient_id: string;
+    ingredient_name: string;
+    quantity: number;
+    unit: string;
+    notes?: string;
+}
+
+export interface RecipeCreateData {
+    ingredient_id: string;
+    quantity: number;
+    unit: string; // kg, g, lt, ml, pza, porcion
+    notes?: string;
+}
+
+export interface RecipeUpdateData {
+    quantity?: number;
+    unit?: string;
+    notes?: string;
+}
 
 
 // ============================================

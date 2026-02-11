@@ -100,6 +100,7 @@ export interface MenuItem extends AppwriteDocument {
   tags?: string[];
   allergens?: string[];
   calories?: number;
+  recipe_count?: number;  // Number of ingredients linked via recipe (escandallo)
 }
 
 // ============================================

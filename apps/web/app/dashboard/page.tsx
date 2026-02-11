@@ -10,7 +10,7 @@ import {
     Clock, TrendingUp, DollarSign, ClipboardList
 } from "lucide-react";
 import { motion } from "framer-motion";
-import { kdsApi, analyticsApi, tablesApi, inventoryApi, forecastApi, tenantApi } from "@/lib/api";
+import { kdsApi, analyticsApi, tablesApi, inventoryApi, forecastApi, tenantApi, wsClient } from "@/lib/api";
 
 // ============================================
 // Dashboard Modules (base config)
@@ -265,6 +265,41 @@ export default function DashboardHome() {
 
         fetchUserData();
     }, [router]);
+
+    // ============================================
+    // Real-time WebSocket for live KPI updates
+    // ============================================
+    useEffect(() => {
+        // Connect WebSocket
+        wsClient.connect('/ws/all');
+
+        const refreshStats = async () => {
+            try {
+                const today = new Date();
+                today.setHours(0, 0, 0, 0);
+                const kpis = await analyticsApi.getKPIs(today, new Date()).catch(() => ({ total_sales: 0, total_orders: 0 }));
+                setStats(prev => ({
+                    ...prev,
+                    salesToday: new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' }).format((kpis as any).total_sales || 0),
+                    ordersToday: ((kpis as any).total_orders || 0).toString(),
+                }));
+            } catch (err) {
+                console.error('Dashboard WS refresh error:', err);
+            }
+        };
+
+        // Subscribe to analytics events fired by backend on payment/sale
+        const unsub1 = wsClient.subscribe('analytics:order_paid', refreshStats);
+        const unsub2 = wsClient.subscribe('analytics:sale_recorded', refreshStats);
+        const unsub3 = wsClient.subscribe('order_paid', refreshStats);
+
+        return () => {
+            unsub1();
+            unsub2();
+            unsub3();
+            wsClient.disconnect();
+        };
+    }, []);
 
     // Helper for AI Demand Badge
     const getDemandBadge = (multiplier: number) => {

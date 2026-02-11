@@ -42,15 +42,20 @@ import {
     Upload,
     Link as LinkIcon,
     Clock,
+    Beaker,
 } from "lucide-react";
 import { motion, AnimatePresence, Reorder } from "framer-motion";
 import {
     menuApi,
+    inventoryApi,
     CategoryCreateData,
     CategoryUpdateData,
     ItemCreateData,
     ItemUpdateData,
     AIOptimizationResponse,
+    RecipeEntry,
+    RecipeCreateData,
+    Ingredient,
 } from "@/lib/api";
 import { EmptyState } from "@/components/ui/EmptyState";
 
@@ -79,6 +84,7 @@ interface MenuItem {
     route_to?: string;
     is_available?: boolean;
     sort_order?: number;
+    recipe_count?: number;
 }
 
 interface EditingCategory {
@@ -134,6 +140,15 @@ export default function AdminMenuPage() {
     const [aiResult, setAiResult] = useState<AIOptimizationResponse | null>(null);
     const [aiItemId, setAiItemId] = useState<string | null>(null);
     const [isOptimizing, setIsOptimizing] = useState(false);
+
+    // Recipe / Escandallo state
+    const [recipeTab, setRecipeTab] = useState<'details' | 'recipe'>('details');
+    const [recipeEntries, setRecipeEntries] = useState<RecipeEntry[]>([]);
+    const [ingredients, setIngredients] = useState<Ingredient[]>([]);
+    const [isLoadingRecipes, setIsLoadingRecipes] = useState(false);
+    const [newRecipeIngredientId, setNewRecipeIngredientId] = useState('');
+    const [newRecipeQty, setNewRecipeQty] = useState('');
+    const [newRecipeUnit, setNewRecipeUnit] = useState('kg');
 
     // ============================================
     // Data Loading
@@ -347,6 +362,56 @@ export default function AdminMenuPage() {
             console.error("Failed to apply AI description:", error);
         } finally {
             setIsSaving(false);
+        }
+    };
+
+    // ============================================
+    // Recipe / Escandallo
+    // ============================================
+
+    const loadRecipes = async (itemId: string) => {
+        setIsLoadingRecipes(true);
+        try {
+            const [recipes, allIngredients] = await Promise.all([
+                menuApi.getRecipes(itemId),
+                inventoryApi.list(),
+            ]);
+            setRecipeEntries(recipes);
+            setIngredients(allIngredients);
+        } catch (error) {
+            console.error('Failed to load recipes:', error);
+            setRecipeEntries([]);
+        } finally {
+            setIsLoadingRecipes(false);
+        }
+    };
+
+    const addRecipeEntry = async (itemId: string) => {
+        if (!newRecipeIngredientId || !newRecipeQty) return;
+        try {
+            const data: RecipeCreateData = {
+                ingredient_id: newRecipeIngredientId,
+                quantity: parseFloat(newRecipeQty),
+                unit: newRecipeUnit,
+            };
+            await menuApi.addRecipe(itemId, data);
+            await loadRecipes(itemId);
+            await loadData();
+            setNewRecipeIngredientId('');
+            setNewRecipeQty('');
+            setNewRecipeUnit('kg');
+        } catch (error) {
+            console.error('Failed to add recipe entry:', error);
+        }
+    };
+
+    const removeRecipeEntry = async (itemId: string, recipeId: string) => {
+        try {
+            await menuApi.deleteRecipe(itemId, recipeId);
+            await loadRecipes(itemId);
+            await loadData();
+        } catch (error) {
+            console.error('Failed to remove recipe entry:', error);
         }
     };
 
@@ -674,9 +739,17 @@ export default function AdminMenuPage() {
                                                 <p className="text-sm text-slate-400 line-clamp-2 h-10 mb-2">
                                                     {item.description || "Sin descripción"}
                                                 </p>
-                                                <p className="text-lg font-bold text-emerald-400">
-                                                    {formatPrice(item.price)}
-                                                </p>
+                                                <div className="flex items-center gap-2">
+                                                    <p className="text-lg font-bold text-emerald-400">
+                                                        {formatPrice(item.price)}
+                                                    </p>
+                                                    {(item.recipe_count ?? 0) > 0 && (
+                                                        <span className="inline-flex items-center gap-1 text-xs bg-amber-500/20 text-amber-400 px-2 py-0.5 rounded-full">
+                                                            <Beaker className="w-3 h-3" />
+                                                            {item.recipe_count}
+                                                        </span>
+                                                    )}
+                                                </div>
 
                                                 {/* Actions */}
                                                 <div className="flex items-center gap-2 mt-3 pt-3 border-t border-slate-600/50">
@@ -725,7 +798,15 @@ export default function AdminMenuPage() {
 
                                             {/* Info */}
                                             <div className="flex-1 min-w-0">
-                                                <h3 className="font-semibold text-white truncate">{item.name}</h3>
+                                                <div className="flex items-center gap-2">
+                                                    <h3 className="font-semibold text-white truncate">{item.name}</h3>
+                                                    {(item.recipe_count ?? 0) > 0 && (
+                                                        <span className="inline-flex items-center gap-1 text-xs bg-amber-500/20 text-amber-400 px-2 py-0.5 rounded-full flex-shrink-0">
+                                                            <Beaker className="w-3 h-3" />
+                                                            {item.recipe_count}
+                                                        </span>
+                                                    )}
+                                                </div>
                                                 <p className="text-sm text-slate-400 truncate">
                                                     {item.description || "Sin descripción"}
                                                 </p>
@@ -787,7 +868,7 @@ export default function AdminMenuPage() {
                             initial={{ scale: 0.9, opacity: 0 }}
                             animate={{ scale: 1, opacity: 1 }}
                             exit={{ scale: 0.9, opacity: 0 }}
-                            className="bg-slate-800 border border-slate-700 rounded-2xl shadow-2xl max-w-md w-full p-6"
+                            className="bg-slate-800 border border-slate-700 rounded-2xl shadow-2xl max-w-lg w-full p-6"
                             onClick={(e) => e.stopPropagation()}
                         >
                             {/* Category Modal */}
@@ -857,7 +938,7 @@ export default function AdminMenuPage() {
                             {/* Item Modal */}
                             {modalType === "item" && editingItem && (
                                 <>
-                                    <div className="flex items-center gap-3 mb-6">
+                                    <div className="flex items-center gap-3 mb-4">
                                         <div className="w-10 h-10 bg-gradient-to-br from-emerald-500 to-teal-600 rounded-xl flex items-center justify-center">
                                             <Package className="w-5 h-5 text-white" />
                                         </div>
@@ -865,129 +946,293 @@ export default function AdminMenuPage() {
                                             {editingItem.id ? "Editar Producto" : "Nuevo Producto"}
                                         </h3>
                                     </div>
-                                    <div className="space-y-4 max-h-[60vh] overflow-y-auto pr-2">
-                                        <div>
-                                            <label className="block text-sm font-medium text-slate-300 mb-2">Categoría</label>
-                                            <select
-                                                value={editingItem.category_id}
-                                                onChange={(e) => setEditingItem({ ...editingItem, category_id: e.target.value })}
-                                                className="w-full px-4 py-3 rounded-xl border border-slate-600 bg-slate-700/50 text-white focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+
+                                    {/* Tabs — only when editing an existing item */}
+                                    {editingItem.id && (
+                                        <div className="flex mb-4 bg-slate-700/50 rounded-xl p-1">
+                                            <button
+                                                onClick={() => setRecipeTab('details')}
+                                                className={`flex-1 flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-all ${recipeTab === 'details'
+                                                    ? 'bg-emerald-600 text-white shadow-md'
+                                                    : 'text-slate-400 hover:text-white'
+                                                    }`}
                                             >
-                                                {categories.map((cat) => (
-                                                    <option key={cat.$id || cat.id} value={cat.$id || cat.id}>
-                                                        {cat.name}
-                                                    </option>
-                                                ))}
-                                            </select>
+                                                <Package className="w-4 h-4" />
+                                                Detalles
+                                            </button>
+                                            <button
+                                                onClick={() => {
+                                                    setRecipeTab('recipe');
+                                                    if (recipeEntries.length === 0 && !isLoadingRecipes) {
+                                                        loadRecipes(editingItem.id!);
+                                                    }
+                                                }}
+                                                className={`flex-1 flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-all ${recipeTab === 'recipe'
+                                                    ? 'bg-amber-600 text-white shadow-md'
+                                                    : 'text-slate-400 hover:text-white'
+                                                    }`}
+                                            >
+                                                <Beaker className="w-4 h-4" />
+                                                Receta
+                                                {recipeEntries.length > 0 && (
+                                                    <span className="text-xs bg-white/20 px-1.5 py-0.5 rounded-full">
+                                                        {recipeEntries.length}
+                                                    </span>
+                                                )}
+                                            </button>
                                         </div>
-                                        <div>
-                                            <label className="block text-sm font-medium text-slate-300 mb-2">Nombre del Producto</label>
-                                            <input
-                                                type="text"
-                                                value={editingItem.name}
-                                                onChange={(e) => setEditingItem({ ...editingItem, name: e.target.value })}
-                                                className="w-full px-4 py-3 rounded-xl border border-slate-600 bg-slate-700/50 text-white placeholder-slate-500 focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
-                                                placeholder="Ej: Tacos al Pastor"
-                                            />
-                                        </div>
-                                        <div>
-                                            <label className="block text-sm font-medium text-slate-300 mb-2">Descripción</label>
-                                            <textarea
-                                                value={editingItem.description}
-                                                onChange={(e) => setEditingItem({ ...editingItem, description: e.target.value })}
-                                                className="w-full px-4 py-3 rounded-xl border border-slate-600 bg-slate-700/50 text-white placeholder-slate-500 focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
-                                                rows={3}
-                                                placeholder="Descripción atractiva del platillo"
-                                            />
-                                        </div>
-                                        <div className="grid grid-cols-2 gap-4">
-                                            <div>
-                                                <label className="block text-sm font-medium text-slate-300 mb-2">Precio (MXN)</label>
-                                                <div className="relative">
-                                                    <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
+                                    )}
+
+                                    {/* Details Tab (default / new item) */}
+                                    {(recipeTab === 'details' || !editingItem.id) && (
+                                        <>
+                                            <div className="space-y-4 max-h-[60vh] overflow-y-auto pr-2">
+                                                <div>
+                                                    <label className="block text-sm font-medium text-slate-300 mb-2">Categoría</label>
+                                                    <select
+                                                        value={editingItem.category_id}
+                                                        onChange={(e) => setEditingItem({ ...editingItem, category_id: e.target.value })}
+                                                        className="w-full px-4 py-3 rounded-xl border border-slate-600 bg-slate-700/50 text-white focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                                                    >
+                                                        {categories.map((cat) => (
+                                                            <option key={cat.$id || cat.id} value={cat.$id || cat.id}>
+                                                                {cat.name}
+                                                            </option>
+                                                        ))}
+                                                    </select>
+                                                </div>
+                                                <div>
+                                                    <label className="block text-sm font-medium text-slate-300 mb-2">Nombre del Producto</label>
+                                                    <input
+                                                        type="text"
+                                                        value={editingItem.name}
+                                                        onChange={(e) => setEditingItem({ ...editingItem, name: e.target.value })}
+                                                        className="w-full px-4 py-3 rounded-xl border border-slate-600 bg-slate-700/50 text-white placeholder-slate-500 focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                                                        placeholder="Ej: Tacos al Pastor"
+                                                    />
+                                                </div>
+                                                <div>
+                                                    <label className="block text-sm font-medium text-slate-300 mb-2">Descripción</label>
+                                                    <textarea
+                                                        value={editingItem.description}
+                                                        onChange={(e) => setEditingItem({ ...editingItem, description: e.target.value })}
+                                                        className="w-full px-4 py-3 rounded-xl border border-slate-600 bg-slate-700/50 text-white placeholder-slate-500 focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                                                        rows={3}
+                                                        placeholder="Descripción atractiva del platillo"
+                                                    />
+                                                </div>
+                                                <div className="grid grid-cols-2 gap-4">
+                                                    <div>
+                                                        <label className="block text-sm font-medium text-slate-300 mb-2">Precio (MXN)</label>
+                                                        <div className="relative">
+                                                            <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
+                                                            <input
+                                                                type="number"
+                                                                value={editingItem.price}
+                                                                onChange={(e) => setEditingItem({ ...editingItem, price: e.target.value })}
+                                                                className="w-full pl-10 pr-4 py-3 rounded-xl border border-slate-600 bg-slate-700/50 text-white placeholder-slate-500 focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                                                                placeholder="0.00"
+                                                                min="0"
+                                                                step="0.01"
+                                                            />
+                                                        </div>
+                                                    </div>
+                                                    <div>
+                                                        <label className="block text-sm font-medium text-slate-300 mb-2">Destino</label>
+                                                        <select
+                                                            value={editingItem.route_to}
+                                                            onChange={(e) => setEditingItem({ ...editingItem, route_to: e.target.value })}
+                                                            className="w-full px-4 py-3 rounded-xl border border-slate-600 bg-slate-700/50 text-white focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                                                        >
+                                                            <option value="kitchen">Cocina</option>
+                                                            <option value="bar">Bar</option>
+                                                        </select>
+                                                    </div>
+                                                </div>
+                                                <div>
+                                                    <label className="block text-sm font-medium text-slate-300 mb-2">
+                                                        <span className="flex items-center gap-2">
+                                                            <Clock className="w-4 h-4" />
+                                                            Tiempo de Preparación (minutos)
+                                                        </span>
+                                                    </label>
                                                     <input
                                                         type="number"
-                                                        value={editingItem.price}
-                                                        onChange={(e) => setEditingItem({ ...editingItem, price: e.target.value })}
-                                                        className="w-full pl-10 pr-4 py-3 rounded-xl border border-slate-600 bg-slate-700/50 text-white placeholder-slate-500 focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
-                                                        placeholder="0.00"
-                                                        min="0"
-                                                        step="0.01"
+                                                        value={editingItem.prep_time_minutes}
+                                                        onChange={(e) => setEditingItem({ ...editingItem, prep_time_minutes: e.target.value })}
+                                                        className="w-full px-4 py-3 rounded-xl border border-slate-600 bg-slate-700/50 text-white placeholder-slate-500 focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                                                        placeholder="15"
+                                                        min="1"
+                                                        max="120"
                                                     />
+                                                    <p className="text-xs text-slate-500 mt-1">Tiempo estimado en minutos. Se mostrará en la pantalla de cocina.</p>
+                                                </div>
+                                                <div>
+                                                    <label className="block text-sm font-medium text-slate-300 mb-2">
+                                                        <span className="flex items-center gap-2">
+                                                            <LinkIcon className="w-4 h-4" />
+                                                            URL de Imagen
+                                                        </span>
+                                                    </label>
+                                                    <input
+                                                        type="text"
+                                                        value={editingItem.image_url}
+                                                        onChange={(e) => setEditingItem({ ...editingItem, image_url: e.target.value })}
+                                                        className="w-full px-4 py-3 rounded-xl border border-slate-600 bg-slate-700/50 text-white placeholder-slate-500 focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                                                        placeholder="https://example.com/imagen.jpg"
+                                                    />
+                                                    {editingItem.image_url && (
+                                                        <div className="mt-2 aspect-video rounded-xl overflow-hidden bg-slate-700/50">
+                                                            <img
+                                                                src={editingItem.image_url}
+                                                                alt="Preview"
+                                                                className="w-full h-full object-cover"
+                                                                onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }}
+                                                            />
+                                                        </div>
+                                                    )}
                                                 </div>
                                             </div>
-                                            <div>
-                                                <label className="block text-sm font-medium text-slate-300 mb-2">Destino</label>
-                                                <select
-                                                    value={editingItem.route_to}
-                                                    onChange={(e) => setEditingItem({ ...editingItem, route_to: e.target.value })}
-                                                    className="w-full px-4 py-3 rounded-xl border border-slate-600 bg-slate-700/50 text-white focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                                            <div className="flex gap-3 mt-6">
+                                                <button
+                                                    onClick={() => { setModalType(null); setEditingItem(null); setRecipeTab('details'); setRecipeEntries([]); }}
+                                                    className="flex-1 px-4 py-3 border border-slate-600 text-slate-300 rounded-xl hover:bg-slate-700 transition-all"
                                                 >
-                                                    <option value="kitchen">Cocina</option>
-                                                    <option value="bar">Bar</option>
-                                                </select>
+                                                    Cancelar
+                                                </button>
+                                                <button
+                                                    onClick={saveItem}
+                                                    disabled={isSaving || !editingItem.name.trim() || !editingItem.price}
+                                                    className="flex-1 px-4 py-3 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 disabled:from-slate-600 disabled:to-slate-600 text-white font-medium rounded-xl flex items-center justify-center gap-2 transition-all"
+                                                >
+                                                    {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                                                    Guardar
+                                                </button>
                                             </div>
-                                        </div>
-                                        <div>
-                                            <label className="block text-sm font-medium text-slate-300 mb-2">
-                                                <span className="flex items-center gap-2">
-                                                    <Clock className="w-4 h-4" />
-                                                    Tiempo de Preparación (minutos)
-                                                </span>
-                                            </label>
-                                            <input
-                                                type="number"
-                                                value={editingItem.prep_time_minutes}
-                                                onChange={(e) => setEditingItem({ ...editingItem, prep_time_minutes: e.target.value })}
-                                                className="w-full px-4 py-3 rounded-xl border border-slate-600 bg-slate-700/50 text-white placeholder-slate-500 focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
-                                                placeholder="15"
-                                                min="1"
-                                                max="120"
-                                            />
-                                            <p className="text-xs text-slate-500 mt-1">Tiempo estimado en minutos. Se mostrará en la pantalla de cocina.</p>
-                                        </div>
-                                        <div>
-                                            <label className="block text-sm font-medium text-slate-300 mb-2">
-                                                <span className="flex items-center gap-2">
-                                                    <LinkIcon className="w-4 h-4" />
-                                                    URL de Imagen
-                                                </span>
-                                            </label>
-                                            <input
-                                                type="text"
-                                                value={editingItem.image_url}
-                                                onChange={(e) => setEditingItem({ ...editingItem, image_url: e.target.value })}
-                                                className="w-full px-4 py-3 rounded-xl border border-slate-600 bg-slate-700/50 text-white placeholder-slate-500 focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
-                                                placeholder="https://example.com/imagen.jpg"
-                                            />
-                                            {editingItem.image_url && (
-                                                <div className="mt-2 aspect-video rounded-xl overflow-hidden bg-slate-700/50">
-                                                    <img
-                                                        src={editingItem.image_url}
-                                                        alt="Preview"
-                                                        className="w-full h-full object-cover"
-                                                        onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }}
-                                                    />
-                                                </div>
-                                            )}
-                                        </div>
-                                    </div>
-                                    <div className="flex gap-3 mt-6">
-                                        <button
-                                            onClick={() => { setModalType(null); setEditingItem(null); }}
-                                            className="flex-1 px-4 py-3 border border-slate-600 text-slate-300 rounded-xl hover:bg-slate-700 transition-all"
-                                        >
-                                            Cancelar
-                                        </button>
-                                        <button
-                                            onClick={saveItem}
-                                            disabled={isSaving || !editingItem.name.trim() || !editingItem.price}
-                                            className="flex-1 px-4 py-3 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 disabled:from-slate-600 disabled:to-slate-600 text-white font-medium rounded-xl flex items-center justify-center gap-2 transition-all"
-                                        >
-                                            {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-                                            Guardar
-                                        </button>
-                                    </div>
+                                        </>
+                                    )}
+
+                                    {/* Recipe Tab */}
+                                    {recipeTab === 'recipe' && editingItem.id && (
+                                        <>
+                                            <div className="space-y-4 max-h-[60vh] overflow-y-auto pr-2">
+                                                {isLoadingRecipes ? (
+                                                    <div className="py-12 text-center">
+                                                        <Loader2 className="w-6 h-6 text-amber-400 animate-spin mx-auto mb-3" />
+                                                        <p className="text-sm text-slate-400">Cargando receta...</p>
+                                                    </div>
+                                                ) : (
+                                                    <>
+                                                        {/* Existing recipe entries */}
+                                                        {recipeEntries.length === 0 ? (
+                                                            <div className="py-8 text-center">
+                                                                <Beaker className="w-10 h-10 text-slate-600 mx-auto mb-3" />
+                                                                <p className="text-sm text-slate-400">No hay ingredientes en la receta</p>
+                                                                <p className="text-xs text-slate-500 mt-1">Agrega ingredientes del inventario para calcular costos</p>
+                                                            </div>
+                                                        ) : (
+                                                            <div className="space-y-2">
+                                                                {recipeEntries.map((entry) => (
+                                                                    <div
+                                                                        key={entry.id}
+                                                                        className="flex items-center gap-3 p-3 bg-slate-700/30 rounded-xl border border-slate-600/50 group"
+                                                                    >
+                                                                        <div className="w-8 h-8 bg-amber-500/20 rounded-lg flex items-center justify-center flex-shrink-0">
+                                                                            <Beaker className="w-4 h-4 text-amber-400" />
+                                                                        </div>
+                                                                        <div className="flex-1 min-w-0">
+                                                                            <p className="text-sm font-medium text-white truncate">{entry.ingredient_name}</p>
+                                                                            <p className="text-xs text-slate-400">
+                                                                                {entry.quantity} {entry.unit}
+                                                                                {entry.notes && ` · ${entry.notes}`}
+                                                                            </p>
+                                                                        </div>
+                                                                        <button
+                                                                            onClick={() => removeRecipeEntry(editingItem.id!, entry.id)}
+                                                                            className="p-1.5 hover:bg-red-500/20 text-slate-500 hover:text-red-400 rounded-lg opacity-0 group-hover:opacity-100 transition-all"
+                                                                        >
+                                                                            <Trash2 className="w-4 h-4" />
+                                                                        </button>
+                                                                    </div>
+                                                                ))}
+                                                            </div>
+                                                        )}
+
+                                                        {/* Add new ingredient row */}
+                                                        <div className="mt-4 p-4 bg-slate-700/20 rounded-xl border border-dashed border-slate-600/50">
+                                                            <p className="text-xs font-medium text-slate-400 mb-3 flex items-center gap-1">
+                                                                <Plus className="w-3 h-3" />
+                                                                Agregar Ingrediente
+                                                            </p>
+                                                            <div className="space-y-3">
+                                                                <select
+                                                                    value={newRecipeIngredientId}
+                                                                    onChange={(e) => setNewRecipeIngredientId(e.target.value)}
+                                                                    className="w-full px-3 py-2.5 rounded-xl border border-slate-600 bg-slate-700/50 text-white text-sm focus:ring-2 focus:ring-amber-500 focus:border-transparent"
+                                                                >
+                                                                    <option value="">Seleccionar ingrediente...</option>
+                                                                    {ingredients
+                                                                        .filter(ing => !recipeEntries.some(r => r.ingredient_id === ing.id))
+                                                                        .map((ing) => (
+                                                                            <option key={ing.id} value={ing.id}>
+                                                                                {ing.name} ({ing.stock_quantity} {ing.unit} en stock)
+                                                                            </option>
+                                                                        ))
+                                                                    }
+                                                                </select>
+                                                                <div className="grid grid-cols-2 gap-3">
+                                                                    <div>
+                                                                        <label className="block text-xs text-slate-500 mb-1">Cantidad</label>
+                                                                        <input
+                                                                            type="number"
+                                                                            value={newRecipeQty}
+                                                                            onChange={(e) => setNewRecipeQty(e.target.value)}
+                                                                            className="w-full px-3 py-2.5 rounded-xl border border-slate-600 bg-slate-700/50 text-white text-sm placeholder-slate-500 focus:ring-2 focus:ring-amber-500 focus:border-transparent"
+                                                                            placeholder="0.00"
+                                                                            min="0"
+                                                                            step="0.01"
+                                                                        />
+                                                                    </div>
+                                                                    <div>
+                                                                        <label className="block text-xs text-slate-500 mb-1">Unidad</label>
+                                                                        <select
+                                                                            value={newRecipeUnit}
+                                                                            onChange={(e) => setNewRecipeUnit(e.target.value)}
+                                                                            className="w-full px-3 py-2.5 rounded-xl border border-slate-600 bg-slate-700/50 text-white text-sm focus:ring-2 focus:ring-amber-500 focus:border-transparent"
+                                                                        >
+                                                                            <option value="kg">kg</option>
+                                                                            <option value="g">g</option>
+                                                                            <option value="lt">lt</option>
+                                                                            <option value="ml">ml</option>
+                                                                            <option value="pza">pza</option>
+                                                                            <option value="porcion">porción</option>
+                                                                        </select>
+                                                                    </div>
+                                                                </div>
+                                                                <button
+                                                                    onClick={() => addRecipeEntry(editingItem.id!)}
+                                                                    disabled={!newRecipeIngredientId || !newRecipeQty || parseFloat(newRecipeQty) <= 0}
+                                                                    className="w-full px-4 py-2.5 bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-500 hover:to-orange-500 disabled:from-slate-600 disabled:to-slate-600 text-white font-medium rounded-xl flex items-center justify-center gap-2 text-sm transition-all"
+                                                                >
+                                                                    <Plus className="w-4 h-4" />
+                                                                    Agregar a Receta
+                                                                </button>
+                                                            </div>
+                                                        </div>
+                                                    </>
+                                                )}
+                                            </div>
+
+                                            <div className="flex gap-3 mt-6">
+                                                <button
+                                                    onClick={() => { setModalType(null); setEditingItem(null); setRecipeTab('details'); setRecipeEntries([]); }}
+                                                    className="flex-1 px-4 py-3 border border-slate-600 text-slate-300 rounded-xl hover:bg-slate-700 transition-all"
+                                                >
+                                                    Cerrar
+                                                </button>
+                                            </div>
+                                        </>
+                                    )}
                                 </>
                             )}
 

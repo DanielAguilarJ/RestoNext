@@ -14,7 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
 from app.core.security import get_current_user, require_roles
-from app.models.models import User, MenuItem, MenuCategory, Tenant, Ingredient, Recipe, UserRole, RouteDestination, PrinterTarget
+from app.models.models import User, MenuItem, MenuCategory, Tenant, Ingredient, Recipe, UserRole, RouteDestination, PrinterTarget, UnitOfMeasure
 from app.schemas.schemas import MenuItemOptimizationResponse
 from app.services.ai_service import AIService
 
@@ -52,9 +52,40 @@ class MenuItemResponse(BaseModel):
     is_available: bool = True
     sort_order: int = 0
     prep_time_minutes: int = 15
+    recipe_count: int = 0  # Number of ingredients linked via recipe
 
     class Config:
         from_attributes = True
+
+
+# ============================================
+# Recipe Schemas
+# ============================================
+
+class RecipeResponse(BaseModel):
+    """Recipe (escandallo) response model"""
+    id: str
+    menu_item_id: str
+    ingredient_id: str
+    ingredient_name: str
+    quantity: float
+    unit: str
+    notes: Optional[str] = None
+
+
+class RecipeCreateRequest(BaseModel):
+    """Add an ingredient to a menu item's recipe"""
+    ingredient_id: str
+    quantity: float
+    unit: str  # kg, g, lt, ml, pza, porcion
+    notes: Optional[str] = None
+
+
+class RecipeUpdateRequest(BaseModel):
+    """Update a recipe entry"""
+    quantity: Optional[float] = None
+    unit: Optional[str] = None
+    notes: Optional[str] = None
 
 
 # ============================================
@@ -284,12 +315,14 @@ async def list_items(
     """
     List all menu items, optionally filtered by category.
     Used by the POS to display items in the menu grid.
+    Includes recipe_count for admin visibility.
     """
-    # Build query
+    # Build query with recipes eagerly loaded for count
     query = (
         select(MenuItem)
         .join(MenuCategory)
         .where(MenuCategory.tenant_id == current_user.tenant_id)
+        .options(selectinload(MenuItem.recipes))
     )
     
     if category_id:
@@ -305,7 +338,7 @@ async def list_items(
     query = query.where(MenuItem.is_available == True).order_by(MenuItem.sort_order)
     
     result = await db.execute(query)
-    items = result.scalars().all()
+    items = result.scalars().unique().all()
     
     return [
         MenuItemResponse(
@@ -321,6 +354,7 @@ async def list_items(
             is_available=item.is_available,
             sort_order=item.sort_order,
             prep_time_minutes=item.prep_time_minutes,
+            recipe_count=len(item.recipes) if item.recipes else 0,
         )
         for item in items
     ]
@@ -572,3 +606,225 @@ async def optimize_dish(
     )
     
     return optimization
+
+
+# ============================================
+# Recipe (Escandallo) Endpoints
+# ============================================
+
+@router.get("/items/{item_id}/recipes", response_model=List[RecipeResponse])
+async def list_recipes(
+    item_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    List all recipe entries (escandallo) for a menu item.
+    Shows which ingredients and how much is needed per unit sold.
+    """
+    # Verify item belongs to tenant
+    item_result = await db.execute(
+        select(MenuItem)
+        .join(MenuCategory)
+        .where(
+            and_(
+                MenuItem.id == item_id,
+                MenuCategory.tenant_id == current_user.tenant_id
+            )
+        )
+    )
+    if not item_result.scalar_one_or_none():
+        raise HTTPException(status_code=404, detail="Menu item not found")
+    
+    result = await db.execute(
+        select(Recipe)
+        .options(selectinload(Recipe.ingredient))
+        .where(Recipe.menu_item_id == item_id)
+    )
+    recipes = result.scalars().all()
+    
+    return [
+        RecipeResponse(
+            id=str(r.id),
+            menu_item_id=str(r.menu_item_id),
+            ingredient_id=str(r.ingredient_id),
+            ingredient_name=r.ingredient.name if r.ingredient else "Unknown",
+            quantity=r.quantity,
+            unit=r.unit.value if hasattr(r.unit, 'value') else str(r.unit),
+            notes=r.notes,
+        )
+        for r in recipes
+    ]
+
+
+@router.post("/items/{item_id}/recipes", response_model=RecipeResponse, status_code=status.HTTP_201_CREATED)
+async def add_recipe(
+    item_id: UUID,
+    request: RecipeCreateRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_roles(UserRole.ADMIN, UserRole.MANAGER)),
+):
+    """
+    Add an ingredient to a menu item's recipe (escandallo).
+    Requires Admin or Manager role.
+    """
+    # Verify item belongs to tenant
+    item_result = await db.execute(
+        select(MenuItem)
+        .join(MenuCategory)
+        .where(
+            and_(
+                MenuItem.id == item_id,
+                MenuCategory.tenant_id == current_user.tenant_id
+            )
+        )
+    )
+    if not item_result.scalar_one_or_none():
+        raise HTTPException(status_code=404, detail="Menu item not found")
+    
+    # Verify ingredient exists and belongs to tenant
+    try:
+        ingredient_uuid = UUID(request.ingredient_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid ingredient_id format")
+    
+    ing_result = await db.execute(
+        select(Ingredient).where(
+            and_(
+                Ingredient.id == ingredient_uuid,
+                Ingredient.tenant_id == current_user.tenant_id
+            )
+        )
+    )
+    ingredient = ing_result.scalar_one_or_none()
+    if not ingredient:
+        raise HTTPException(status_code=404, detail="Ingredient not found")
+    
+    # Parse unit
+    try:
+        unit_enum = UnitOfMeasure(request.unit.lower())
+    except ValueError:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid unit. Must be one of: {[u.value for u in UnitOfMeasure]}"
+        )
+    
+    # Check for duplicate
+    existing = await db.execute(
+        select(Recipe).where(
+            and_(
+                Recipe.menu_item_id == item_id,
+                Recipe.ingredient_id == ingredient_uuid
+            )
+        )
+    )
+    if existing.scalar_one_or_none():
+        raise HTTPException(
+            status_code=409,
+            detail=f"Ingredient '{ingredient.name}' already in this recipe. Update the existing entry instead."
+        )
+    
+    recipe = Recipe(
+        menu_item_id=item_id,
+        ingredient_id=ingredient_uuid,
+        quantity=request.quantity,
+        unit=unit_enum,
+        notes=request.notes,
+    )
+    db.add(recipe)
+    await db.commit()
+    await db.refresh(recipe)
+    
+    return RecipeResponse(
+        id=str(recipe.id),
+        menu_item_id=str(recipe.menu_item_id),
+        ingredient_id=str(recipe.ingredient_id),
+        ingredient_name=ingredient.name,
+        quantity=recipe.quantity,
+        unit=recipe.unit.value,
+        notes=recipe.notes,
+    )
+
+
+@router.patch("/items/{item_id}/recipes/{recipe_id}", response_model=RecipeResponse)
+async def update_recipe(
+    item_id: UUID,
+    recipe_id: UUID,
+    request: RecipeUpdateRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_roles(UserRole.ADMIN, UserRole.MANAGER)),
+):
+    """
+    Update a recipe entry's quantity, unit, or notes.
+    Requires Admin or Manager role.
+    """
+    result = await db.execute(
+        select(Recipe)
+        .options(selectinload(Recipe.ingredient))
+        .where(
+            and_(
+                Recipe.id == recipe_id,
+                Recipe.menu_item_id == item_id
+            )
+        )
+    )
+    recipe = result.scalar_one_or_none()
+    
+    if not recipe:
+        raise HTTPException(status_code=404, detail="Recipe entry not found")
+    
+    if request.quantity is not None:
+        recipe.quantity = request.quantity
+    if request.unit is not None:
+        try:
+            recipe.unit = UnitOfMeasure(request.unit.lower())
+        except ValueError:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Invalid unit. Must be one of: {[u.value for u in UnitOfMeasure]}"
+            )
+    if request.notes is not None:
+        recipe.notes = request.notes
+    
+    await db.commit()
+    await db.refresh(recipe)
+    
+    return RecipeResponse(
+        id=str(recipe.id),
+        menu_item_id=str(recipe.menu_item_id),
+        ingredient_id=str(recipe.ingredient_id),
+        ingredient_name=recipe.ingredient.name if recipe.ingredient else "Unknown",
+        quantity=recipe.quantity,
+        unit=recipe.unit.value if hasattr(recipe.unit, 'value') else str(recipe.unit),
+        notes=recipe.notes,
+    )
+
+
+@router.delete("/items/{item_id}/recipes/{recipe_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_recipe(
+    item_id: UUID,
+    recipe_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_roles(UserRole.ADMIN, UserRole.MANAGER)),
+):
+    """
+    Remove an ingredient from a menu item's recipe.
+    Requires Admin or Manager role.
+    """
+    result = await db.execute(
+        select(Recipe).where(
+            and_(
+                Recipe.id == recipe_id,
+                Recipe.menu_item_id == item_id
+            )
+        )
+    )
+    recipe = result.scalar_one_or_none()
+    
+    if not recipe:
+        raise HTTPException(status_code=404, detail="Recipe entry not found")
+    
+    await db.delete(recipe)
+    await db.commit()
+    
+    return None
