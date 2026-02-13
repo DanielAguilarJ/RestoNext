@@ -89,7 +89,39 @@ def upgrade() -> None:
         if not table_exists:
             continue
 
+        # Get valid enum labels from pg_enum
+        # This prevents "invalid input value for enum" error if the UPPERCASE value
+        # doesn't exist in the enum definition (e.g. fresh deploys or already fixed)
+        enum_type = conn.execute(text(
+            """
+            SELECT t.typname
+            FROM pg_attribute a
+            JOIN pg_type t ON a.atttypid = t.oid
+            JOIN pg_class c ON a.attrelid = c.oid
+            WHERE c.relname = :table AND a.attname = :column
+            """
+        ), {"table": table, "column": column}).scalar()
+
+        if not enum_type:
+            continue
+
+        valid_labels = [
+            row[0] for row in conn.execute(text(
+                """
+                SELECT e.enumlabel
+                FROM pg_enum e
+                JOIN pg_type t ON e.enumtypid = t.oid
+                WHERE t.typname = :type_name
+                """
+            ), {"type_name": enum_type}).fetchall()
+        ]
+
         for upper_val, lower_val in update['mapping'].items():
+            # ONLY try to update if the UPPERCASE value actually exists in the enum
+            # attempting to use a value not in the enum in a WHERE clause causes instant error
+            if upper_val not in valid_labels:
+                continue
+
             # Update rows that still reference the UPPERCASE label
             result = conn.execute(text(
                 f"UPDATE {table} SET {column} = :lower WHERE {column} = :upper"
