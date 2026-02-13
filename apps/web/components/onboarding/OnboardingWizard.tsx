@@ -967,7 +967,7 @@ export default function OnboardingWizard({ isOpen, onComplete, initialData }: On
                 {/* Navigation Footer */}
                 <div className="p-8 border-t border-slate-800">
                     <div className="max-w-2xl mx-auto flex items-center justify-between">
-                        {currentStep > 0 && currentStep < 4 ? (
+                        {currentStep > 0 && currentStep < 5 ? (
                             <button
                                 onClick={() => goToStep(currentStep - 1)}
                                 className="flex items-center gap-2 px-6 py-3 text-slate-400 hover:text-white transition-colors"
@@ -979,7 +979,7 @@ export default function OnboardingWizard({ isOpen, onComplete, initialData }: On
                             <div />
                         )}
 
-                        {currentStep < 4 && (
+                        {currentStep < 5 && (
                             <button
                                 onClick={() => goToStep(currentStep + 1)}
                                 className="flex items-center gap-2 px-8 py-4 bg-gradient-to-r from-violet-500 to-purple-600 hover:from-violet-400 hover:to-purple-500 text-white font-semibold rounded-xl transition-all"
