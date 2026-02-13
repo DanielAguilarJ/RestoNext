@@ -28,11 +28,13 @@ import {
     MapPin,
     Wifi,
     WifiOff,
+    CheckCircle,
+    AlertCircle,
 } from "lucide-react";
 import Link from "next/link";
 import Image from "next/image";
 import { m, LazyMotion, domAnimation, AnimatePresence } from "framer-motion";
-import { menuApi } from "@/lib/api";
+import { menuApi, tablesApi, ordersApi } from "@/lib/api";
 
 // ============================================
 // Types
@@ -109,6 +111,11 @@ export default function MenuPage() {
     const [activeCategory, setActiveCategory] = useState<string | null>(null);
     const [cart, setCart] = useState<CartItem[]>([]);
     const [showCart, setShowCart] = useState(false);
+
+    // Order state
+    const [isSending, setIsSending] = useState(false);
+    const [orderStatus, setOrderStatus] = useState<'success' | 'error' | null>(null);
+    const [statusMessage, setStatusMessage] = useState<string>("");
 
     // ============================================
     // Load Menu Data
@@ -246,6 +253,55 @@ export default function MenuPage() {
             }
             return prev.filter((i) => i.id !== itemId);
         });
+    };
+
+    const handleSendOrder = async () => {
+        if (cart.length === 0) return;
+
+        setIsSending(true);
+        setOrderStatus(null);
+
+        try {
+            // 1. Resolve Table UUID
+            const tables = await tablesApi.list();
+            const currentTable = tables.find((t) => t.number === tableNumber);
+
+            if (!currentTable) {
+                throw new Error(`Mesa ${tableNumber} no encontrada. Por favor contacte al personal.`);
+            }
+
+            // 2. Prepare Order Payload
+            const orderItems = cart.map((item) => ({
+                menu_item_id: item.id,
+                quantity: item.quantity,
+                notes: "",
+                selected_modifiers: [],
+            }));
+
+            // 3. Send Order
+            await ordersApi.create({
+                table_id: currentTable.id || "",
+                items: orderItems,
+                notes: `Pedido desde QR - Mesa ${tableNumber}`,
+            });
+
+            // 4. Success Handling
+            setOrderStatus("success");
+            setStatusMessage("¡Tu pedido ha sido enviado a cocina!");
+            setCart([]);
+            setTimeout(() => {
+                setShowCart(false);
+                setOrderStatus(null);
+            }, 3000);
+
+        } catch (err: any) {
+            console.error("Error sending order:", err);
+            setOrderStatus("error");
+            setStatusMessage(err.message || "Error al enviar el pedido. Intenta de nuevo.");
+            setTimeout(() => setOrderStatus(null), 5000);
+        } finally {
+            setIsSending(false);
+        }
     };
 
     const cartTotal = cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
@@ -574,12 +630,41 @@ export default function MenuPage() {
                             className="fixed top-4 left-4 right-4 bg-green-600/95 backdrop-blur text-white px-5 py-4 rounded-2xl shadow-2xl z-50 flex items-center gap-4"
                         >
                             <div className="w-12 h-12 bg-white/20 rounded-xl flex items-center justify-center">
-                                <span className="text-2xl">✓</span>
+                                <CheckCircle className="w-6 h-6 text-white" />
                             </div>
                             <div>
                                 <p className="font-bold text-lg">¡Mesero llamado!</p>
                                 <p className="text-sm text-white/80">
                                     Un mesero vendrá a la Mesa {tableNumber} en breve.
+                                </p>
+                            </div>
+                        </m.div>
+                    )}
+                </AnimatePresence>
+
+                {/* Order Success/Error Toast */}
+                <AnimatePresence>
+                    {orderStatus && (
+                        <m.div
+                            initial={{ y: -100, opacity: 0 }}
+                            animate={{ y: 0, opacity: 1 }}
+                            exit={{ y: -100, opacity: 0 }}
+                            className={`fixed top-4 left-4 right-4 backdrop-blur text-white px-5 py-4 rounded-2xl shadow-2xl z-50 flex items-center gap-4 ${orderStatus === 'success' ? 'bg-green-600/95' : 'bg-red-600/95'
+                                }`}
+                        >
+                            <div className="w-12 h-12 bg-white/20 rounded-xl flex items-center justify-center">
+                                {orderStatus === 'success' ? (
+                                    <CheckCircle className="w-6 h-6 text-white" />
+                                ) : (
+                                    <AlertCircle className="w-6 h-6 text-white" />
+                                )}
+                            </div>
+                            <div>
+                                <p className="font-bold text-lg">
+                                    {orderStatus === 'success' ? '¡Pedido Enviado!' : 'Error'}
+                                </p>
+                                <p className="text-sm text-white/80">
+                                    {statusMessage}
                                 </p>
                             </div>
                         </m.div>
@@ -659,8 +744,25 @@ export default function MenuPage() {
                                             {formatPrice(cartTotal)}
                                         </span>
                                     </div>
-                                    <button className="w-full py-4 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold rounded-xl shadow-lg transition-all">
-                                        Enviar al Mesero
+                                    <button
+                                        onClick={handleSendOrder}
+                                        disabled={isSending}
+                                        className={`
+                                            w-full py-4 font-bold rounded-xl shadow-lg transition-all flex items-center justify-center gap-2
+                                            ${isSending
+                                                ? "bg-slate-600 cursor-not-allowed"
+                                                : "bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white"
+                                            }
+                                        `}
+                                    >
+                                        {isSending ? (
+                                            <>
+                                                <Loader2 className="w-5 h-5 animate-spin" />
+                                                Enviando...
+                                            </>
+                                        ) : (
+                                            "Enviar al Mesero"
+                                        )}
                                     </button>
                                 </div>
                             </m.div>
