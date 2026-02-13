@@ -18,7 +18,7 @@ import { useKDSStore } from "@/lib/store";
 import type { KDSTicket } from "@/lib/store";
 import { useKitchenSocket } from "@/hooks/useKitchenSocket";
 import { kdsApi, KDSConfig } from "@/lib/api";
-import { cn, formatTimeElapsed } from "@/lib/utils";
+import { cn, formatTimeElapsed, parseUTC } from "@/lib/utils";
 import {
     Clock, Check, ChefHat, ArrowLeft, Flame, Bell, Sparkles,
     Wifi, WifiOff, RefreshCw, Volume2, VolumeX, Send
@@ -79,7 +79,6 @@ export function KDSBoard() {
         reconnectInterval: 3000,
         maxReconnectAttempts: 10,
     });
-
     // Transform API orders to ticket format
     const transformOrders = useCallback((orders: any[]): KDSTicket[] => {
         return orders.map((order: any) => ({
@@ -100,14 +99,14 @@ export function KDSBoard() {
                             ? item.modifiers.map((m: any) => (typeof m === 'string' ? m : m.option_name || m.name || String(m)))
                             : [])
                         : item.selected_modifiers?.map((m: any) => m.option_name || m.name || String(m)) ||
-                          [],
+                        [],
                 notes: item.notes,
                 status: item.status || "pending",
                 prep_time_minutes: item.prep_time_minutes ?? 15,
             })),
             createdAt: order.paid_at
-                ? new Date(order.paid_at)
-                : new Date(order.created_at),
+                ? parseUTC(order.paid_at)
+                : parseUTC(order.created_at),
         }));
     }, []);
 
@@ -479,8 +478,8 @@ export function KDSBoard() {
                                 "rounded-2xl overflow-hidden transition-all duration-300 animate-scale-in",
                                 "shadow-xl hover:shadow-2xl",
                                 timerStatus === "critical" &&
-                                    config.shake_animation &&
-                                    "animate-shake ring-2 ring-red-500/50",
+                                config.shake_animation &&
+                                "animate-shake ring-2 ring-red-500/50",
                                 isBumping && "opacity-0 scale-90 transition-all duration-400",
                                 isAllReady && "ring-2 ring-green-500/60"
                             )}
@@ -568,11 +567,11 @@ export function KDSBoard() {
                                                 "w-full text-left p-4 rounded-xl transition-all duration-300",
                                                 "border-2 active:scale-[0.98] animate-slide-up",
                                                 item.status === "pending" &&
-                                                    "bg-gray-700/50 border-gray-600 hover:border-gray-500",
+                                                "bg-gray-700/50 border-gray-600 hover:border-gray-500",
                                                 item.status === "preparing" &&
-                                                    "bg-orange-500/20 border-orange-500 hover:bg-orange-500/30",
+                                                "bg-orange-500/20 border-orange-500 hover:bg-orange-500/30",
                                                 item.status === "ready" &&
-                                                    "bg-green-500/20 border-green-500 cursor-default",
+                                                "bg-green-500/20 border-green-500 cursor-default",
                                                 isItemOverdue && "border-red-500 bg-red-500/10"
                                             )}
                                             style={{ animationDelay: `${itemIndex * 0.05}s` }}
@@ -583,11 +582,11 @@ export function KDSBoard() {
                                                         className={cn(
                                                             "text-xl font-black px-2 py-0.5 rounded",
                                                             item.status === "pending" &&
-                                                                "bg-gray-600 text-gray-300",
+                                                            "bg-gray-600 text-gray-300",
                                                             item.status === "preparing" &&
-                                                                "bg-orange-500 text-white",
+                                                            "bg-orange-500 text-white",
                                                             item.status === "ready" &&
-                                                                "bg-green-500 text-white"
+                                                            "bg-green-500 text-white"
                                                         )}
                                                     >
                                                         {item.quantity}x

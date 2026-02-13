@@ -21,14 +21,35 @@ export function formatPrice(price: number): string {
 /**
  * Format time elapsed since a date
  */
+/**
+ * Parse a date string that might be naive UTC (no 'Z')
+ * Forces it to be interpreted as UTC.
+ */
+export function parseUTC(dateString: string | Date | null | undefined): Date {
+    if (!dateString) return new Date();
+    if (dateString instanceof Date) return dateString;
+
+    // If it's a string and missing timezone info (ends in number), append Z
+    if (typeof dateString === 'string' && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?$/.test(dateString)) {
+        return new Date(dateString + 'Z');
+    }
+
+    return new Date(dateString);
+}
+
+/**
+ * Format time elapsed since a date
+ */
 export function formatTimeElapsed(startTime: Date): string {
     const now = new Date();
     const diff = Math.floor((now.getTime() - startTime.getTime()) / 1000);
 
-    const minutes = Math.floor(diff / 60);
-    const seconds = diff % 60;
+    const absDiff = Math.abs(diff);
+    const minutes = Math.floor(absDiff / 60);
+    const seconds = absDiff % 60;
 
-    return `${minutes.toString().padStart(2, "0")}:${seconds.toString().padStart(2, "0")}`;
+    const formatted = `${minutes.toString().padStart(2, "0")}:${seconds.toString().padStart(2, "0")}`;
+    return diff < 0 ? `-${formatted}` : formatted;
 }
 
 /**
