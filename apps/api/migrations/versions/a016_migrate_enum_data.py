@@ -92,7 +92,7 @@ def upgrade() -> None:
         for upper_val, lower_val in update['mapping'].items():
             # Update rows that still reference the UPPERCASE label
             result = conn.execute(text(
-                f"UPDATE {table} SET {column} = :{lower} WHERE {column} = :{upper}"
+                f"UPDATE {table} SET {column} = :lower WHERE {column} = :upper"
             ), {"lower": lower_val, "upper": upper_val})
 
             if result.rowcount > 0:
