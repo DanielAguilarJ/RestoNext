@@ -126,7 +126,7 @@ def upgrade() -> None:
     if not column_exists('orders', 'order_source'):
         op.add_column('orders', sa.Column(
             'order_source', 
-            sa.Enum('pos', 'self_service', 'delivery_app', 'kiosk', name='ordersource'),
+            postgresql.ENUM('pos', 'self_service', 'delivery_app', 'kiosk', name='ordersource', create_type=False),
             nullable=False,
             server_default='pos'
         ))
@@ -164,8 +164,8 @@ def upgrade() -> None:
             sa.Column('id', postgresql.UUID(as_uuid=True), primary_key=True, server_default=sa.text('gen_random_uuid()')),
             sa.Column('tenant_id', postgresql.UUID(as_uuid=True), sa.ForeignKey('tenants.id'), nullable=False),
             sa.Column('table_id', postgresql.UUID(as_uuid=True), sa.ForeignKey('tables.id'), nullable=False),
-            sa.Column('request_type', sa.Enum('waiter', 'bill', 'refill', 'custom', name='servicerequesttype'), nullable=False),
-            sa.Column('status', sa.Enum('pending', 'acknowledged', 'resolved', name='servicerequeststatus'), nullable=False, server_default='pending'),
+            sa.Column('request_type', postgresql.ENUM('waiter', 'bill', 'refill', 'custom', name='servicerequesttype', create_type=False), nullable=False),
+            sa.Column('status', postgresql.ENUM('pending', 'acknowledged', 'resolved', name='servicerequeststatus', create_type=False), nullable=False, server_default='pending'),
             sa.Column('message', sa.Text(), nullable=True),
             sa.Column('resolved_by', postgresql.UUID(as_uuid=True), sa.ForeignKey('users.id'), nullable=True),
             sa.Column('resolved_at', sa.DateTime(), nullable=True),

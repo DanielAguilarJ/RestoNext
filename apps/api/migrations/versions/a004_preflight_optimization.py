@@ -184,16 +184,22 @@ def upgrade() -> None:
     
     # Create legal_acceptances table
     if not table_exists('legal_acceptances'):
-        op.create_table(
-            'legal_acceptances',
+        columns = [
             sa.Column('id', postgresql.UUID(as_uuid=True), primary_key=True),
             sa.Column('user_id', postgresql.UUID(as_uuid=True), sa.ForeignKey('users.id'), nullable=True),
-            sa.Column('customer_id', postgresql.UUID(as_uuid=True), sa.ForeignKey('customers.id'), nullable=True),
             sa.Column('document_id', postgresql.UUID(as_uuid=True), sa.ForeignKey('legal_documents.id'), nullable=False),
             sa.Column('accepted_at', sa.DateTime(), default=sa.func.now()),
             sa.Column('ip_address', sa.String(45), nullable=True),  # IPv6 max length
             sa.Column('user_agent', sa.String(500), nullable=True),
-        )
+        ]
+        
+        # Conditionally add customer_id FK only if customers table exists
+        if table_exists('customers'):
+            columns.append(sa.Column('customer_id', postgresql.UUID(as_uuid=True), sa.ForeignKey('customers.id'), nullable=True))
+        else:
+            columns.append(sa.Column('customer_id', postgresql.UUID(as_uuid=True), nullable=True))
+
+        op.create_table('legal_acceptances', *columns)
     
     if table_exists('legal_acceptances'):
         if not index_exists('legal_acceptances', 'idx_legal_accept_user_doc'):

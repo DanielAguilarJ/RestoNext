@@ -41,9 +41,14 @@ def enum_exists(enum_name: str) -> bool:
 
 def ensure_enum(name: str, values: list):
     """Ensure an enum exists, creating it if not"""
-    if not enum_exists(name):
+    if enum_exists(name):  # Double check
+        return
+
+    try:
         enum_type = postgresql.ENUM(*values, name=name)
         enum_type.create(op.get_bind())
+    except Exception as e:
+        print(f"Warning: Could not create enum {name}, assuming it exists. Error: {e}")
 
 
 def upgrade() -> None:
@@ -100,7 +105,7 @@ def upgrade() -> None:
             sa.Column('id', postgresql.UUID(as_uuid=True), nullable=False),
             sa.Column('tenant_id', postgresql.UUID(as_uuid=True), nullable=False),
             sa.Column('supplier_id', postgresql.UUID(as_uuid=True), nullable=False),
-            sa.Column('status', sa.Enum('draft', 'pending', 'approved', 'received', 'cancelled', name='purchaseorderstatus', create_type=False), nullable=False, server_default='draft'),
+            sa.Column('status', postgresql.ENUM('draft', 'pending', 'approved', 'received', 'cancelled', name='purchaseorderstatus', create_type=False), nullable=False, server_default='draft'),
             sa.Column('expected_delivery', sa.DateTime(), nullable=True),
             sa.Column('actual_delivery', sa.DateTime(), nullable=True),
             sa.Column('subtotal', sa.Float(), nullable=False, server_default='0'),

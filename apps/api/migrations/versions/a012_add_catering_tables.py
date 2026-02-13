@@ -65,7 +65,7 @@ def upgrade() -> None:
             sa.Column('event_date', sa.DateTime(), nullable=True),
             sa.Column('guest_count', sa.Integer(), nullable=True),
             sa.Column('event_type', sa.String(length=64), nullable=True),
-            sa.Column('status', sa.Enum(
+            sa.Column('status', postgresql.ENUM(
                 'new', 'contacted', 'proposal_sent', 'negotiation', 'quoting', 'won', 'lost',
                 name='leadstatus', create_type=False
             ), nullable=False, server_default='new'),
@@ -89,7 +89,7 @@ def upgrade() -> None:
             sa.Column('end_time', sa.DateTime(), nullable=False),
             sa.Column('guest_count', sa.Integer(), nullable=False, server_default='0'),
             sa.Column('location', sa.String(length=255), nullable=True),
-            sa.Column('status', sa.Enum(
+            sa.Column('status', postgresql.ENUM(
                 'draft', 'confirmed', 'booked', 'in_progress', 'completed', 'cancelled',
                 name='eventstatus', create_type=False
             ), nullable=False, server_default='draft'),
@@ -142,7 +142,7 @@ def upgrade() -> None:
             sa.Column('event_id', postgresql.UUID(as_uuid=True), nullable=False),
             sa.Column('tenant_id', postgresql.UUID(as_uuid=True), nullable=False),
             sa.Column('valid_until', sa.DateTime(), nullable=False),
-            sa.Column('status', sa.Enum(
+            sa.Column('status', postgresql.ENUM(
                 'draft', 'sent', 'viewed', 'accepted', 'rejected', 'expired',
                 name='quotestatus', create_type=False
             ), nullable=False, server_default='draft'),
