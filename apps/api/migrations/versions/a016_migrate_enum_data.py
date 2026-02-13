@@ -66,7 +66,7 @@ DATA_UPDATES = [
             'PENDING': 'pending',
             'PREPARING': 'preparing',
             'READY': 'ready',
-            'SERVED': 'served',
+            # 'SERVED' removed
             'DELIVERED': 'delivered',
             'CANCELLED': 'cancelled',
         },
