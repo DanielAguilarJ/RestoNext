@@ -77,6 +77,7 @@ def normalize_datetime(dt: Optional[datetime]) -> Optional[datetime]:
 async def get_forecast(
     ingredient: str = Query(..., description="Ingredient name to forecast"),
     days_ahead: int = Query(7, ge=1, le=30, description="Days to forecast"),
+    db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_manager_or_admin),
 ):
     """
@@ -97,6 +98,7 @@ async def get_forecast(
     forecast = await get_forecast_for_ingredient(
         tenant_id=str(current_user.tenant_id),
         ingredient=ingredient,
+        db_session=db,
     )
     
     return ForecastResponse(

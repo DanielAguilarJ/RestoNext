@@ -271,23 +271,82 @@ def generate_sample_sales_data(
     return data
 
 
+async def fetch_sales_from_db(
+    db_session,
+    tenant_id: str,
+    ingredient_id: str,
+    days: int = 90,
+) -> List[dict]:
+    """
+    Fetch real ingredient consumption data from InventoryTransaction records.
+    
+    Aggregates daily sales/usage quantities for the specified ingredient
+    over the last `days` days, returning data in Prophet-compatible format.
+    """
+    from sqlalchemy import select, func, cast, Date
+    from app.models.models import InventoryTransaction
+    
+    cutoff_date = datetime.now() - timedelta(days=days)
+    
+    try:
+        # Query daily aggregated consumption (sale + negative adjustments)
+        from uuid import UUID as PyUUID
+        ing_uuid = PyUUID(ingredient_id) if isinstance(ingredient_id, str) else ingredient_id
+        
+        stmt = (
+            select(
+                cast(InventoryTransaction.created_at, Date).label("date"),
+                func.sum(func.abs(InventoryTransaction.quantity)).label("quantity_sold"),
+            )
+            .where(
+                InventoryTransaction.ingredient_id == ing_uuid,
+                InventoryTransaction.created_at >= cutoff_date,
+                InventoryTransaction.transaction_type.in_(["sale", "waste"]),
+            )
+            .group_by(cast(InventoryTransaction.created_at, Date))
+            .order_by(cast(InventoryTransaction.created_at, Date))
+        )
+        
+        result = await db_session.execute(stmt)
+        rows = result.all()
+        
+        if not rows:
+            return []
+        
+        return [
+            {
+                "date": row.date.strftime("%Y-%m-%d"),
+                "quantity_sold": float(row.quantity_sold),
+            }
+            for row in rows
+        ]
+    except Exception as e:
+        print(f"WARNING:  Failed to fetch sales data from DB: {e}")
+        return []
+
+
 async def get_forecast_for_ingredient(
     tenant_id: str,
     ingredient: str,
-    db_session = None,
+    db_session=None,
+    ingredient_id: str = None,
 ) -> dict:
     """
     Main entry point for forecasting.
     Fetches real data from database and returns predictions.
     
-    For demo/testing, generates sample data if no DB session.
+    Falls back to sample data if no DB session or insufficient real data.
     """
-    if db_session:
-        # In production, fetch from DailySales table
-        # sales_data = await fetch_sales_from_db(db_session, tenant_id, ingredient)
-        pass
+    sales_data = None
     
-    # For demo, generate sample data
-    sales_data = generate_sample_sales_data(ingredient, days=90)
+    # Try to fetch real consumption data from DB
+    if db_session and ingredient_id:
+        sales_data = await fetch_sales_from_db(
+            db_session, tenant_id, ingredient_id
+        )
+    
+    # Fallback to sample data if not enough real records
+    if not sales_data or len(sales_data) < 14:
+        sales_data = generate_sample_sales_data(ingredient, days=90)
     
     return forecast_ingredient_demand(sales_data, ingredient)

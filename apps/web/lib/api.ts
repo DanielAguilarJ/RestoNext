@@ -1417,6 +1417,21 @@ export interface InventoryTransaction {
     created_by?: string;
 }
 
+export interface LinkedProductItem {
+    id: string;
+    name: string;
+    category_name?: string;
+    recipe_quantity: number;
+    recipe_unit: string;
+}
+
+export interface LinkedProductsResponse {
+    ingredient_id: string;
+    ingredient_name: string;
+    linked_products: LinkedProductItem[];
+    total_products: number;
+}
+
 export const inventoryApi = {
     /**
      * List all ingredients
@@ -1472,7 +1487,21 @@ export const inventoryApi = {
      */
     getTransactions: async (id: string): Promise<InventoryTransaction[]> => {
         return apiRequest<InventoryTransaction[]>(`/inventory/${id}/transactions`);
-    }
+    },
+
+    /**
+     * Get menu items that use this ingredient (via recipes)
+     */
+    getLinkedProducts: async (id: string): Promise<LinkedProductsResponse> => {
+        return apiRequest<LinkedProductsResponse>(`/inventory/${id}/linked-products`);
+    },
+
+    /**
+     * Get AI demand forecast for this ingredient
+     */
+    getForecast: async (id: string, daysAhead: number = 7): Promise<ForecastResponse> => {
+        return apiRequest<ForecastResponse>(`/inventory/${id}/forecast?days_ahead=${daysAhead}`);
+    },
 };
 
 // ============================================

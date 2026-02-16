@@ -9,6 +9,7 @@ import {
 import { inventoryApi, Ingredient } from "../../lib/api";
 import { CreateIngredientModal } from "../../components/ui/CreateIngredientModal";
 import { AdjustStockModal } from "../../components/ui/AdjustStockModal";
+import { IngredientDetailModal } from "../../components/ui/IngredientDetailModal";
 
 export default function InventoryPage() {
     const [ingredients, setIngredients] = useState<Ingredient[]>([]);
@@ -20,6 +21,7 @@ export default function InventoryPage() {
     // Modal states
     const [isCreateOpen, setIsCreateOpen] = useState(false);
     const [isAdjustOpen, setIsAdjustOpen] = useState(false);
+    const [isDetailOpen, setIsDetailOpen] = useState(false);
     const [selectedIngredient, setSelectedIngredient] = useState<Ingredient | null>(null);
 
     useEffect(() => {
@@ -45,6 +47,11 @@ export default function InventoryPage() {
         setIsAdjustOpen(true);
     };
 
+    const handleOpenDetail = (ingredient: Ingredient) => {
+        setSelectedIngredient(ingredient);
+        setIsDetailOpen(true);
+    };
+
     const filteredIngredients = ingredients.filter(item => {
         const matchesSearch = item.name.toLowerCase().includes(search.toLowerCase());
         const matchesFilter = filter === 'all' || (filter === 'low' && item.stock_quantity <= item.min_stock_alert);
@@ -65,6 +72,12 @@ export default function InventoryPage() {
                 isOpen={isAdjustOpen}
                 onClose={() => { setIsAdjustOpen(false); setSelectedIngredient(null); }}
                 onSuccess={loadInventory}
+                ingredient={selectedIngredient}
+            />
+
+            <IngredientDetailModal
+                isOpen={isDetailOpen}
+                onClose={() => { setIsDetailOpen(false); setSelectedIngredient(null); }}
                 ingredient={selectedIngredient}
             />
 
@@ -225,7 +238,7 @@ export default function InventoryPage() {
                                     {filteredIngredients.map((item) => {
                                         const isLowStock = item.stock_quantity <= item.min_stock_alert;
                                         return (
-                                            <tr key={item.id} className="hover:bg-white/40 dark:hover:bg-gray-800/40 transition-colors group">
+                                            <tr key={item.id} className="hover:bg-white/40 dark:hover:bg-gray-800/40 transition-colors group cursor-pointer" onClick={() => handleOpenDetail(item)}>
                                                 <td className="py-4 px-6">
                                                     <div className="flex items-center gap-3">
                                                         <div className={`w-8 h-8 rounded-lg flex items-center justify-center text-lg ${isLowStock ? 'bg-red-100 dark:bg-red-900/30' : 'bg-gray-100 dark:bg-gray-800'}`}>
@@ -263,7 +276,7 @@ export default function InventoryPage() {
                                                 <td className="py-4 px-6 text-right">
                                                     <div className="flex items-center justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
                                                         <button
-                                                            onClick={() => handleAdjustStock(item)}
+                                                            onClick={(e) => { e.stopPropagation(); handleAdjustStock(item); }}
                                                             className="text-teal-600 hover:text-teal-700 bg-teal-50 hover:bg-teal-100 p-1.5 rounded-lg transition-colors"
                                                             title="Ajustar"
                                                         >
@@ -326,7 +339,8 @@ export default function InventoryPage() {
                         return (
                             <div
                                 key={item.id}
-                                className={`glass p-6 rounded-2xl group hover:shadow-xl hover:-translate-y-1 transition-all duration-300 relative overflow-hidden ${isLowStock ? 'border-red-200 dark:border-red-900/50' : ''}`}
+                                onClick={() => handleOpenDetail(item)}
+                                className={`glass p-6 rounded-2xl group hover:shadow-xl hover:-translate-y-1 transition-all duration-300 relative overflow-hidden cursor-pointer ${isLowStock ? 'border-red-200 dark:border-red-900/50' : ''}`}
                             >
                                 {/* Background gradient hint for low stock */}
                                 {isLowStock && (
@@ -380,7 +394,7 @@ export default function InventoryPage() {
                                     {/* Actions Footer */}
                                     <div className="flex items-center gap-2 mt-2 pt-4 border-t border-gray-100 dark:border-gray-700/50">
                                         <button
-                                            onClick={() => handleAdjustStock(item)}
+                                            onClick={(e) => { e.stopPropagation(); handleAdjustStock(item); }}
                                             className="flex-1 bg-gray-900 dark:bg-white text-white dark:text-gray-900 py-2 rounded-lg text-sm font-medium hover:opacity-90 transition-opacity shadow-sm"
                                         >
                                             Ajustar Stock
@@ -395,6 +409,6 @@ export default function InventoryPage() {
                     })
                 )}
             </div>
-        </main >
+        </main>
     );
 }

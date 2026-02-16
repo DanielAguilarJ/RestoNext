@@ -3,20 +3,26 @@ from typing import List, Optional
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status, Query
-from sqlalchemy import select
-from sqlalchemy.orm import selectinload
+from sqlalchemy import select, and_
+from sqlalchemy.orm import selectinload, joinedload
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
 from app.core.security import get_current_user, require_manager_or_admin
-from app.models.models import User, Ingredient, TransactionType, UnitOfMeasure
+from app.models.models import (
+    User, Ingredient, TransactionType, UnitOfMeasure,
+    Recipe, MenuItem, MenuCategory,
+)
 from app.schemas.inventory_schemas import (
     IngredientCreate, IngredientUpdate, IngredientResponse,
-    StockUpdate, InventoryTransactionResponse
+    StockUpdate, InventoryTransactionResponse,
+    LinkedProductItem, LinkedProductsResponse,
 )
 from app.services.inventory_service import (
     update_stock, get_ingredient_transactions, InventoryError
 )
+from app.services.forecasting import get_forecast_for_ingredient
+from app.schemas.schemas import ForecastResponse
 
 router = APIRouter(prefix="/inventory", tags=["Inventory"])
 
@@ -225,4 +231,106 @@ async def list_transactions(
         
     return await get_ingredient_transactions(
         db, current_user.tenant_id, ingredient_id, limit
+    )
+
+
+# ============================================
+# Linked Products & AI Forecast
+# ============================================
+
+@router.get(
+    "/{ingredient_id}/linked-products",
+    response_model=LinkedProductsResponse,
+    summary="Get menu items that use this ingredient"
+)
+async def get_linked_products(
+    ingredient_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Returns all menu items linked to this ingredient via recipes (escandallo).
+    Shows which dishes use this ingredient and in what quantity.
+    """
+    # Verify ingredient exists and belongs to tenant
+    result = await db.execute(
+        select(Ingredient).where(
+            Ingredient.id == ingredient_id,
+            Ingredient.tenant_id == current_user.tenant_id
+        )
+    )
+    ingredient = result.scalar_one_or_none()
+    if not ingredient:
+        raise HTTPException(status_code=404, detail="Ingredient not found")
+
+    # Fetch recipes with menu items and categories
+    recipes_result = await db.execute(
+        select(Recipe)
+        .options(
+            joinedload(Recipe.menu_item).joinedload(MenuItem.category)
+        )
+        .where(Recipe.ingredient_id == ingredient_id)
+    )
+    recipes = recipes_result.unique().scalars().all()
+
+    linked_products = [
+        LinkedProductItem(
+            id=str(r.menu_item.id),
+            name=r.menu_item.name,
+            category_name=(
+                r.menu_item.category.name
+                if r.menu_item.category else None
+            ),
+            recipe_quantity=r.quantity,
+            recipe_unit=r.unit.value if hasattr(r.unit, 'value') else str(r.unit),
+        )
+        for r in recipes
+        if r.menu_item is not None
+    ]
+
+    return LinkedProductsResponse(
+        ingredient_id=str(ingredient_id),
+        ingredient_name=ingredient.name,
+        linked_products=linked_products,
+        total_products=len(linked_products),
+    )
+
+
+@router.get(
+    "/{ingredient_id}/forecast",
+    response_model=ForecastResponse,
+    summary="Get AI demand forecast for this ingredient"
+)
+async def get_ingredient_forecast(
+    ingredient_id: UUID,
+    days_ahead: int = Query(7, ge=1, le=30, description="Days to forecast"),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_manager_or_admin)
+):
+    """
+    Get AI-powered demand forecast for a specific ingredient.
+    Uses Facebook Prophet with Mexican holiday adjustments.
+    Falls back to sample data if insufficient transaction history.
+    """
+    # Verify ingredient exists and belongs to tenant
+    result = await db.execute(
+        select(Ingredient).where(
+            Ingredient.id == ingredient_id,
+            Ingredient.tenant_id == current_user.tenant_id
+        )
+    )
+    ingredient = result.scalar_one_or_none()
+    if not ingredient:
+        raise HTTPException(status_code=404, detail="Ingredient not found")
+
+    forecast = await get_forecast_for_ingredient(
+        tenant_id=str(current_user.tenant_id),
+        ingredient=ingredient.name,
+        db_session=db,
+        ingredient_id=str(ingredient_id),
+    )
+
+    return ForecastResponse(
+        ingredient=forecast["ingredient"],
+        predictions=forecast.get("predictions", []),
     )

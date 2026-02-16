@@ -62,3 +62,21 @@ class InventoryTransactionResponse(BaseModel):
 
     class Config:
         from_attributes = True
+
+
+# ============================================
+# Linked Products (Menu ↔ Inventory)
+# ============================================
+
+class LinkedProductItem(BaseModel):
+    id: str
+    name: str
+    category_name: Optional[str] = None
+    recipe_quantity: float
+    recipe_unit: str
+
+class LinkedProductsResponse(BaseModel):
+    ingredient_id: str
+    ingredient_name: str
+    linked_products: List[LinkedProductItem]
+    total_products: int
