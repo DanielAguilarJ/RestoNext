@@ -20,6 +20,7 @@ from app.models.models import (
     Order, OrderItem, MenuItem, Ingredient, Recipe, 
     InventoryTransaction, TransactionType, OrderStatus
 )
+from app.utils.units import convert_unit, UnitConversionError
 
 logger = logging.getLogger(__name__)
 
@@ -139,12 +140,20 @@ async def process_order_inventory(
             logger.warning(f"Ingredient {ingredient_id} not found, skipping")
             continue
         
+        # Convert deduction to ingredient unit
+        try:
+            converted_deduction = convert_unit(total_deduction, recipe.unit, ingredient.unit)
+        except UnitConversionError as e:
+            logger.error(f"Failed to convert units for {ingredient.name}: {e}")
+            # Depending on business logic, we might skip or fail. skipping to avoid blocking sale
+            continue
+            
         # Check stock availability
-        new_stock = ingredient.stock_quantity - total_deduction
+        new_stock = ingredient.stock_quantity - converted_deduction
         
         if new_stock < 0 and not allow_negative_stock:
             raise InsufficientStockError(
-                ingredient.name, total_deduction, ingredient.stock_quantity
+                ingredient.name, converted_deduction, ingredient.stock_quantity
             )
         
         # Update stock
@@ -155,7 +164,7 @@ async def process_order_inventory(
             tenant_id=order.tenant_id,
             ingredient_id=ingredient_id,
             transaction_type=TransactionType.SALE,
-            quantity=-total_deduction,  # Negative for outgoing
+            quantity=-converted_deduction,  # Negative for outgoing
             unit=ingredient.unit,
             reference_type="order",
             reference_id=order_id,

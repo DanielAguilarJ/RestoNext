@@ -1,13 +1,14 @@
 """
 RestoNext MX - SQLAlchemy Models
 PostgreSQL with JSONB columns for flexible data structures
-
-ARCHITECTURAL DECISIONS:
-1. JSONB for fiscal_config: Allows changing fiscal settings without migrations
-2. JSONB for modifiers_schema: Complex menu options without 5-level joins
-3. JSONB for selected_modifiers: Captures customer choices at order time
-4. UUID primary keys: Better for distributed systems and security
 """
+from __future__ import annotations
+
+# ARCHITECTURAL DECISIONS:
+# 1. JSONB for fiscal_config: Allows changing fiscal settings without migrations
+# 2. JSONB for modifiers_schema: Complex menu options without 5-level joins
+# 3. JSONB for selected_modifiers: Captures customer choices at order time
+# 4. UUID primary keys: Better for distributed systems and security
 
 import uuid
 from datetime import datetime
@@ -755,11 +756,6 @@ class Recipe(Base):
     """
     Links MenuItem to Ingredients with quantities (Escandallo).
     Enables automatic inventory deduction on sale.
-    
-    Example: A "Hamburguesa" might have:
-    - 150g of Carne
-    - 1 pza of Pan
-    - 30g of Queso
     """
     __tablename__ = "recipes"
     
@@ -1459,9 +1455,6 @@ class Reservation(Base):
 class Promotion(Base):
     """
     Flexible promotion rules engine.
-    Examples:
-    - 2x1 Beers on Thursdays 18:00-20:00
-    - Combo Burger + Soda = $150
     """
     __tablename__ = "promotions"
     
@@ -1523,17 +1516,6 @@ class OrderPromotion(Base):
 # ============================================
 
 class ServiceRequest(Base):
-    """
-    Service requests from customers via self-service tablets/QR.
-    Enables customers to call waiter, request bill, or send custom messages.
-    
-    Flow:
-    1. Customer taps "Call Waiter" on tablet
-    2. ServiceRequest created with type='waiter', status='pending'
-    3. WebSocket notification sent to POS/waiter devices
-    4. Staff marks as 'acknowledged' when they see it
-    5. Staff marks as 'resolved' when handled
-    """
     __tablename__ = "service_requests"
     
     id: Mapped[uuid.UUID] = mapped_column(
@@ -1583,22 +1565,11 @@ class ServiceRequest(Base):
 # ============================================
 
 class LegalDocumentType(str, enum.Enum):
-    """Types of legal documents"""
     TERMS = "terms"
     PRIVACY = "privacy"
 
 
 class LegalDocument(Base):
-    """
-    Versioned legal documents (Terms of Service, Privacy Policy).
-    Required for Stripe compliance - must prove users accepted current terms.
-    
-    Features:
-    - Version tracking (semantic versioning recommended)
-    - Markdown content for flexible formatting
-    - is_current flag to mark active version
-    - effective_date for legal validity
-    """
     __tablename__ = "legal_documents"
     
     id: Mapped[uuid.UUID] = mapped_column(
@@ -1635,13 +1606,6 @@ class LegalDocument(Base):
 
 
 class LegalAcceptance(Base):
-    """
-    Records user acceptance of legal documents.
-    Captures IP address and timestamp for audit trail (Stripe requirement).
-    
-    CRITICAL: This is legally binding evidence that the user accepted terms.
-    Never delete these records.
-    """
     __tablename__ = "legal_acceptances"
     
     id: Mapped[uuid.UUID] = mapped_column(
