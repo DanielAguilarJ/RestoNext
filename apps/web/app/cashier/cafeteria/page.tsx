@@ -10,7 +10,7 @@ import {
     ChevronUp, Coffee, UtensilsCrossed
 } from "lucide-react";
 import { formatPrice, cn } from "@/lib/utils";
-import { menuApi, ordersApi, cashierApi } from "@/lib/api";
+import { menuApi, ordersApi, cashierApi, tablesApi } from "@/lib/api";
 
 /* ─── Types ────────────────────────────────────────── */
 
@@ -244,6 +244,12 @@ export default function CafeteriaCashierPage() {
                 try {
                     await cashierApi.recordSale({ order_id: oid, amount: order.total, tip_amount: 0, payment_method: method as "cash" | "card" | "transfer" });
                 } catch { /* no shift */ }
+
+                if (order.table_id) {
+                    try {
+                        await tablesApi.updateStatus(order.table_id, 'free');
+                    } catch { /* ignore table error */ }
+                }
             }
             setSuccess(`Orden cobrada! ${formatPrice(order?.total || 0)}`);
             setOrders((p) => p.filter((o) => o.id !== oid));

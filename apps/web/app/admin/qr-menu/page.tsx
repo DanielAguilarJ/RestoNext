@@ -22,6 +22,7 @@ import {
     Clock,
     CheckCircle2,
     ArrowRight,
+    ArrowLeft,
     Settings,
     RefreshCw,
     Loader2,
@@ -289,16 +290,25 @@ export default function AdminQRMenuPage() {
             <div className="bg-white border-b border-gray-200">
                 <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
                     <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-                        <div>
-                            <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-3">
-                                <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-violet-500 to-purple-600 flex items-center justify-center">
-                                    <QrCode className="w-5 h-5 text-white" />
-                                </div>
-                                Menú QR - Self-Service
-                            </h1>
-                            <p className="text-gray-500 mt-1">
-                                Gestiona el sistema de pedidos desde celular para tus clientes
-                            </p>
+                        <div className="flex items-center gap-4">
+                            <button
+                                onClick={() => router.back()}
+                                className="p-2 text-gray-500 hover:text-gray-900 hover:bg-gray-100 rounded-xl transition-colors shrink-0"
+                                title="Volver atrás"
+                            >
+                                <ArrowLeft className="w-6 h-6" />
+                            </button>
+                            <div>
+                                <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-3">
+                                    <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-violet-500 to-purple-600 flex items-center justify-center">
+                                        <QrCode className="w-5 h-5 text-white" />
+                                    </div>
+                                    Menú QR - Self-Service
+                                </h1>
+                                <p className="text-gray-500 mt-1">
+                                    Gestiona el sistema de pedidos desde celular para tus clientes
+                                </p>
+                            </div>
                         </div>
 
                         <div className="flex gap-3">

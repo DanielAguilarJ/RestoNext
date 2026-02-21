@@ -5,7 +5,7 @@ import { SplitCheck } from "@/components/cashier/SplitCheck";
 import { ArrowLeft, Receipt, Sparkles } from "lucide-react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
-import { ordersApi, cashierApi } from "@/lib/api";
+import { ordersApi, cashierApi, tablesApi } from "@/lib/api";
 
 export default function SplitCheckPage() {
     const params = useParams();
@@ -28,7 +28,14 @@ export default function SplitCheckPage() {
         fetchOrder();
     }, [orderId]);
 
-    const handleComplete = () => {
+    const handleComplete = async () => {
+        if (order?.table_id) {
+            try {
+                await tablesApi.updateStatus(order.table_id, 'free');
+            } catch (error) {
+                console.error("Error al liberar la mesa:", error);
+            }
+        }
         router.push("/cashier");
     };
 
