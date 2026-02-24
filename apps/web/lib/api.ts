@@ -1753,11 +1753,11 @@ export interface Customer {
 export const customersApi = {
     list: async (search?: string): Promise<Customer[]> => {
         const query = search ? `?search=${search}` : '';
-        return apiRequest<Customer[]>(`/customers${query}`);
+        return apiRequest<Customer[]>(`/customers/${query}`);
     },
 
     create: async (data: any): Promise<Customer> => {
-        return apiRequest<Customer>('/customers', {
+        return apiRequest<Customer>('/customers/', {
             method: 'POST',
             body: JSON.stringify(data),
         });

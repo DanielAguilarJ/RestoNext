@@ -199,7 +199,11 @@ app = FastAPI(
     description="Cloud-Native Restaurant Management SaaS for Mexico",
     version="1.0.0",
     lifespan=lifespan,
-    # Configure docs to be accessible via root (DO strips /api)
+    # root_path tells FastAPI that it's served behind a reverse proxy at /api
+    # This ensures redirects (like trailing slash) include the /api prefix
+    # DigitalOcean App Platform strips /api before forwarding to this service
+    root_path="/api",
+    # Docs URLs are relative to root_path, so /docs becomes /api/docs externally
     docs_url="/docs",
     redoc_url="/redoc",
     openapi_url="/openapi.json",

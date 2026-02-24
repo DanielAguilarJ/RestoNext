@@ -42,4 +42,6 @@ echo ""
 echo "🌐 Starting uvicorn server..."
 
 # Start the server
-exec uvicorn main:app --host 0.0.0.0 --port ${PORT:-8000} --workers 1
+# --root-path /api: DigitalOcean strips /api before forwarding; this ensures
+# FastAPI constructs correct redirect URLs (e.g. trailing slash redirects)
+exec uvicorn main:app --host 0.0.0.0 --port ${PORT:-8000} --workers 1 --root-path /api
