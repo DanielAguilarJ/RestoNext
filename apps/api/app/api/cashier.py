@@ -431,20 +431,22 @@ async def record_sale(
     """
     Record a sale transaction in the current shift.
     Called when an order is paid.
-    
-    Returns success even if no shift is open (flexible mode).
+
+    Auto-opens a shift if none exists, ensuring every payment is tracked.
     """
     shift = await get_open_shift(
         current_user.id, current_user.tenant_id, db
     )
     
     if not shift:
-        # Flexible mode: allow payment but don't track in shift
-        return {
-            "message": "Payment processed (no active shift)",
-            "transaction_id": None,
-            "shift_active": False
-        }
+        # Auto-open a shift so every payment is tracked
+        shift = CashShift(
+            tenant_id=current_user.tenant_id,
+            user_id=current_user.id,
+            opening_amount=0.0,
+        )
+        db.add(shift)
+        await db.flush()  # Get shift.id for FK reference
     
     # Map payment method
     pm = PaymentMethod.CASH

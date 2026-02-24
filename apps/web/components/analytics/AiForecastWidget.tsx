@@ -153,53 +153,55 @@ export function AiForecastWidget({
             </CardHeader>
 
             <CardContent className="space-y-3">
-                <AnimatePresence mode="popLayout">
-                    {forecasts.map((forecast, index) => {
-                        const trend = getWeekTrend(forecast);
-                        const totalDemand = getTotalDemand(forecast);
+                <div className="max-h-[300px] overflow-y-auto space-y-3 pr-2">
+                    <AnimatePresence mode="popLayout">
+                        {forecasts.map((forecast, index) => {
+                            const trend = getWeekTrend(forecast);
+                            const totalDemand = getTotalDemand(forecast);
 
-                        return (
-                            <motion.div
-                                key={forecast.ingredient}
-                                initial={{ opacity: 0, y: 10 }}
-                                animate={{ opacity: 1, y: 0 }}
-                                transition={{ delay: index * 0.1 }}
-                                className="flex items-center justify-between p-3 bg-white/50 dark:bg-gray-800/30 rounded-lg border border-gray-100 dark:border-gray-800"
-                            >
-                                <div className="flex items-center gap-3">
-                                    <div className={`w-2 h-2 rounded-full ${trend.direction === "up" ? "bg-emerald-500" :
-                                        trend.direction === "down" ? "bg-rose-500" :
-                                            "bg-gray-400"
-                                        }`} />
-                                    <span className="font-medium text-gray-900 dark:text-gray-100">
-                                        {forecast.ingredient}
-                                    </span>
-                                </div>
+                            return (
+                                <motion.div
+                                    key={forecast.ingredient}
+                                    initial={{ opacity: 0, y: 10 }}
+                                    animate={{ opacity: 1, y: 0 }}
+                                    transition={{ delay: index * 0.1 }}
+                                    className="flex items-center justify-between p-3 bg-white/50 dark:bg-gray-800/30 rounded-lg border border-gray-100 dark:border-gray-800"
+                                >
+                                    <div className="flex items-center gap-3">
+                                        <div className={`w-2 h-2 rounded-full ${trend.direction === "up" ? "bg-emerald-500" :
+                                            trend.direction === "down" ? "bg-rose-500" :
+                                                "bg-gray-400"
+                                            }`} />
+                                        <span className="font-medium text-gray-900 dark:text-gray-100">
+                                            {forecast.ingredient}
+                                        </span>
+                                    </div>
 
-                                <div className="flex items-center gap-3">
-                                    <span className="text-sm text-gray-600 dark:text-gray-400">
-                                        {totalDemand.toLocaleString()} unidades
-                                    </span>
+                                    <div className="flex items-center gap-3">
+                                        <span className="text-sm text-gray-600 dark:text-gray-400">
+                                            {totalDemand.toLocaleString()} unidades
+                                        </span>
 
-                                    <Badge
-                                        variant="outline"
-                                        className={`flex items-center gap-1 ${trend.direction === "up"
-                                            ? "bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-900/20 dark:text-emerald-400 dark:border-emerald-800"
-                                            : trend.direction === "down"
-                                                ? "bg-rose-50 text-rose-700 border-rose-200 dark:bg-rose-900/20 dark:text-rose-400 dark:border-rose-800"
-                                                : "bg-gray-50 text-gray-600 border-gray-200 dark:bg-gray-800 dark:text-gray-400"
-                                            }`}
-                                    >
-                                        {trend.direction === "up" && <TrendingUp className="h-3 w-3" />}
-                                        {trend.direction === "down" && <TrendingDown className="h-3 w-3" />}
-                                        {trend.direction === "neutral" && <Minus className="h-3 w-3" />}
-                                        {Math.abs(trend.change).toFixed(0)}%
-                                    </Badge>
-                                </div>
-                            </motion.div>
-                        );
-                    })}
-                </AnimatePresence>
+                                        <Badge
+                                            variant="outline"
+                                            className={`flex items-center gap-1 ${trend.direction === "up"
+                                                ? "bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-900/20 dark:text-emerald-400 dark:border-emerald-800"
+                                                : trend.direction === "down"
+                                                    ? "bg-rose-50 text-rose-700 border-rose-200 dark:bg-rose-900/20 dark:text-rose-400 dark:border-rose-800"
+                                                    : "bg-gray-50 text-gray-600 border-gray-200 dark:bg-gray-800 dark:text-gray-400"
+                                                }`}
+                                        >
+                                            {trend.direction === "up" && <TrendingUp className="h-3 w-3" />}
+                                            {trend.direction === "down" && <TrendingDown className="h-3 w-3" />}
+                                            {trend.direction === "neutral" && <Minus className="h-3 w-3" />}
+                                            {Math.abs(trend.change).toFixed(0)}%
+                                        </Badge>
+                                    </div>
+                                </motion.div>
+                            );
+                        })}
+                    </AnimatePresence>
+                </div>
 
                 {/* Footer */}
                 <motion.div

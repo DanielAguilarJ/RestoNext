@@ -148,18 +148,20 @@ async def update_table_status(
     await db.commit()
     await db.refresh(table)
     
-    # Notify via WebSocket
-    await ws_manager.broadcast_to_tenant(
-        current_user.tenant_id,
-        {
+    # Notify via WebSocket (don't fail the request if WS fails)
+    try:
+        message = {
             "event": "table:status_changed",
-            "data": {
+            "payload": {
                 "table_id": str(table.id),
                 "table_number": table.number,
                 "new_status": table.status.value,
             }
         }
-    )
+        await ws_manager.broadcast_to_channel(message, "pos")
+        await ws_manager.broadcast_to_channel(message, "waiter")
+    except Exception:
+        pass
     
     return TableResponse(
         id=str(table.id),

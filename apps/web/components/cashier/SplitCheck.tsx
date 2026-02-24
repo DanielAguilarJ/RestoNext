@@ -113,8 +113,18 @@ function SplitContainer({
     split: Split;
     items: OrderItem[];
     total: number;
-    onPay: (splitId: string, method: "cash" | "card") => void;
+    onPay: (splitId: string, method: "cash" | "card", tipAmount: number) => void;
 }) {
+    const [tipPercent, setTipPercent] = useState<number>(10);
+    const [customTip, setCustomTip] = useState<string>("");
+    const [isCustomTip, setIsCustomTip] = useState(false);
+
+    const calculatedTip = isCustomTip
+        ? (parseFloat(customTip) || 0)
+        : (total * (tipPercent / 100));
+
+    const finalTotal = total + calculatedTip;
+
     return (
         <div
             className={cn(
@@ -135,12 +145,19 @@ function SplitContainer({
                         </span>
                     )}
                 </h3>
-                <span className={cn(
-                    "text-2xl font-bold transition-colors",
-                    split.paid ? "text-green-600" : "text-brand-600"
-                )}>
-                    {formatPrice(total)}
-                </span>
+                <div className="text-right">
+                    <span className={cn(
+                        "text-2xl font-bold transition-colors block",
+                        split.paid ? "text-green-600" : "text-brand-600"
+                    )}>
+                        {formatPrice(finalTotal)}
+                    </span>
+                    {!split.paid && total > 0 && calculatedTip > 0 && (
+                        <span className="text-xs text-gray-400">
+                            Incluye {formatPrice(calculatedTip)} prop.
+                        </span>
+                    )}
+                </div>
             </div>
 
             {/* Items */}
@@ -162,11 +179,60 @@ function SplitContainer({
                 </div>
             </SortableContext>
 
+            {/* Tip Selection */}
+            {!split.paid && total > 0 && (
+                <div className="mt-4 pt-4 border-t border-gray-100 dark:border-gray-700">
+                    <p className="text-sm font-medium text-gray-600 dark:text-gray-300 mb-2">Propina</p>
+                    <div className="flex flex-wrap gap-2 mb-3">
+                        {[0, 10, 15, 20].map((pct) => (
+                            <button
+                                key={pct}
+                                onClick={() => {
+                                    setTipPercent(pct);
+                                    setIsCustomTip(false);
+                                }}
+                                className={cn(
+                                    "px-3 py-1.5 rounded-lg text-sm font-medium transition-all",
+                                    !isCustomTip && tipPercent === pct
+                                        ? "bg-brand-500 text-white shadow-md shadow-brand-500/20"
+                                        : "bg-gray-100 text-gray-600 hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-300"
+                                )}
+                            >
+                                {pct}%
+                            </button>
+                        ))}
+                        <button
+                            onClick={() => setIsCustomTip(true)}
+                            className={cn(
+                                "px-3 py-1.5 rounded-lg text-sm font-medium transition-all",
+                                isCustomTip
+                                    ? "bg-brand-500 text-white shadow-md shadow-brand-500/20"
+                                    : "bg-gray-100 text-gray-600 hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-300"
+                            )}
+                        >
+                            Otro
+                        </button>
+                    </div>
+                    {isCustomTip && (
+                        <div className="relative mb-3">
+                            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500">$</span>
+                            <input
+                                type="number"
+                                value={customTip}
+                                onChange={(e) => setCustomTip(e.target.value)}
+                                placeholder="Monto exacto"
+                                className="w-full pl-8 pr-4 py-2 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
+                            />
+                        </div>
+                    )}
+                </div>
+            )}
+
             {/* Payment Buttons */}
             {!split.paid && total > 0 && (
-                <div className="flex gap-3 mt-5">
+                <div className="flex gap-3 mt-2">
                     <button
-                        onClick={() => onPay(split.id, "cash")}
+                        onClick={() => onPay(split.id, "cash", calculatedTip)}
                         className="flex-1 flex items-center justify-center gap-2 py-4 px-4
                                  bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 
                                  text-white rounded-xl font-bold transition-all duration-300 
@@ -176,7 +242,7 @@ function SplitContainer({
                         Efectivo
                     </button>
                     <button
-                        onClick={() => onPay(split.id, "card")}
+                        onClick={() => onPay(split.id, "card", calculatedTip)}
                         className="flex-1 flex items-center justify-center gap-2 py-4 px-4
                                  bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 
                                  text-white rounded-xl font-bold transition-all duration-300 
@@ -204,7 +270,7 @@ interface SplitCheckProps {
     orderId: string;
     orderItems: OrderItem[];
     onComplete?: () => void;
-    onPay?: (amount: number, method: "cash" | "card") => Promise<void>;
+    onPay?: (amount: number, method: "cash" | "card", tipAmount: number) => Promise<void>;
 }
 
 export function SplitCheck({ orderId, orderItems, onComplete, onPay }: SplitCheckProps) {
@@ -365,12 +431,12 @@ export function SplitCheck({ orderId, orderItems, onComplete, onPay }: SplitChec
     };
 
     // Pay split
-    const handlePay = async (splitId: string, method: "cash" | "card") => {
+    const handlePay = async (splitId: string, method: "cash" | "card", tipAmount: number) => {
         const total = getSplitTotal(splits.find(s => s.id === splitId)!);
 
         if (onPay) {
             try {
-                await onPay(total, method);
+                await onPay(total, method, tipAmount);
             } catch (error) {
                 alert("Error al procesar pago");
                 return;

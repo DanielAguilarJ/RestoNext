@@ -23,7 +23,9 @@ const getRawApiUrl = () => {
 
 const rawApiUrl = getRawApiUrl();
 // Clean the URL: remove trailing slashes, ensure it ends with /api for consistency
-const API_BASE_URL = rawApiUrl.replace(/\/+$/, '');
+const cleanUrl = rawApiUrl.replace(/\/+$/, '');
+// Defensive: ensure the URL always ends with /api (DigitalOcean routes /api/* to the backend)
+const API_BASE_URL = cleanUrl.endsWith('/api') ? cleanUrl : `${cleanUrl}/api`;
 
 /**
  * Cookie utilities for middleware compatibility
@@ -887,15 +889,25 @@ export class WebSocketClient {
     private maxReconnectAttempts = 5;
     private reconnectDelay = 1000;
     private messageHandlers: Map<string, Set<(data: any) => void>> = new Map();
+    private intentionalClose = false;
 
     connect(endpoint: string = '/ws'): void {
+        // Close existing connection before opening a new one
+        if (this.ws) {
+            this.intentionalClose = true;
+            this.ws.close();
+            this.ws = null;
+        }
+        this.intentionalClose = false;
+        this.reconnectAttempts = 0;
+
         const token = TokenStorage.get();
 
         // For WebSocket connections in production with DigitalOcean:
         // The API_BASE_URL is https://domain/api
         // DO routes /api/* to the backend and STRIPS /api
         // So we need to connect to wss://domain/api/ws/... which becomes /ws/... at the backend
-        // 
+        //
         // Transform: https://restonext.me/api -> wss://restonext.me/api
         const wsUrl = API_BASE_URL.replace(/^http/, 'ws') + endpoint;
         const url = token ? `${wsUrl}?token=${token}` : wsUrl;
@@ -930,8 +942,9 @@ export class WebSocketClient {
         };
 
         this.ws.onclose = () => {
-            console.log('WebSocket disconnected');
-            this.attemptReconnect(endpoint);
+            if (!this.intentionalClose) {
+                this.attemptReconnect(endpoint);
+            }
         };
 
         this.ws.onerror = (error) => {
@@ -940,11 +953,15 @@ export class WebSocketClient {
     }
 
     private attemptReconnect(endpoint: string): void {
+        if (this.intentionalClose) return;
         if (this.reconnectAttempts < this.maxReconnectAttempts) {
             this.reconnectAttempts++;
             const delay = this.reconnectDelay * Math.pow(2, this.reconnectAttempts - 1);
-            console.log(`Attempting to reconnect in ${delay}ms...`);
-            setTimeout(() => this.connect(endpoint), delay);
+            setTimeout(() => {
+                if (!this.intentionalClose) {
+                    this.connect(endpoint);
+                }
+            }, delay);
         }
     }
 
@@ -964,6 +981,7 @@ export class WebSocketClient {
     }
 
     disconnect(): void {
+        this.intentionalClose = true;
         if (this.ws) {
             this.ws.close();
             this.ws = null;
@@ -1673,10 +1691,10 @@ export const cashierApi = {
     recordSale: async (data: {
         order_id: string;
         amount: number;
-        tip_amount?: number;
+        tip_amount: number;
         payment_method: 'cash' | 'card' | 'transfer';
         reference?: string;
-    }): Promise<{ message: string; transaction_id: string | null; shift_active: boolean }> => {
+    }): Promise<{ message: string; transaction_id: string; shift_active: boolean }> => {
         return apiRequest('/shift/sale', {
             method: 'POST',
             body: JSON.stringify(data),

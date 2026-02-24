@@ -741,93 +741,125 @@ async def get_payment_analytics(
 ) -> dict:
     """
     Get payment method breakdown and cashier shift analytics.
-    
+
     Integrates CashShift and CashTransaction data with order data
     to provide a complete picture of cash flow.
     """
-    # Payment method breakdown from cash transactions
-    payment_query = text("""
-        SELECT 
-            ct.payment_method,
-            COUNT(ct.id) AS transaction_count,
-            COALESCE(SUM(ct.amount), 0) AS total_amount,
-            COALESCE(SUM(ct.tip_amount), 0) AS total_tips
-        FROM cash_transactions ct
-        JOIN cash_shifts cs ON cs.id = ct.shift_id
-        WHERE cs.tenant_id = :tenant_id
-            AND ct.transaction_type = 'sale'
-            AND ct.created_at >= :start_date
-            AND ct.created_at <= :end_date
-        GROUP BY ct.payment_method
-    """)
-    
-    payment_result = await db.execute(payment_query, {
-        "tenant_id": str(tenant_id),
-        "start_date": start_date,
-        "end_date": end_date
-    })
-    
-    payment_methods = {}
-    total_revenue = 0.0
-    total_tips = 0.0
-    total_transactions = 0
-    
-    for prow in payment_result.fetchall():
-        method = prow.payment_method or "unknown"
-        amount = float(prow.total_amount)
-        tips = float(prow.total_tips)
-        payment_methods[method] = {
-            "count": prow.transaction_count,
-            "amount": round(amount, 2),
-            "tips": round(tips, 2)
-        }
-        total_revenue += amount
-        total_tips += tips
-        total_transactions += prow.transaction_count
-    
-    # Calculate percentages
-    for method in payment_methods:
-        pct = (payment_methods[method]["amount"] / total_revenue * 100) if total_revenue > 0 else 0
-        payment_methods[method]["percentage"] = round(pct, 1)
-    
-    # Shift summary: total shifts, average shift duration, discrepancies
-    shift_query = text("""
-        SELECT 
-            COUNT(cs.id) AS total_shifts,
-            COALESCE(AVG(EXTRACT(EPOCH FROM (cs.closed_at - cs.opened_at)) / 3600.0), 0) AS avg_shift_hours,
-            COALESCE(SUM(cs.difference), 0) AS total_discrepancy,
-            COALESCE(SUM(CASE WHEN cs.difference != 0 THEN 1 ELSE 0 END), 0) AS shifts_with_discrepancy,
-            COALESCE(SUM(cs.total_drops), 0) AS total_drops
-        FROM cash_shifts cs
-        WHERE cs.tenant_id = :tenant_id
-            AND cs.status = 'closed'
-            AND cs.opened_at >= :start_date
-            AND cs.closed_at <= :end_date
-    """)
-    
-    shift_result = await db.execute(shift_query, {
-        "tenant_id": str(tenant_id),
-        "start_date": start_date,
-        "end_date": end_date
-    })
-    shift_row = shift_result.fetchone()
-    
-    return {
-        "payment_methods": payment_methods,
-        "total_revenue": round(total_revenue, 2),
-        "total_tips": round(total_tips, 2),
-        "total_transactions": total_transactions,
-        "tip_percentage": round((total_tips / total_revenue * 100) if total_revenue > 0 else 0, 1),
+    empty_response = {
+        "payment_methods": {},
+        "total_revenue": 0.0,
+        "total_tips": 0.0,
+        "total_transactions": 0,
+        "tip_percentage": 0.0,
         "shifts": {
-            "total_shifts": shift_row.total_shifts if shift_row else 0,
-            "avg_shift_hours": round(float(shift_row.avg_shift_hours) if shift_row else 0, 1),
-            "total_discrepancy": round(float(shift_row.total_discrepancy) if shift_row else 0, 2),
-            "shifts_with_discrepancy": shift_row.shifts_with_discrepancy if shift_row else 0,
-            "total_drops": round(float(shift_row.total_drops) if shift_row else 0, 2)
+            "total_shifts": 0,
+            "avg_shift_hours": 0.0,
+            "total_discrepancy": 0.0,
+            "shifts_with_discrepancy": 0,
+            "total_drops": 0.0
         },
         "start_date": start_date,
         "end_date": end_date
     }
+
+    # Check that cash tables exist before querying
+    try:
+        table_check = await db.execute(text(
+            "SELECT 1 FROM information_schema.tables WHERE table_name = 'cash_transactions'"
+        ))
+        if not table_check.fetchone():
+            return empty_response
+    except Exception:
+        return empty_response
+
+    try:
+        # Payment method breakdown from cash transactions
+        payment_query = text("""
+            SELECT
+                ct.payment_method,
+                COUNT(ct.id) AS transaction_count,
+                COALESCE(SUM(ct.amount), 0) AS total_amount,
+                COALESCE(SUM(ct.tip_amount), 0) AS total_tips
+            FROM cash_transactions ct
+            JOIN cash_shifts cs ON cs.id = ct.shift_id
+            WHERE cs.tenant_id = :tenant_id
+                AND ct.transaction_type = 'sale'
+                AND ct.created_at >= :start_date
+                AND ct.created_at <= :end_date
+            GROUP BY ct.payment_method
+        """)
+
+        payment_result = await db.execute(payment_query, {
+            "tenant_id": str(tenant_id),
+            "start_date": start_date,
+            "end_date": end_date
+        })
+
+        payment_methods = {}
+        total_revenue = 0.0
+        total_tips = 0.0
+        total_transactions = 0
+
+        for prow in payment_result.fetchall():
+            method = prow.payment_method or "unknown"
+            amount = float(prow.total_amount)
+            tips = float(prow.total_tips)
+            payment_methods[method] = {
+                "count": prow.transaction_count,
+                "amount": round(amount, 2),
+                "tips": round(tips, 2)
+            }
+            total_revenue += amount
+            total_tips += tips
+            total_transactions += prow.transaction_count
+
+        # Calculate percentages
+        for method in payment_methods:
+            pct = (payment_methods[method]["amount"] / total_revenue * 100) if total_revenue > 0 else 0
+            payment_methods[method]["percentage"] = round(pct, 1)
+
+        # Shift summary: total shifts, average shift duration, discrepancies
+        shift_query = text("""
+            SELECT
+                COUNT(cs.id) AS total_shifts,
+                COALESCE(AVG(EXTRACT(EPOCH FROM (cs.closed_at - cs.opened_at)) / 3600.0), 0) AS avg_shift_hours,
+                COALESCE(SUM(cs.difference), 0) AS total_discrepancy,
+                COALESCE(SUM(CASE WHEN cs.difference != 0 THEN 1 ELSE 0 END), 0) AS shifts_with_discrepancy,
+                COALESCE(SUM(cs.total_drops), 0) AS total_drops
+            FROM cash_shifts cs
+            WHERE cs.tenant_id = :tenant_id
+                AND cs.status = 'closed'
+                AND cs.opened_at >= :start_date
+                AND cs.closed_at <= :end_date
+        """)
+
+        shift_result = await db.execute(shift_query, {
+            "tenant_id": str(tenant_id),
+            "start_date": start_date,
+            "end_date": end_date
+        })
+        shift_row = shift_result.fetchone()
+
+        return {
+            "payment_methods": payment_methods,
+            "total_revenue": round(total_revenue, 2),
+            "total_tips": round(total_tips, 2),
+            "total_transactions": total_transactions,
+            "tip_percentage": round((total_tips / total_revenue * 100) if total_revenue > 0 else 0, 1),
+            "shifts": {
+                "total_shifts": shift_row.total_shifts if shift_row else 0,
+                "avg_shift_hours": round(float(shift_row.avg_shift_hours) if shift_row else 0, 1),
+                "total_discrepancy": round(float(shift_row.total_discrepancy) if shift_row else 0, 2),
+                "shifts_with_discrepancy": shift_row.shifts_with_discrepancy if shift_row else 0,
+                "total_drops": round(float(shift_row.total_drops) if shift_row else 0, 2)
+            },
+            "start_date": start_date,
+            "end_date": end_date
+        }
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).error(f"Payment analytics query failed: {e}")
+        return empty_response
 
 
 # ============================================

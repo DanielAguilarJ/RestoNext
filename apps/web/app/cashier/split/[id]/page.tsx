@@ -66,10 +66,11 @@ export default function SplitCheckPage() {
         quantity: item.quantity
     }));
 
-    const handlePay = async (amount: number, method: "cash" | "card") => {
+    const handlePay = async (amount: number, method: "cash" | "card", tipAmount: number) => {
         // Record payment for the order
         await ordersApi.pay(orderId, {
             amount,
+            tip: tipAmount,
             payment_method: method,
         });
 
@@ -78,7 +79,7 @@ export default function SplitCheckPage() {
             await cashierApi.recordSale({
                 order_id: orderId,
                 amount,
-                tip_amount: 0, // Tips are handled at full payment, not split
+                tip_amount: tipAmount,
                 payment_method: method,
             });
         } catch (err) {
